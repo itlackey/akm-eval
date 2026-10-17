@@ -46,12 +46,12 @@ export const planted = (items: Item[], files: Map<string, string>): Planted[] =>
  * The items a run plants. Without a limit, all of them. With one, N items, taking the first of each kind in turn, in the order
  * of KINDS, so a short night holds as many kinds as it can. They come back in file order.
  */
-export function selectItems(items: Item[], limit?: number): Item[] {
+export function selectItems<I extends Item>(items: I[], limit?: number): I[] {
   if (limit === undefined || limit >= items.length) return items;
   const queues = KINDS.map((k) => items.filter((i) => i.kind === k)).filter((q) => q.length > 0);
-  const picked = new Set<Item>();
+  const picked = new Set<I>();
   for (let round = 0; picked.size < limit; round++) {
-    for (const q of queues) if (picked.size < limit && q[round]) picked.add(q[round] as Item);
+    for (const q of queues) if (picked.size < limit && q[round]) picked.add(q[round] as I);
   }
   return items.filter((i) => picked.has(i));
 }

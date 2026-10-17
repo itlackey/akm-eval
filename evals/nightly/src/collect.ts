@@ -23,8 +23,8 @@ export const STRATEGY = "default";
 
 const STEP_TIMEOUT_MS = 5 * 60_000; // an akm command that calls no model
 const REAL_INDEX_TIMEOUT_MS = 30 * 60_000; // the real embedder loads its model to index, and the first run downloads it (133 MB)
-const IMPROVE_BUDGET_MS = 45 * 60_000; // akm's own wall-clock budget for the improve run: it skips what it has not reached
-const IMPROVE_TIMEOUT_MS = IMPROVE_BUDGET_MS + 10 * 60_000; // and this ends akm if it does not stop
+export const IMPROVE_BUDGET_MS = 45 * 60_000; // akm's own wall-clock budget for the improve run: it skips what it has not reached
+const IMPROVE_KILL_SLACK_MS = 10 * 60_000; // and the eval ends akm this long after the budget, if it does not stop
 const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
 const DAY_MS = 86_400_000;
 
@@ -36,8 +36,8 @@ export const timeoutMessage = (command: string, timeoutMs: number): string => `a
  * The strategy is akm's own `default`. Requests use temperature 0 and ask for no thinking, as distill's and extract's do, so a night
  * does not depend on akm's default sampling. The embedder is the deterministic one unless `real` says akm's built-in model.
  */
-export function nightlyConfig(baseUrl: string, model: string, hasKey: boolean, embedder: Embedder = "deterministic"): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey, "nightly");
+export function nightlyConfig(baseUrl: string, model: string, hasKey: boolean, embedder: Embedder = "deterministic", provider = "openai"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, "nightly", provider);
   config.engines.nightly.temperature = 0;
   config.engines.nightly.enableThinking = false;
   return withEmbedder(config, embedder);
@@ -134,23 +134,30 @@ export function feedbackArgs(f: Feedback): string[] {
   return args;
 }
 
-/** What a night needs of its context: how to make a sandbox, the model and its endpoint, the strategy and patch, the embedder and, for a test, the time limit. */
+/** What a night needs of its context: how to make a sandbox, the model, its endpoint and provider kind, the strategy and patch, the embedder, and the time limit. */
 export type CollectContext = {
   newSandbox: () => Sandbox;
   baseUrl: string;
   model: string;
   hasKey: boolean;
+  /** The provider kind of akm's engine. Default: openai. */
+  provider?: string;
   overrides?: Overrides;
   /** How akm embeds the notes. The sandbox newSandbox makes has to match it: see sandboxOptions. Default: deterministic. */
   embedder?: Embedder;
-  /** The time limit of the improve run, in milliseconds, in place of the eval's own: for tests. */
+  /**
+   * --timeout-ms, which a run always sets: akm's own wall-clock budget for the improve run, passed to akm as its `--timeout-ms`, and the eval ends akm
+   * IMPROVE_KILL_SLACK_MS after it. The other steps have limits of their own. Without it the budget is IMPROVE_BUDGET_MS.
+   */
+  timeoutMs?: number;
+  /** The time after which the eval ends the improve run, in place of the budget and its slack: for tests. */
   improveTimeoutMs?: number;
 };
 
 const embedderOf = (ctx: { embedder?: Embedder }): Embedder => ctx.embedder ?? "deterministic";
 
 /** The akm config a night writes: the eval's own, with the config patch merged into it. summary.json records it. */
-export const effectiveConfig = (ctx: CollectContext): Record<string, any> => patchedConfig(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey, embedderOf(ctx)), ctx.overrides ?? defaultOverrides(STRATEGY));
+export const effectiveConfig = (ctx: Pick<CollectContext, "baseUrl" | "model" | "hasKey" | "provider" | "embedder" | "overrides">): Record<string, any> => patchedConfig(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey, embedderOf(ctx), ctx.provider), ctx.overrides ?? defaultOverrides(STRATEGY));
 
 const seconds = (ms: number): number => Number((ms / 1000).toFixed(1));
 
@@ -181,7 +188,8 @@ export async function haveNight(items: Item[], files: Map<string, string>, ctx: 
 
 async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, string>, ctx: CollectContext): Promise<Collected> {
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
-  const improveTimeoutMs = ctx.improveTimeoutMs ?? IMPROVE_TIMEOUT_MS;
+  const budget = ctx.timeoutMs ?? IMPROVE_BUDGET_MS;
+  const improveTimeoutMs = ctx.improveTimeoutMs ?? budget + IMPROVE_KILL_SLACK_MS;
   writeConfig(sandbox, effectiveConfig(ctx));
   Object.assign(sandbox.env, embedderEnv(embedderOf(ctx)));
   plant(sandbox, items, files);
@@ -204,7 +212,7 @@ async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, stri
       await runAkmJson(sandbox, feedbackArgs({ ...f, ref }), { timeoutMs: STEP_TIMEOUT_MS });
     }
   });
-  const improveArgs = ["improve", "--strategy", overrides.strategy, "--require-engines", "--no-sync", "--timeout-ms", String(IMPROVE_BUDGET_MS), "--json-to-stdout", "--format", "json"];
+  const improveArgs = ["improve", "--strategy", overrides.strategy, "--require-engines", "--no-sync", "--timeout-ms", String(budget), "--json-to-stdout", "--format", "json"];
   const [improved, improveSeconds] = await step("improve", () => runAkm(sandbox, improveArgs, { timeoutMs: improveTimeoutMs }));
   if (improved.timedOut) fail(timeoutMessage("improve", improveTimeoutMs), 1); // it was killed in the middle of the night: there is no result to score
   if (improved.code !== 0) fail(hideEndpoint(failureMessage(`akm ${improveArgs[0]}`, improved.code, improved.stderr), ctx.baseUrl), 1);

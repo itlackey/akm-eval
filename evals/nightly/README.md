@@ -24,7 +24,7 @@ akm proposal list --status <state> --detail full
 - **the proactive lane**: plans up to 15 assets with no feedback, and reflect proposes fixes that wait for a person. The `silent` items are defects only it can reach. To measure it, run with `--config-patch` holding `{"improve":{"strategies":{"default":{"processes":{"proactiveMaintenance":{"enabled":false}}}}}}`, and again with `{"enabled":true,"maxPerRun":50}`.
 - **validation**: calls a model only to repair a fault; the planted notes have none.
 
-The drain accepts what the gates allowed: a staged duplicate retirement and a reflect edit its judge passed. `--embedder deterministic|real` works as in `evals/consolidate`; the night's pairs were made in the hash space, so a `real` run is not comparable with a `deterministic` one.
+The drain accepts what the gates allowed: a staged duplicate retirement and a reflect edit its judge passed. akm embeds the notes to find the pairs it judges as in `evals/consolidate`: by default with its deterministic word-hash embedder (`AKM_EMBED_DETERMINISTIC=1`), and with `--semantic` with its real embedder, its built-in model. The night's pairs were made in the hash space, so a `--semantic` run is not comparable with a default one.
 
 ## Run
 
@@ -37,9 +37,10 @@ evals/nightly/run
 evals/nightly/run --model qwen3-27b
 evals/nightly/run --corpus custom              # the rewrite: ./generate-assets --only nightly
 evals/nightly/run --cases ~/notes/nightly
+evals/nightly/run --semantic                   # akm's real embedder, not the deterministic one
 ```
 
-`--limit N` plants N items, the first of each kind in turn (pair, reflect, distill, fix, untouched). `--strategy` replaces `default` in improve and the drain; `--config-patch` changes the config. A night is about 40 calls, one at a time, of up to 6k tokens; about five minutes on a local 27B. akm's budget is 45 minutes: refs it does not reach show `not reached`. If akm runs 10 minutes past its budget the eval kills it and the night fails with no summary. An endpoint that answers an unservable schema with a 5xx fails every distill call. The eval sets temperature 0 and thinking off.
+`--limit N` plants N items, the first of each kind in turn (pair, reflect, distill, fix, untouched). `--strategy` replaces `default` in improve and the drain; `--config-patch` changes the config. `--timeout-ms N` is akm's own wall-clock budget for the improve run, which the eval passes on as `--timeout-ms` (default 2700000, 45 minutes): refs akm does not reach show `not reached`. The steps that call no model have limits of their own, and a night is one run of all the items, so there is no `--concurrency`. A night is about 40 calls, one at a time, of up to 6k tokens; about five minutes on a local 27B. If akm runs 10 minutes past its budget the eval kills it and the night fails. A night that fails is not given up on item by item, since the items run together: the command that failed or was killed ends the run, which writes its summary with `status: "aborted"` and the reason (and no rows, since there is no night to score) and exits 1. An endpoint that answers an unservable schema with a 5xx fails every distill call. The eval sets temperature 0 and thinking off.
 
 ## Run your own set
 
@@ -89,7 +90,7 @@ For scale: a night that does nothing gets 15 of 35 right and no harm. One item i
 
 ## What the summary reports
 
-`summary.json`: `metrics`, the seconds of each step, what the drain did (`drain`), the pair judge's labels (`pair_pass`), `outside_changed`, `calls_by` (by process and served model), `embedder`, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder` and the `manifest`. `status` is always `complete`: a night that fails writes no summary. `samples.jsonl`: one row per item with its checks, a few words on what the night did, the lesson or edit and gate decision behind them, and the raw output it was scored from (the item's files before and after, its proposals and actions, and the shared part of the night).
+`summary.json`: `metrics`, the seconds of each step, what the drain did (`drain`), the pair judge's labels (`pair_pass`), `outside_changed`, `calls_by` (by process and served model), `embedder`, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder`, `timeout_ms` (the improve budget) and the `manifest`. `status` is `complete`, or `aborted` when the night failed, and then `aborted_reason` says why. `n_cases` (the same as `n_items`) and `concurrency` (always 1) are written for every eval that runs on `lib/run.ts`. `samples.jsonl`: one row per item with its checks, a few words on what the night did, the lesson or edit and gate decision behind them, and the raw output it was scored from (the item's files before and after, its proposals and actions, and the shared part of the night).
 
 ## Notes
 

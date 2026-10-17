@@ -29,7 +29,7 @@ evals/bakeoff/run --corpus custom              # the rewrite: ./generate-assets 
 evals/bakeoff/run --cases ~/notes/bakeoff
 ```
 
-`--process NAME` runs one process. `--limit N` takes the first case of each process in turn. `--config-patch FILE` changes the config; there is no `--strategy`, since each process has its own. A full run is 40 cases and about 75 calls, one at a time; 16k of context is safe. The eval sets temperature 0 and thinking off.
+`--process NAME` runs one process. `--limit N` takes the first case of each process in turn. `--config-patch FILE` changes the config, and `--semantic` adds akm's native embedder to it (semantic search is off otherwise); there is no `--strategy`, since each process has its own. `--concurrency N` runs N cases at a time, each in a sandbox of its own (default 1). `--timeout-ms N` stops an akm command that is still running after N milliseconds (default 900000, 15 minutes). A full run is 40 cases and about 75 calls, one at a time; 16k of context is safe. The eval sets temperature 0 and thinking off. The run gives up when five cases in a row end in an error: it starts no new case, writes the summary with `status: "aborted"` and the reason, and exits 1.
 
 ## Run your own set
 
@@ -65,7 +65,7 @@ One case is 2.5 points of `case_pass`, and 12.5 points of its process, which has
 
 ## What the summary reports
 
-`summary.json`: `metrics`, the counts run, scored and errored, `timeouts` (akm past 15 minutes), `status` and `aborted_reason` (it aborts when the first five cases get no outcome), `served` (empty for remember-enrich and session-summary), `process`, the model, akm version and build, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per case with the outcome, the checks, and the raw output: the derived memory, written memory, repair proposal, session asset, or plan and promotions.
+`summary.json`: `metrics`, the counts run, scored and errored, `timeouts` (akm past `--timeout-ms`), `status` and `aborted_reason` (it aborts after five errored cases in a row), `served` (empty for remember-enrich and session-summary), `process`, the model, akm version and build, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder`, `concurrency`, `timeout_ms` and the `manifest`. `samples.jsonl`: one row per case with the outcome, the checks, and the raw output: the derived memory, written memory, repair proposal, session asset, or plan and promotions.
 
 `src/real.test.ts` runs every public case through a real akm against a scripted model, with `AKM_EVAL_REAL_AKM=1` and `AKM_BIN` set.
 

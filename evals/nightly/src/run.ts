@@ -3,89 +3,45 @@
 // feedback, `akm improve` with the default strategy, then `akm proposal drain`, as the lab's nightly does. It checks every
 // item, what changed outside the items, the lessons accepted and the model calls that failed. See ../README.md.
 //
-//   evals/nightly/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/nightly/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--timeout-ms N]
+//
+// The flags, the setup and the summary are lib/run.ts. This file is what is nightly's: the spec that says what a case is and how it is shown, and
+// the night, which is the one unit of work: the items are planted together, so the spec runs them itself (`collectAll`) and not one after another.
 
-import { existsSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-import { parseArgs } from "node:util";
-import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
-import { type ModelCalls, takeModelCalls } from "../../../lib/akm/usage.ts";
-import { type SemanticVerification, takeSemanticVerification } from "../../../lib/akm/semantic.ts";
-import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
-import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
-import { OVERRIDE_OPTIONS, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
-import { repeatRuns } from "../../../lib/repeat.ts";
-import { makeResultsDir } from "../../../lib/results.ts";
-import { type RunInputs, privateAssetsProblem, runInputs } from "../../consolidate/src/inputs.ts";
-import { EMBEDDER_OPTIONS, embedderUsage, parseEmbedder } from "../../consolidate/src/lib.ts";
-import { type Embedder, sandboxOptions } from "../../consolidate/src/sandbox.ts";
-import { atLeast } from "../../reflect/src/lib.ts";
-import { type CallRow, type CollectContext, NAME, STRATEGY, callStats, effectiveConfig, haveNight, rawOfNight } from "./collect.ts";
+import { join, relative, resolve } from "node:path";
+import { Fatal, hideEndpoint } from "../../../lib/cli.ts";
+import type { ResolvedCorpus } from "../../../lib/corpus.ts";
+import { type CtxInput, type EvalSpec, type Summary, runCorpus as runIn, runEval } from "../../../lib/run.ts";
+import { assetsDigest } from "../../consolidate/src/inputs.ts";
+import { type Embedder, sandboxMaker } from "../../consolidate/src/sandbox.ts";
+import { type CallRow, type Collected, type CollectContext, IMPROVE_BUDGET_MS, NAME, STRATEGY, callStats, effectiveConfig, haveNight, rawOfNight } from "./collect.ts";
 import { KINDS } from "./items.ts";
-import { MEASUREMENT } from "./measurement.ts";
-import { loadNight, nightFiles, planted, selectItems } from "./night.ts";
-import { type Metrics, type Row, makeRow, summarize } from "./score.ts";
 import { pct } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { type Planted, loadNight, nightFiles, planted, selectItems } from "./night.ts";
+import { type Raw, type Row, makeRow, summarize } from "./score.ts";
 
-export const MIN_AKM = "0.9.26"; // the first release with the pair judge's claim lists, exact fixes and lessons that wait for review
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
-// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 
-const USAGE = `Usage: evals/nightly/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
-
-Runs one night of akm improve, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its engine, on a library
-of planted items, then drains the proposals as the nightly does, and checks the result. Settings come from .env at the
-repository root.
-
-${corpusUsage}
-            The default custom corpus is private/nightly/assets, made by ./generate-assets; the run stops if it is missing.
-  --limit   plant only N items, taking the first of each kind in turn
-  --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
-            <UTC date>-<label>-repeat-summary.json beside them
-${embedderUsage}
-${overridesUsage(STRATEGY)}
-${modelUsage}
-${akmUsage}
-  --label   names the results folder: <UTC date>-<label>. Default: the model name.
-
-Tested with akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
-
-/** What the summary of a run records of its corpus: public or custom, and the folder of a custom corpus if that is inside the repository (null for the public one and for a folder outside it, for scripts/rescore: lib/manifest.ts corpusFolderOf). Never an absolute path. */
-interface CorpusFields {
-  corpus: "public" | "custom";
-  corpus_folder: string | null;
+/** What the night leaves for the summary, which the spec reads after the night: what akm and the library showed, and how long it all took. */
+interface NightRun {
+  /** How many items the night holds, of which the run plants those it selects. */
+  items: number;
+  collected?: Collected;
+  /** Wall-clock seconds of the night, whether it ended or failed. */
+  total?: number;
 }
 
-export const corpusFields = (c: ResolvedCorpus): CorpusFields => ({ corpus: c.name, corpus_folder: c.name === "custom" ? corpusFolderOf(c.folder) : null });
+/** What nightly adds to the context of a run: how to make the sandbox of the night and how akm embeds the notes (see `embedding`), the night's own record, and for a test the time after which the improve run is ended. */
+type Extra = Pick<CollectContext, "newSandbox" | "embedder" | "improveTimeoutMs"> & { night?: NightRun };
 
-interface Summary extends RunInputs, CorpusFields {
-  eval: string;
-  label: string;
-  date: string;
-  /** A night that fails writes no summary, so this is "complete". It is here so every eval's summary says whether the run was cut short. */
-  status: "complete";
-  aborted_reason: null;
-  git_commit: string;
-  model: string;
-  akm_version: string;
-  /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
-  akm_bin: string;
-  akm_build: string | null;
-  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
-  akm_build_fingerprint: string | null;
+/** The fields of a nightly summary that are neither the common ones nor from `summarize`. */
+type Own = ReturnType<typeof summarize> & {
   /** How akm embedded the notes to find pairs: its deterministic word-hash embedder, or its built-in model. */
   embedder: Embedder;
-  limit: number | null;
-  /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
-  strategy: string;
-  config_patch: { path: string; sha256: string } | null;
   n_items: number;
   n_planted: number;
-  /** Items akm reports an error for: a model call failed, or the run's budget ran out at them. */
-  n_errored: number;
   /** Wall-clock seconds of each step of the night. */
   seconds: { index: number; feedback: number; improve: number; drain: number; total: number };
   /** What akm says of the improve run: false when it did not run to its end. */
@@ -94,25 +50,17 @@ interface Summary extends RunInputs, CorpusFields {
   skipped_processes: string[];
   /** What the drain did: proposals promoted, rejected, left for review and failed. */
   drain: { promoted: number; rejected: number; deferred: number; failed: number };
-  /** Paths no item owns that changed, appeared or vanished. */
-  outside_changed: string[];
   /** The pair pass of consolidate: pairs judged, judgments that failed and the labels given. */
   pair_pass: { pairs_judged: number; failed_judgments: number; labels: Record<string, number> } | null;
   /** The improve run's model calls by process and the model name the endpoint reported. A gateway may serve one name from several providers. */
   calls_by: CallRow[];
-  metrics: Metrics;
-  /** What the run was made of (see lib/manifest.ts). */
-  /** The run's model calls, from akm's own record of them (lib/akm/usage.ts). */
-  model_calls: ModelCalls | null;
-  semantic_verification?: SemanticVerification | null;
-  manifest: RunManifest;
-  results_dir: string;
-}
+};
 
 const cell = (n: number, of: number, x: number | null) => `${n}/${of}  ${pct(x)}`;
 const minutes = (s: number): string => (s >= 120 ? `${(s / 60).toFixed(1)} min` : `${s.toFixed(0)} s`);
+const wall = (since: number): number => Number(((performance.now() - since) / 1000).toFixed(1));
 
-function printSummary(s: Summary, rows: Row[]): void {
+function printSummary(s: Summary & Own): void {
   const m = s.metrics;
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | ${s.n_planted} of ${s.n_items} items`);
   console.log(`  items right        ${cell(m.items.ok, m.items.n, m.items.rate)}`);
@@ -129,22 +77,20 @@ function printSummary(s: Summary, rows: Row[]): void {
     const c = m.by_kind[k];
     if (c) console.log(`    ${k.padEnd(10)} ${c.ok}/${c.n}`);
   }
-  for (const r of rows.filter((r) => !r.ok)) console.log(`  ${r.harm ? "HARM" : "miss"}  ${r.id.padEnd(24)} ${Object.entries(r.checks).filter(([, pass]) => !pass).map(([name]) => name).join(", ")} | ${r.state}${r.error ? ` | ${r.error}` : ""}`);
   for (const p of s.outside_changed) console.log(`  HARM  changed outside the items: ${p}`);
   console.log(`  results            ${relative(ROOT, s.results_dir)}/`);
 }
 
-/** The two summaries as columns, never one pooled number. */
-function printSideBySide(a: Summary, b: Summary): void {
-  const col = (s: Summary) => ({
+/** The rows of the table of the two summaries, public and custom. */
+function sideBySide(a: Summary & Own, b: Summary & Own): [string, string, string][] {
+  const col = (s: Summary & Own) => ({
     right: cell(s.metrics.items.ok, s.metrics.items.n, s.metrics.items.rate),
     harm: `${s.metrics.harm.items} items, ${s.metrics.harm.outside_changed} outside, ${s.metrics.harm.lessons_accepted} lessons`,
     calls: `${s.metrics.calls.n} calls, ${s.metrics.calls.failures} failed`,
     night: minutes(s.seconds.total),
   });
   const [x, y] = [col(a), col(b)];
-  const rows: [string, string, string][] = [
-    ["", a.corpus, b.corpus],
+  return [
     ["items right", x.right, y.right],
     ["harm", x.harm, y.harm],
     ["model calls", x.calls, y.calls],
@@ -154,140 +100,92 @@ function printSideBySide(a: Summary, b: Summary): void {
       return [`  ${k}`, c(a), c(b)];
     }),
   ];
-  const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => (r[i] as string).length)));
-  console.log(`\n${NAME}: public and custom side by side (not pooled)`);
-  for (const r of rows) console.log(`  ${r[0].padEnd(w[0] as number)}  ${r[1].padEnd(w[1] as number)}  ${r[2].padEnd(w[2] as number)}`);
 }
 
-/** What a run needs besides the collector's: the akm version, the label of its results folder and the limit of items. */
-type RunContext = CollectContext & { version: string; label: string; limit?: number };
+const SPEC: EvalSpec<Planted, Row, Extra> = {
+  measurement: MEASUREMENT,
+  dir: EVAL_DIR,
+  strategy: STRATEGY,
+  minAkm: "0.9.26", // the first release with the pair judge's claim lists, exact fixes and lessons that wait for review
+  defaultTimeoutMs: IMPROVE_BUDGET_MS,
+  casesFile: "items.jsonl",
+  loadCases: (folder) => {
+    const night = loadNight(folder);
+    return planted(night.items, night.files);
+  },
+  selectCases: selectItems,
+  assetsSha256: (folder) => assetsDigest(folder, nightFiles(folder)),
+  configFor: effectiveConfig,
+  runCase: async () => {
+    throw new Error("a night is one run of every item, and collectAll makes it");
+  },
+  progress: (c, row) => {
+    if (row.ok) return `${c.id.padEnd(28)} ok    ${row.state}`;
+    const failed = Object.entries(row.checks).filter(([, pass]) => !pass).map(([name]) => name).join(", ");
+    return `${c.id.padEnd(28)} ${row.harm ? "HARM" : "miss"}  ${failed} | ${row.state}${row.error ? ` | ${row.error}` : ""}`;
+  },
+  // Whether akm embeds the notes with its deterministic word-hash embedder (no model, the same pairs on every run) or with --semantic its built-in model, as a
+  // real bundle runs it. The sandbox has to match: the config names the model key as $MODEL_API_KEY, and the real embedder's model is kept in .cache/.
+  prepare: (values) => {
+    const embedder: Embedder = values.semantic ? "real" : "deterministic";
+    const own = { embedder, newSandbox: sandboxMaker(NAME, embedder) };
+    return () => own;
+  },
+  openRun: async (_ctx, corpus) => ({ night: { items: loadNight(corpus.folder).items.length } }),
+  // The night is one run of the planted items. A night that fails (a command that fails or is ended, a result that is no JSON) leaves nothing to score:
+  // the summary is written for it all the same, with no rows, and says why.
+  collectAll: async (cases, ctx, record) => {
+    const run = ctx.night as NightRun;
+    const t0 = performance.now();
+    try {
+      run.collected = await haveNight(cases, new Map(cases.flatMap((c) => Object.entries(c.texts))), ctx);
+    } catch (e) {
+      if (!(e instanceof Fatal)) throw e;
+      run.total = wall(t0);
+      return { rows: [], aborted: e.message };
+    }
+    run.total = wall(t0);
+    // akm names the endpoint in some of its errors, and rows get shared, so no row carries it (rawOfNight writes <MODEL_BASE_URL> in its place).
+    const raws = rawOfNight(cases, run.collected, ctx.baseUrl);
+    const rows = cases.map((item, i) => makeRow(item, raws[i] as Raw));
+    for (const row of rows) record(row);
+    return { rows };
+  },
+  summaryExtras: (cases, _rows, ctx) => {
+    const run = ctx.night as NightRun;
+    const done = run.collected;
+    const result = (done?.improve ?? {}) as { ok?: boolean; skippedProcesses?: { process?: string }[]; consolidation?: { pairPass?: { pairsJudged?: number; failedJudgments?: number; labelCounts?: Record<string, number> } } };
+    const pairPass = result.consolidation?.pairPass;
+    return {
+      embedder: ctx.embedder ?? "deterministic",
+      n_items: run.items,
+      n_planted: cases.length,
+      seconds: { ...(done?.seconds ?? { index: 0, feedback: 0, improve: 0, drain: 0 }), total: run.total ?? 0 },
+      improve_ok: done !== undefined && result.ok !== false,
+      skipped_processes: (result.skippedProcesses ?? []).map((p) => String(p.process)),
+      drain: done?.drain ?? { promoted: 0, rejected: 0, deferred: 0, failed: 0 },
+      pair_pass: pairPass ? { pairs_judged: Number(pairPass.pairsJudged ?? 0), failed_judgments: Number(pairPass.failedJudgments ?? 0), labels: Object.fromEntries(Object.entries(pairPass.labelCounts ?? {}).filter(([, n]) => n > 0)) } : null,
+      calls_by: callStats(done?.improve).by.map((r) => ({ ...r, model: hideEndpoint(r.model, ctx.baseUrl) })),
+    };
+  },
+  printSummary,
+  sideBySide,
+  usage: {
+    about: `Runs one night of akm improve, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its engine, on a library
+of planted items, then drains the proposals as the nightly does, and checks the result. Settings come from .env at the
+repository root.
 
-export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, resultsParent = corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results")): Promise<Summary> {
-  const night = loadNight(corpus.folder);
-  const items = selectItems(night.items, ctx.limit);
-  console.log(`${NAME} (${corpus.name}): ${items.length} of ${night.items.length} items, one night, one model call at a time`);
-  const t0 = performance.now();
-  const done = await haveNight(items, night.files, ctx);
-  const total = Number(((performance.now() - t0) / 1000).toFixed(1));
+--timeout-ms is akm's own wall-clock budget for the improve run: refs it has not reached show \`not reached\`. The eval ends akm 10 minutes
+after it, and the night then fails with a summary that says so. The steps that call no model have limits of their own.
 
-  // akm names the endpoint in some of its errors, and rows get shared, so no row carries it (rawOfNight writes <MODEL_BASE_URL> in its place).
-  const raws = rawOfNight(items, done, ctx.baseUrl);
-  const rows = items.map((item, i) => makeRow(item, raws[i] as never));
-  const counts = summarize(rows);
-  const calls = callStats(done.improve);
-  const result = done.improve as { ok?: boolean; skippedProcesses?: { process?: string }[]; consolidation?: { pairPass?: { pairsJudged?: number; failedJudgments?: number; labelCounts?: Record<string, number> } } };
-  const pairPass = result.consolidation?.pairPass;
+akm finds the pairs it judges by the cosine of the notes' embeddings. Without --semantic that is akm's deterministic word-hash embedder:
+no model, and the same pairs on every run, which the night's pairs were made for. --semantic uses akm's built-in model, as a real bundle runs
+it (downloaded once into .cache/); it can pair other notes, so its runs are not comparable with the default's.`,
+    corpus: "            The default custom corpus is private/nightly/assets, made by ./generate-assets; the run stops if it is missing.",
+    limit: "plant only N items, taking the first of each kind in turn",
+  },
+};
 
-  const dir = makeResultsDir(resultsParent, ctx.label);
-  writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
-  const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
-  const embedder = ctx.embedder ?? "deterministic";
-  const config = effectiveConfig(ctx);
-  const seed = corpus.seed;
-  const build = akmBuild();
-  const summary: Summary = {
-    eval: NAME,
-    ...corpusFields(corpus),
-    label: ctx.label,
-    date: new Date().toISOString(),
-    status: "complete",
-    aborted_reason: null,
-    git_commit: gitCommit(ROOT),
+export const runCorpus = (corpus: ResolvedCorpus, ctx: CtxInput<Extra>, resultsParent?: string): Promise<Summary & Own> => runIn(SPEC, corpus, ctx, resultsParent) as Promise<Summary & Own>;
 
-    model: ctx.model,
-    akm_version: ctx.version,
-    ...build,
-    embedder,
-    limit: ctx.limit ?? null,
-    ...overrideSummary(overrides),
-    ...runInputs(config, (text) => hideEndpoint(text, ctx.baseUrl), { dir: corpus.folder, files: nightFiles(corpus.folder) }, seed),
-    n_items: night.items.length,
-    n_planted: items.length,
-    n_errored: counts.n_errored,
-    seconds: { ...done.seconds, total },
-    improve_ok: result.ok !== false,
-    skipped_processes: (result.skippedProcesses ?? []).map((p) => String(p.process)),
-    drain: done.drain,
-    outside_changed: counts.outside_changed,
-    pair_pass: pairPass ? { pairs_judged: Number(pairPass.pairsJudged ?? 0), failed_judgments: Number(pairPass.failedJudgments ?? 0), labels: Object.fromEntries(Object.entries(pairPass.labelCounts ?? {}).filter(([, n]) => n > 0)) } : null,
-    calls_by: calls.by.map((r) => ({ ...r, model: hideEndpoint(r.model, ctx.baseUrl) })),
-    metrics: counts.metrics,
-    model_calls: takeModelCalls(),
-    semantic_verification: takeSemanticVerification(),
-    manifest: buildManifest({
-      measurement: MEASUREMENT,
-      corpus: corpus.name,
-      cases: caseDigests(MEASUREMENT, planted(items, night.files)),
-      akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
-      config,
-      settings: { strategy: overrides.strategy, config_patch_sha256: overrides.configPatch?.sha256 ?? null, timeout_ms: null, seed },
-      treatment_hints: { embedder },
-      completion: completionOf(MEASUREMENT, items.map((i) => i.id), rows),
-    }),
-    results_dir: dir,
-  };
-  const { results_dir: _dir, ...stored } = summary;
-  writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
-  printSummary(summary, rows);
-  return summary;
-}
-
-async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; embedder?: string; semantic?: boolean; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
-  try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...EMBEDDER_OPTIONS, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
-  } catch (e) {
-    console.error(`${NAME}: ${(e as Error).message}\n\n${USAGE}`);
-    process.exit(2);
-  }
-  if (values.help) {
-    console.log(USAGE);
-    return;
-  }
-  const publicAssets = join(EVAL_DIR, "assets");
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: publicAssets, fail });
-  const limit = values.limit === undefined ? undefined : Number(values.limit);
-  if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
-  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
-  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
-  const embedder = parseEmbedder(values.embedder, fail, values.semantic);
-  const overrides = parseOverrides(values, STRATEGY, fail);
-
-  useAkm(values, fail);
-  const settings = useModel(values, fail);
-  const { baseUrl, name: model, hasKey } = settings;
-  for (const c of corpora) {
-    if (c.name === "public") continue;
-    const problem = c.rewrite ? privateAssetsProblem(NAME, dirname(c.folder), "items.jsonl") : existsSync(join(c.folder, "items.jsonl")) ? null : `${c.flag}: ${join(c.folder, "items.jsonl")} is missing. A custom corpus of nightly is a folder with an items.jsonl and a library/, as assets/README.md describes`;
-    if (problem) fail(problem);
-  }
-  const label = values.label ?? slug(model);
-  if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
-  await confirmCases(values, [{ role: "model", name: model, baseUrl }]);
-
-  const newSandbox = () => createSandbox(NAME, sandboxOptions(embedder)); // the config names the model key as $MODEL_API_KEY; the real embedder's model is kept in .cache/
-  const probe = newSandbox();
-  let version: string;
-  try {
-    version = await akmVersion(probe).catch((e: Error) => fail(e.message));
-  } finally {
-    removeSandbox(probe);
-  }
-
-  if (!atLeast(version, MIN_AKM)) console.warn(`akm ${version} predates the tested release ${MIN_AKM}; continuing with the requested build. Command or output errors will be recorded normally.`);
-
-  const ctx = { newSandbox, baseUrl, model, hasKey, version, label, limit, overrides, embedder };
-  const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
-  if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
-}
-
-if (import.meta.main) {
-  try {
-    await main();
-  } catch (e) {
-    if (!(e instanceof Fatal)) throw e;
-    console.error(`${NAME}: ${e.message}`);
-    process.exit(e.code);
-  }
-}
+if (import.meta.main) await runEval(SPEC);

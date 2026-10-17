@@ -3,8 +3,10 @@ import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SEMANTIC_MODEL, createSandbox, removeSandbox, semanticConfig } from "../../../lib/akm/akm.ts";
+import { parseOverrides } from "../../../lib/akm/overrides.ts";
+import { fail } from "../../../lib/cli.ts";
 import { assemble, explode } from "./generate.ts";
-import { type Case, EMBEDDER_ENV, RELATIONS, type Relation, type Row, claimProblems, consolidateConfig, embedderEnv, errorRow, isTimeout, metrics, noteAges, parseCases, parseEmbedder, rowFromRun, sandboxOptions, selectCases, timeoutMessage, withEmbedder } from "./lib.ts";
+import { type Case, EMBEDDER_ENV, RELATIONS, type Relation, type Row, claimProblems, consolidateConfig, effectiveConfig, embedderEnv, errorRow, isTimeout, metrics, noteAges, parseCases, rowFromRun, sandboxMaker, sandboxOptions, selectCases, timeoutMessage, withEmbedder } from "./lib.ts";
 
 const note = (name: string, text = `---\ndescription: ${name}\n---\n# ${name}\n\nA claim.\n`) => ({ name, text });
 
@@ -187,23 +189,25 @@ describe("consolidateConfig", () => {
     expect(real.embedding).toEqual({ localModel: SEMANTIC_MODEL, queryTimeoutMs: semanticConfig().embedding.queryTimeoutMs });
     expect({ ...real, embedding: undefined }).toEqual({ ...hash, embedding: undefined });
   });
+
+  test("--semantic, which the driver turns into a config patch, writes the very config that --embedder real wrote: key for key, in the same order", () => {
+    const base = { baseUrl: "http://localhost:8080/v1", model: "m", hasKey: true };
+    const real = consolidateConfig(base.baseUrl, base.model, base.hasKey, "real"); // what --embedder real wrote, and the embedder is real whatever the patch says
+    const overrides = parseOverrides({ semantic: true }, "consolidate", fail);
+    expect(overrides.configPatch).toMatchObject({ path: "--semantic", patch: { semanticSearchMode: real.semanticSearchMode, embedding: real.embedding } });
+    expect(JSON.stringify(effectiveConfig({ ...base, embedder: "real", overrides }))).toBe(JSON.stringify(real));
+    // without the flag the config is the deterministic one
+    expect(JSON.stringify(effectiveConfig({ ...base, overrides: parseOverrides({}, "consolidate", fail) }))).toBe(JSON.stringify(consolidateConfig(base.baseUrl, base.model, base.hasKey)));
+  });
+
+  test("gives the engine the provider kind it is given, and openai without one", () => {
+    expect(consolidateConfig("http://localhost:8080/v1", "m", false, "deterministic", "groq").engines.consolidate.provider).toBe("groq");
+    expect(consolidateConfig("http://localhost:8080/v1", "m", false).engines.consolidate.provider).toBe("openai");
+    expect(effectiveConfig({ baseUrl: "http://localhost:8080/v1", model: "m", hasKey: false, provider: "anthropic" }).engines.consolidate.provider).toBe("anthropic");
+  });
 });
 
 describe("the embedder", () => {
-  test("parseEmbedder takes deterministic (the default) and real, and ends the run with a message for anything else", () => {
-    const fail = (message: string): never => {
-      throw new Error(message);
-    };
-    expect(parseEmbedder(undefined, fail)).toBe("deterministic");
-    expect(parseEmbedder("deterministic", fail)).toBe("deterministic");
-    expect(parseEmbedder("real", fail)).toBe("real");
-    expect(parseEmbedder(undefined, fail, true)).toBe("real");
-    expect(parseEmbedder("real", fail, true)).toBe("real");
-    expect(() => parseEmbedder("deterministic", fail, true)).toThrow("--semantic uses the real embedder");
-    expect(() => parseEmbedder("fake", fail)).toThrow('--embedder must be deterministic or real, not "fake"');
-    expect(() => parseEmbedder("", fail)).toThrow("--embedder must be deterministic or real");
-  });
-
   test("the deterministic embedder is akm's switch in the environment, and the real one sets nothing", () => {
     expect(embedderEnv("deterministic")).toEqual(EMBEDDER_ENV);
     expect(EMBEDDER_ENV).toEqual({ AKM_EMBED_DETERMINISTIC: "1" });
@@ -218,6 +222,19 @@ describe("the embedder", () => {
       expect(real.env.HF_HOME).toMatch(/\.cache[\\/]models$/);
       expect(hash.env.HF_HOME).toBeUndefined();
       expect(real.env.AKM_EMBED_DETERMINISTIC).toBeUndefined(); // the sandbox never forwards the caller's AKM_ settings
+    } finally {
+      removeSandbox(real);
+      removeSandbox(hash);
+    }
+  });
+
+  test("sandboxMaker makes the sandbox of a run for the eval's name and the embedder, with the options above", () => {
+    const [real, hash] = [sandboxMaker("consolidate-test", "real")(), sandboxMaker("consolidate-test", "deterministic")()];
+    try {
+      expect(real.dir).toContain("akm-eval-consolidate-test-");
+      expect(real.keep).toEqual(["MODEL_API_KEY"]); // keepModelKey, as sandboxOptions says
+      expect(real.env.HF_HOME).toMatch(/\.cache[\\/]models$/);
+      expect(hash.env.HF_HOME).toBeUndefined();
     } finally {
       removeSandbox(real);
       removeSandbox(hash);

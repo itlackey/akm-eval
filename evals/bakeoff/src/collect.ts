@@ -16,7 +16,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { type Sandbox, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
-import { type ConfigPatch, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
 import { type Case, type Process, type Raw, type Row, makeRow } from "./score.ts";
 
@@ -56,8 +56,8 @@ const only = (on: Record<string, unknown>) => ({
  * `experimental.improveAutonomy`. Semantic search is off, so consolidate's pair pass finds no pairs and the promotion pass sees the pool in
  * the order it was written.
  */
-export function bakeoffConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey, ENGINE);
+export function bakeoffConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, ENGINE, provider);
   config.engines[ENGINE].temperature = 0;
   config.engines[ENGINE].enableThinking = false;
   config.experimental = { improveAutonomy: true };
@@ -72,19 +72,22 @@ export function bakeoffConfig(baseUrl: string, model: string, hasKey: boolean): 
   return config;
 }
 
-/** What one case needs of the run: the model, its endpoint, a config patch and the time limit of an akm command. */
+/** What one case needs of the run: the model, its endpoint and provider kind, the config patch and the time limit of an akm command. */
 export interface CaseContext {
   baseUrl: string;
   model: string;
   hasKey: boolean;
-  configPatch?: ConfigPatch | null;
-  /** How long one akm command may run, in milliseconds. The default is TIMEOUT_MS. */
+  /** The provider kind of akm's engine. Default: openai. */
+  provider?: string;
+  /** The config patch of the run; its strategy is "", since bakeoff has none. */
+  overrides?: Overrides;
+  /** How long one akm command may run, in milliseconds. A run always sets it (--timeout-ms); without it the default is TIMEOUT_MS. */
   timeoutMs?: number;
 }
 
 /** The akm config of a run, with the config patch merged in. */
-export const configFor = (ctx: Pick<CaseContext, "baseUrl" | "model" | "hasKey" | "configPatch">): Record<string, any> =>
-  patchedConfig(bakeoffConfig(ctx.baseUrl, ctx.model, ctx.hasKey), { strategy: "", configPatch: ctx.configPatch ?? null });
+export const configFor = (ctx: Pick<CaseContext, "baseUrl" | "model" | "hasKey" | "provider" | "overrides">): Record<string, any> =>
+  patchedConfig(bakeoffConfig(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.provider), ctx.overrides ?? defaultOverrides(""));
 
 /** Did the command run past its timeout? runAkm ends the stderr of a command it killed with "akm timed out after <N>s", and runAkmJson throws a message that says so. */
 export const timedOutMessage = (message: string): boolean => /\btimed out after [\d.]+s\b/.test(message);

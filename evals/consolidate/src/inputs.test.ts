@@ -2,9 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { engineConfig } from "../../../lib/akm/akm.ts";
-import { endpointHost, sha256Files } from "../../../lib/provenance.ts";
-import { assetsDigest, generateInto, privateAssetsProblem, replaceDir, runInputs } from "./inputs.ts";
+import { sha256Files } from "../../../lib/provenance.ts";
+import { assetsDigest, generateInto, replaceDir } from "./inputs.ts";
 
 const dirs: string[] = [];
 const temp = () => {
@@ -55,14 +54,6 @@ describe("assetsDigest", () => {
     const here = process.cwd();
     expect(() => assetsDigest(temp(), ["no-such-file.txt"])).toThrow();
     expect(process.cwd()).toBe(here);
-  });
-});
-
-describe("privateAssetsProblem", () => {
-  test("is null when the file the run reads is there, and says how to make the assets when it is not", () => {
-    expect(privateAssetsProblem("consolidate", put(temp(), { "assets/cases.jsonl": "x\n" }), "cases.jsonl")).toBeNull();
-    expect(privateAssetsProblem("consolidate", temp(), "cases.jsonl")).toBe("the private assets are missing (private/consolidate/assets/cases.jsonl). Make them with: ./generate-assets --only consolidate");
-    expect(privateAssetsProblem("nightly", temp(), "items.jsonl")).toContain("./generate-assets --only nightly");
   });
 });
 
@@ -143,7 +134,7 @@ describe("generateInto", () => {
     const out = join(temp(), "c");
     expect(generateInto(out, "1", () => ["broken"])).toEqual(["broken"]);
     expect(readdirSync(out)).toEqual([]);
-    expect(privateAssetsProblem("consolidate", out, "cases.jsonl")).toContain("assets are missing");
+    expect(existsSync(join(out, "assets"))).toBe(false);
   });
 
   test("a stale temporary folder from a run that died is cleared first", () => {
@@ -151,32 +142,5 @@ describe("generateInto", () => {
     generateInto(out, "1", writeSet("first"));
     expect(existsSync(join(out, ".new"))).toBe(false);
     expect(readdirSync(join(out, "assets"))).toEqual(["cases.jsonl"]);
-  });
-});
-
-describe("runInputs", () => {
-  const base = "http://localhost:8080/v1";
-  const hide = (text: string) => text.split(base).join("<MODEL_BASE_URL>");
-
-  test("holds the redacted config, the engine's settings, the digest of the files and the seed", () => {
-    const config = engineConfig(base, "the-model", true, "consolidate");
-    Object.assign(config.engines.consolidate, { temperature: 0, enableThinking: false, apiKey: "sk-secret" });
-    const assets = put(temp(), { "cases.jsonl": "x\n" });
-    const inputs = runInputs(config, hide, { dir: assets, files: ["cases.jsonl"] }, "7");
-    expect(inputs.assets_sha256).toBe(assetsDigest(assets, ["cases.jsonl"]));
-    expect(inputs.seed).toBe("7");
-    expect(inputs.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
-    expect(JSON.stringify(inputs)).not.toContain("sk-secret");
-    expect((inputs.config as any).engines.consolidate).toMatchObject({ apiKey: "<redacted>", endpoint: "<MODEL_BASE_URL>/chat/completions", temperature: 0 });
-    expect((inputs.config as any).defaults).toEqual({ llmEngine: "consolidate" });
-  });
-
-  test("redacts a $VARIABLE key reference too, writes the endpoint as <MODEL_BASE_URL>, and has no seed for the public assets", () => {
-    const config = engineConfig(base, "m", true, "consolidate");
-    const inputs = runInputs(config, hide, { dir: put(temp(), { "a.txt": "1" }), files: ["a.txt"] }, null);
-    expect(inputs.seed).toBeNull();
-    expect(JSON.stringify(inputs.config)).toContain('"apiKey":"$MODEL_API_KEY"');
-    expect(JSON.stringify(inputs.config)).not.toContain("localhost");
-    expect(config.engines.consolidate.endpoint).toBe(`${base}/chat/completions`); // the config that was written is not changed
   });
 });

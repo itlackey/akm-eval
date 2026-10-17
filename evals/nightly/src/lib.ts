@@ -9,6 +9,6 @@ export * from "./library.ts";
 export * from "./night.ts";
 export * from "./score.ts";
 export * from "./collect.ts";
-export { EMBEDDER_ENV, noteAges } from "../../consolidate/src/sandbox.ts";
+export { noteAges } from "../../consolidate/src/sandbox.ts";
 
 export const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);

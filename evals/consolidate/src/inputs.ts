@@ -1,13 +1,12 @@
-// What ties a consolidate or nightly run to its inputs: the digest of the files a run reads, the marker generated.json that
-// `generate` leaves beside the assets, and the fields every summary.json holds about the config and the assets. Both evals use it,
-// nightly through its own lib.
+// What ties a consolidate or nightly run to its inputs: the digest of the files a run reads, and the marker generated.json that
+// `generate` leaves beside the assets. Both evals use it.
 //
 // `generate` writes into a temporary folder and moves the result into place only when every check has passed, so a failed run
 // leaves the previous private set as it was, and a run never meets a new map with old assets. generated.json holds the seed.
 
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type EngineSettings, engineSettings, redactConfig, sha256Files } from "../../../lib/provenance.ts";
+import { sha256Files } from "../../../lib/provenance.ts";
 
 /** The marker `generate` writes in private/<name>/, beside assets/ and map.json: the seed the set was made with. */
 export const GENERATED = "generated.json";
@@ -25,12 +24,6 @@ export function assetsDigest(base: string, files: string[]): string {
   } finally {
     process.chdir(here);
   }
-}
-
-/** Why a run on the rewrite of `name` (in `dir`, private/<name>) cannot go ahead, or null when it can. `probe` is the file of the assets that has to be there. */
-export function privateAssetsProblem(name: string, dir: string, probe: string): string | null {
-  if (!existsSync(join(dir, "assets", probe))) return `the private assets are missing (private/${name}/assets/${probe}). Make them with: ./generate-assets --only ${name}`;
-  return null;
 }
 
 /** The folder `generateInto` hands to `make`: its own assets/, map.json and generated.json are the ones that replace the set. */
@@ -78,21 +71,4 @@ export function generateInto(out: string, seed: string, make: (stage: Stage) => 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-}
-
-/** What a summary.json says about the config and the assets of a run. */
-export interface RunInputs {
-  /** The akm config the eval wrote, with secrets redacted and the model endpoint written as <MODEL_BASE_URL>, like the rows. */
-  config: Record<string, any>;
-  /** The settings of the engine the config names as its default: model, endpoint host, temperature, thinking and timeout. */
-  engine: EngineSettings;
-  /** One digest over the case and label files the run read, as assetsDigest gives it. */
-  assets_sha256: string;
-  /** The seed of the private assets the run read, null for the public ones. */
-  seed: string | null;
-}
-
-/** The fields for a summary. `hide` writes the model endpoint as <MODEL_BASE_URL>. */
-export function runInputs(config: Record<string, any>, hide: (text: string) => string, assets: { dir: string; files: string[] }, seed: string | null): RunInputs {
-  return { config: JSON.parse(hide(JSON.stringify(redactConfig(config)))), engine: engineSettings(config), assets_sha256: assetsDigest(assets.dir, assets.files), seed };
 }
