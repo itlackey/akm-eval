@@ -5,8 +5,12 @@
 //   if (import.meta.main) await runEval(SPEC);
 //
 // The order of a run: the flags, the corpora, --strategy and --config-patch, --akm, the model, the label, the cases file of a custom corpus,
-// the eval's own setup (`prepare`), the destination of --cases, ONE akm version probe and ONE akmBuild() for the whole run, then each corpus
-// (each of its --repeat runs) in turn. What can fail for the person who started the run fails before the first case.
+// the eval's own setup (`prepare`), the destination of --cases, ONE akm version probe, ONE request to the model endpoint (lib/probe.ts; not with
+// AKM_EVAL_NO_PROBE=1) and ONE akmBuild() for the whole run, the startup banner, then each corpus (each of its --repeat runs) in turn. What can
+// fail for the person who started the run fails before the first case, a wrong URL, key or model name included.
+//
+// The banner says what the run is set to, read from the akm config the cases are given and from the flags, so that a setting that is not what
+// the person believes (keyword search for semantic, thinking left on) shows before the run has cost anything.
 //
 // A run gives up when 5 rows in a row, in the order they finish, are errored: no new case starts, those running finish, the summary is written
 // with status "aborted" and the reason, and the run fails with exit code 1.
@@ -25,7 +29,8 @@ import { Fatal, fail, gitCommit, hideEndpoint, slug } from "./cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "./corpus.ts";
 import { type Measurement, type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf } from "./manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "./models.ts";
-import { type EngineSettings, engineSettings, redactConfig } from "./provenance.ts";
+import { type Probe, probeModel } from "./probe.ts";
+import { type EngineSettings, endpointHost, engineSettings, redactConfig } from "./provenance.ts";
 import { repeatRuns } from "./repeat.ts";
 import { makeResultsDir } from "./results.ts";
 
@@ -136,7 +141,11 @@ export interface EvalSpec<Case = any, Row extends Obj = Obj, Extra extends Obj =
   selectCases(all: Case[], limit: number | undefined, ctx: RunCtx & Extra): Case[];
   /** The digest of what a run reads from a corpus folder, whose cases are `all`. */
   assetsSha256(folder: string, all: Case[]): string;
-  /** The akm config of the run. The summary and the manifest record it, and the eval's runCase writes it. */
+  /**
+   * The akm config of the run. The summary and the manifest record it, and the eval's runCase writes it. The startup banner reads the search mode and the
+   * engine's temperature and thinking from it, so it is the config akm is given, and it is asked once before the first case, with the context of the first
+   * corpus and nothing that `openRun` opens.
+   */
   configFor(ctx: RunCtx & Extra): Record<string, any>;
   /** One case: what akm is asked, and the scored row. An error of the case is a row that the measurement calls errored, not a throw. */
   runCase(c: Case, ctx: RunCtx & Extra): Promise<Row>;
@@ -332,7 +341,8 @@ function usageOf(spec: EvalSpec): string {
   ];
   const synopsis = `[--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N]${flags ? ` ${flags}` : ""}${spec.strategy === undefined ? "" : " [--strategy NAME]"} [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]${spec.collectAll ? "" : " [--concurrency N]"} [--timeout-ms N]`;
   const needs = spec.minAkm ? `Tested with akm ${spec.minAkm} or later on PATH, or in AKM_BIN.` : "Needs akm on PATH, or in AKM_BIN.";
-  return `Usage: ${relative(ROOT, spec.dir)}/run ${synopsis}\n\n${about}\n\n${flagLines.join("\n")}\n\n${needs}`;
+  const asks = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
+  return `Usage: ${relative(ROOT, spec.dir)}/run ${synopsis}\n\n${about}\n\n${flagLines.join("\n")}\n\n${needs}\n${asks}`;
 }
 
 /** The two summaries as columns, never one pooled number. */
@@ -342,6 +352,23 @@ function printSideBySide(spec: EvalSpec, a: Summary, b: Summary): void {
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => (r[i] as string).length)));
   console.log(`\n${spec.measurement.eval}: ${a.corpus} and ${b.corpus} side by side (not pooled)`);
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0] as number)}  ${r[1].padEnd(w[1] as number)}  ${r[2].padEnd(w[2] as number)}`);
+}
+
+/** What the run is set to, as one block. `ctx` is the first corpus's, and `probe` is what the endpoint answered: undefined when it was not asked. */
+function banner<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Case, Row, Extra>, ctx: RunCtx & Extra, probe: Probe | undefined): string {
+  const config = spec.configFor(ctx);
+  const engine = engineSettings(config);
+  const served = probe?.ok && probe.served !== null && probe.served !== ctx.model ? `, served as ${probe.served}` : "";
+  const thinking = engine.enableThinking === true ? "on" : engine.enableThinking === false ? "off" : "unset";
+  return [
+    `${spec.measurement.eval}: model ${ctx.model} at ${endpointHost(ctx.baseUrl) ?? "an endpoint that is not a URL"} (provider ${ctx.provider}${probe ? served : ", not probed"})`,
+    `  search ${(config.semanticSearchMode ?? "off") === "off" ? "keyword" : "semantic"}`,
+    `  temperature ${engine.temperature ?? "unset"}, thinking ${thinking}`,
+    ...(spec.strategy === undefined ? [] : [`  strategy ${ctx.overrides.strategy}`]),
+    ...(ctx.overrides.configPatch ? [`  config patch ${ctx.overrides.configPatch.path}`] : []),
+    `  ${spec.collectAll ? "" : `concurrency ${ctx.concurrency}, `}timeout ${ctx.timeoutMs / 1000}s per akm command`,
+    `  akm ${ctx.version}${ctx.build?.akm_build ? ` build ${ctx.build.akm_build}` : ""}`,
+  ].join("\n");
 }
 
 type Values = Obj & { corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; model?: string; akm?: string; strategy?: string; "config-patch"?: string; semantic?: boolean; concurrency?: string; "timeout-ms"?: string; help?: boolean };
@@ -367,7 +394,7 @@ async function main<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Cas
   const corpora = resolveCorpora({ eval: name, values, publicFolder: join(spec.dir, "assets"), rewrite: spec.rewrite, fail });
   const overrides = parseOverrides(values, spec.strategy ?? "", fail);
   useAkm(values, fail);
-  const { baseUrl, name: model, hasKey, provider } = useModel(values, fail);
+  const { baseUrl, name: model, hasKey, provider, apiKey } = useModel(values, fail);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
@@ -390,13 +417,17 @@ async function main<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Cas
     removeSandbox(probe);
   }
   if (spec.minAkm && !atLeast(version, spec.minAkm)) console.warn(`akm ${version} predates the tested release ${spec.minAkm}; continuing with the requested build. Command or output errors will be recorded normally.`);
+  // The endpoint is asked once, with the key and the model name the cases will use: a wrong one ends the run here, before it has spent anything.
+  const probed = process.env.AKM_EVAL_NO_PROBE === "1" ? undefined : await probeModel({ baseUrl, apiKey, model });
+  if (probed && !probed.ok) fail(`the model endpoint did not answer: ${probed.reason}\nCheck MODEL_BASE_URL, MODEL_API_KEY and the model name (${model}); the run made no case.`, 2);
   const build = akmBuild();
 
   const ctx = { baseUrl, model, hasKey, provider, overrides, timeoutMs, concurrency, version, label, limit, build };
+  const more = corpora.map((c) => extra(c));
+  console.log(banner(spec, { ...ctx, ...more[0] } as RunCtx & Extra, probed));
   const summaries: Summary[] = [];
-  for (const c of corpora) {
-    const more = extra(c);
-    summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(spec, c, { ...ctx, ...more, label: runLabel } as CtxInput<Extra>))));
+  for (const [i, c] of corpora.entries()) {
+    summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(spec, c, { ...ctx, ...more[i], label: runLabel } as CtxInput<Extra>))));
   }
   if (summaries.length === 2 && repeat === undefined) printSideBySide(spec, summaries[0] as Summary, summaries[1] as Summary);
 }

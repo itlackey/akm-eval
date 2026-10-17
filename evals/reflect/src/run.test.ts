@@ -601,7 +601,7 @@ describe("run --corpus custom", () => {
     const script = join(tree, "fake-akm.ts");
     writeFileSync(script, FAKE_AKM);
     const log = join(tree, "calls.jsonl");
-    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, FAKE_PLAN: "{}" };
+    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_EVAL_NO_PROBE: "1", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, FAKE_PLAN: "{}" }; // nothing listens on port 9, and the run is not to ask it
     const p = Bun.spawnSync(["bun", join(tree, "evals", "reflect", "src", "run.ts"), "--corpus", "public", "--limit", "4", "--concurrency", "3", "--timeout-ms", "20000", "--label", "flags"], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
     expect([p.exitCode, p.stderr.toString()]).toEqual([0, ""]);
     const results = join(tree, "evals", "reflect", "results");

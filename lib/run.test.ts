@@ -1,5 +1,6 @@
 // The tests of lib/run.ts. A fake eval (FIXTURE) runs through runEval in a process of its own, in a copy of lib/ in a temp folder so that its
-// private/ and results are there and never in the repository, against a fake akm that logs every call and sleeps as long as the case says.
+// private/ and results are there and never in the repository, against a fake akm that logs every call and sleeps as long as the case says, and
+// a stub of the model endpoint (STUB_MODEL) in a process of its own, since a run is started synchronously and that blocks this process.
 // What reflect adds to the run is in evals/reflect/src/run.test.ts.
 
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
@@ -132,6 +133,30 @@ Object.assign(spec, JSON.parse(process.env.FAKE_SPEC ?? "{}"));
 await runEval(spec);
 `;
 
+/**
+ * A model endpoint that prints its port and answers POST /v1/chat/completions with the model "stub", as the smoke's stub does. Under /echo/ it answers
+ * with the model it was asked for, and under /denied/ with 401 and a long body that holds the key it was sent. /__seen is what it was sent since /__reset.
+ */
+const STUB_MODEL = `
+const seen = [];
+const server = Bun.serve({
+  port: 0,
+  hostname: "127.0.0.1",
+  async fetch(req) {
+    const { pathname } = new URL(req.url);
+    if (pathname === "/__seen") return Response.json(seen);
+    if (pathname === "/__reset") { seen.length = 0; return new Response("ok"); }
+    const text = await req.text();
+    const body = text ? JSON.parse(text) : {};
+    const authorization = req.headers.get("authorization");
+    seen.push({ path: pathname, authorization, body });
+    if (pathname.startsWith("/denied/")) return new Response(JSON.stringify({ error: { message: "Incorrect API key provided: " + (authorization ?? "").replace("Bearer ", "") + ". " + "x".repeat(300) } }), { status: 401 });
+    return Response.json({ model: pathname.startsWith("/echo/") ? body.model : "stub", choices: [{ message: { content: "{}" } }] });
+  },
+});
+console.log(server.port);
+`;
+
 /** A case of the fake eval: it waits `ms`, and for the file `gate` if it has one, then fails with `fail` if it has one. A case with `throw` makes the eval throw. */
 interface Case {
   id: string;
@@ -148,11 +173,16 @@ const lines = (cases: Case[]): string => `${cases.map((c) => JSON.stringify(c)).
 /** What the run says when it gives up, after the reason. */
 const CHECK = "Check MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and that akm can reach the model.";
 
+/** The last line of every usage text. */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
+
 setDefaultTimeout(60_000); // every test starts processes
 
 let tree: string;
 let runs = 0;
-beforeAll(() => {
+let stub = ""; // the origin of the stub endpoint: a run's MODEL_BASE_URL is this and /v1
+let stubProcess: Bun.Subprocess<"ignore", "pipe", "inherit">;
+beforeAll(async () => {
   tree = mkdtempSync(join(tmpdir(), "run lib tree-")); // a space in the name, so that a path that is not quoted somewhere fails here
   cpSync(import.meta.dir, join(tree, "lib"), { recursive: true });
   writeFileSync(join(tree, "fixture.ts"), FIXTURE);
@@ -162,8 +192,33 @@ beforeAll(() => {
   writeFileSync(join(tree, "bin", "git"), `#!/bin/sh\necho "$@" >> "$GIT_SHIM_LOG"\nexec ${Bun.which("git")} "$@"\n`);
   chmodSync(join(tree, "bin", "git"), 0o755);
   mkdirSync(join(tree, "evals", "fake", "assets"), { recursive: true });
+  writeFileSync(join(tree, "stub-model.ts"), STUB_MODEL);
+  stubProcess = Bun.spawn(["bun", join(tree, "stub-model.ts")], { stdin: "ignore", stdout: "pipe", stderr: "inherit" });
+  const reader = stubProcess.stdout.getReader();
+  let said = ""; // its port, once it listens
+  while (!said.includes("\n")) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    said += new TextDecoder().decode(chunk.value);
+  }
+  stub = `http://127.0.0.1:${said.trim()}`;
 });
-afterAll(() => rmSync(tree, { recursive: true, force: true }));
+afterAll(() => {
+  stubProcess.kill();
+  rmSync(tree, { recursive: true, force: true });
+});
+
+/** What the stub has been sent since it was last reset: the path, the authorization and the body of each request. */
+const sentToStub = async (): Promise<{ path: string; authorization: string | null; body: any }[]> => (await fetch(`${stub}/__seen`)).json() as Promise<any>;
+const resetStub = async (): Promise<void> => void (await fetch(`${stub}/__reset`));
+
+/** A port that nothing listens on: a connection to it is refused. */
+function closedPort(): number {
+  const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("") });
+  const port = server.port as number;
+  server.stop(true);
+  return port;
+}
 
 /** Puts the cases of the public corpus in place. */
 const setCases = (cases: Case[]): void => writeFileSync(join(tree, "evals", "fake", "assets", "cases.jsonl"), lines(cases));
@@ -187,8 +242,12 @@ function setup(args: string[], env: Record<string, string>) {
   const n = ++runs;
   const own = mkdtempSync(join(tmpdir(), "run lib tmp-"));
   const [calls, contexts, events] = [join(tree, `calls-${n}.jsonl`), join(tree, `ctx-${n}.jsonl`), join(tree, `runs-${n}.log`)];
-  const base = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "the-model", MODEL_API_KEY: "model-secret", MODEL_PROVIDER: "", AKM_BIN: commandLine(["bun", join(tree, "fake-akm.ts")]), FAKE_LOG: calls, FAKE_CTX: contexts, FAKE_RUNS: events, TMPDIR: own };
-  const read = (file: string): any[] => (existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
+  const base = { ...process.env, MODEL_BASE_URL: `${stub}/v1`, MODEL_NAME: "the-model", MODEL_API_KEY: "model-secret", MODEL_PROVIDER: "", AKM_EVAL_NO_PROBE: "", NO_PROXY: "127.0.0.1,localhost", no_proxy: "127.0.0.1,localhost", AKM_BIN: commandLine(["bun", join(tree, "fake-akm.ts")]), FAKE_LOG: calls, FAKE_CTX: contexts, FAKE_RUNS: events, TMPDIR: own };
+  const read = (file: string): any[] => {
+    if (!existsSync(file)) return [];
+    const text = readFileSync(file, "utf8");
+    return text.slice(0, text.lastIndexOf("\n") + 1).split("\n").filter(Boolean).map((l) => JSON.parse(l)); // a line that is still being written has no newline yet, and is not read
+  };
   return {
     argv: ["bun", join(tree, "fixture.ts"), ...args],
     options: { cwd: tree, env: { ...base, ...env }, stdout: "pipe" as const, stderr: "pipe" as const },
@@ -238,6 +297,9 @@ const foldersOf = (label: string): string[] =>
     .flatMap((parent) => (existsSync(join(tree, parent)) ? readdirSync(join(tree, parent)).filter((name) => new RegExp(`^\\d{4}-\\d{2}-\\d{2}-${label}(-r\\d+)?$`).test(name)).map((name) => join(tree, parent, name)) : []))
     .sort();
 
+/** Every folder in either results folder, whatever its label: a run that makes none leaves this as it was. */
+const everyFolder = (): string[] => ["evals/fake/results", "private/fake/results"].flatMap((parent) => (existsSync(join(tree, parent)) ? readdirSync(join(tree, parent)).map((name) => `${parent}/${name}`) : [])).sort();
+
 const rowsOf = (folder: string): any[] =>
   existsSync(join(folder, "samples.jsonl")) ? readFileSync(join(folder, "samples.jsonl"), "utf8").split("\n").filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } }) : [];
 
@@ -272,7 +334,7 @@ describe("the flags and the usage", () => {
         "  --concurrency  run N cases at a time, each in a sandbox of its own. Default: 1.",
         "  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 900000.",
       ]) expect(r.out).toContain(line);
-      expect(r.out).toEndWith("\n\nTested with akm 0.9.25 or later on PATH, or in AKM_BIN.\n");
+      expect(r.out).toEndWith(`\n\nTested with akm 0.9.25 or later on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
       expect(r.out).not.toMatch(/--yes|-y\b/);
     }
   });
@@ -367,7 +429,7 @@ describe("the order of a run", () => {
     const [said, start] = [own.out.indexOf("The cases in "), own.out.indexOf("fake (custom): ")];
     expect(said).toBeGreaterThanOrEqual(0);
     expect(said).toBeLessThan(start);
-    expect(own.out).toContain(`The cases in ${notes} will be sent to:\n  model  the-model at http://127.0.0.1:9/v1\n`);
+    expect(own.out).toContain(`The cases in ${notes} will be sent to:\n  model  the-model at ${stub}/v1\n`);
     setCases(ok(1));
     expect(run(["--label", "nodestination"]).out).not.toContain("will be sent to");
   });
@@ -416,6 +478,149 @@ describe("the order of a run", () => {
   });
 });
 
+describe("the model endpoint and the startup banner", () => {
+  const echo = (): string => `${stub}/echo/v1`; // answers with the model it was asked for
+  /** The lines of the banner a run printed: from its first line to the line of the first corpus. */
+  const bannerOf = (out: string): string[] => out.slice(0, out.indexOf("fake (")).trimEnd().split("\n");
+
+  test("the banner is one block after the version probe and before the first case, a line for each setting that decides what the run measures, in this order", () => {
+    setCases(ok(2));
+    const r = run(["--label", "banner"], { MODEL_BASE_URL: echo() });
+    expect(r.code).toBe(0);
+    expect(r.out).toStartWith(
+      `fake: model the-model at ${stub} (provider openai)\n  search keyword\n  temperature unset, thinking unset\n  strategy fake-only\n  concurrency 1, timeout 900s per akm command\n  akm 0.9.99-test\nfake (public): 2 of 2 cases, one at a time\n`,
+    );
+    expect(r.out).not.toContain("model-secret"); // never the key
+    expect(r.out).not.toContain("/echo/"); // and the endpoint is its host, not its path
+    expect(r.calls.map((c) => c.cmd)).toEqual(["version", "case", "case", "case", "case"]); // the request to the endpoint is no akm call, and akm was probed first
+  });
+
+  test("the model line says what the endpoint served the model as when that is not the name asked for, and names the provider", () => {
+    setCases(ok(1));
+    expect(run(["--label", "served"]).out).toStartWith(`fake: model the-model at ${stub} (provider openai, served as stub)\n`);
+    expect(run(["--label", "served-same", "--model", "model-x"], { MODEL_BASE_URL: echo() }).out).toStartWith(`fake: model model-x at ${stub} (provider openai)\n`);
+    expect(run(["--label", "provider"], { MODEL_BASE_URL: echo(), MODEL_PROVIDER: "anthropic" }).out).toStartWith(`fake: model the-model at ${stub} (provider anthropic)\n`);
+  });
+
+  test("search is semantic when the config akm is given turns it on, by --semantic or by a patch, and keyword when not; temperature and thinking are the engine's in that config", () => {
+    setCases(ok(1));
+    const patch = join(tree, "banner-patch.json");
+    const banner = (flags: string[]): string[] => bannerOf(run(["--label", "banner-config", ...flags], { MODEL_BASE_URL: echo() }).out).slice(1); // after the model line
+    const tail = ["  concurrency 1, timeout 900s per akm command", "  akm 0.9.99-test"];
+
+    expect(banner(["--semantic"])).toEqual(["  search semantic", "  temperature unset, thinking unset", "  strategy fake-only", "  config patch --semantic", ...tail]);
+    writeFileSync(patch, JSON.stringify({ semanticSearchMode: "auto", engines: { fake: { temperature: 0, enableThinking: false } } }));
+    expect(banner(["--config-patch", patch])).toEqual(["  search semantic", "  temperature 0, thinking off", "  strategy fake-only", "  config patch banner-patch.json", ...tail]);
+    writeFileSync(patch, JSON.stringify({ semanticSearchMode: "off", engines: { fake: { temperature: 0.3, enableThinking: true } } }));
+    expect(banner(["--config-patch", patch])).toEqual(["  search keyword", "  temperature 0.3, thinking on", "  strategy fake-only", "  config patch banner-patch.json", ...tail]);
+    expect(banner(["--semantic", "--config-patch", patch]).slice(0, 4)).toEqual(["  search semantic", "  temperature 0.3, thinking on", "  strategy fake-only", "  config patch banner-patch.json + --semantic"]); // the flag wins over the patch
+  });
+
+  test("the banner's strategy is --strategy's, and the concurrency and the timeout are those of the run and in seconds; a spec with no strategy has no line for one, and one that runs its own cases none for concurrency", () => {
+    setCases(ok(1));
+    const banner = (flags: string[], env: Record<string, string> = {}): string[] => bannerOf(run(["--label", "banner-flags", ...flags], { MODEL_BASE_URL: echo(), ...env }).out).slice(3); // after the settings of the config
+    const akm = "  akm 0.9.99-test";
+    expect(banner([])).toEqual(["  strategy fake-only", "  concurrency 1, timeout 900s per akm command", akm]);
+    expect(banner(["--strategy", "other", "--concurrency", "3", "--timeout-ms", "1500"])).toEqual(["  strategy other", "  concurrency 3, timeout 1.5s per akm command", akm]);
+    expect(banner([], { FAKE_SPEC: JSON.stringify({ defaultConcurrency: 2, defaultTimeoutMs: 20_000 }) })).toEqual(["  strategy fake-only", "  concurrency 2, timeout 20s per akm command", akm]);
+    expect(banner([], { FAKE_NO_STRATEGY: "1" })).toEqual(["  concurrency 1, timeout 900s per akm command", akm]);
+    expect(banner([], { FAKE_BATCH: "1" })).toEqual(["  strategy fake-only", "  timeout 900s per akm command", akm]); // there is no pool, so no concurrency to say
+  });
+
+  test("the akm line names the build when akm runs from a checkout of it, and is the version alone otherwise", () => {
+    setCases(ok(1));
+    const repo = mkdtempSync(join(tmpdir(), "run lib akm checkout-"));
+    try {
+      writeFileSync(join(repo, "package.json"), '{"name":"akm-cli"}');
+      writeFileSync(join(repo, "fake-akm.ts"), FAKE_AKM);
+      const git = (...args: string[]) => Bun.spawnSync(["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...args], { stdout: "pipe", stderr: "pipe" });
+      for (const args of [["init", "-q"], ["add", "."], ["commit", "-q", "-m", "akm"]]) expect(git(...args).exitCode).toBe(0);
+      const build = git("describe", "--always", "--dirty").stdout.toString().trim();
+      expect(build).not.toBe("");
+      const r = run(["--label", "build"], { MODEL_BASE_URL: echo(), AKM_BIN: commandLine(["bun", join(repo, "fake-akm.ts")]) });
+      expect(r.code).toBe(0);
+      expect(bannerOf(r.out).at(-1)).toBe(`  akm 0.9.99-test build ${build}`);
+      expect(resultsOf("build")[0]?.summary.akm_build).toBe(build);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+    expect(bannerOf(run(["--label", "no-build"], { MODEL_BASE_URL: echo() }).out).at(-1)).toBe("  akm 0.9.99-test");
+  });
+
+  test("a run with several corpora and repeats has one banner, once, and the endpoint is sent one request: the model and key of the run, one token to say, before any case", async () => {
+    setCases(ok(2));
+    setRewrite(ok(2));
+    await resetStub();
+    const r = run(["--corpus", "all", "--repeat", "2", "--model", "model-x", "--label", "once"], { MODEL_BASE_URL: echo() });
+    expect(r.code).toBe(0);
+    expect(r.out.match(/^fake: model /gm)).toHaveLength(1);
+    expect(r.out.match(/^ {2}search /gm)).toHaveLength(1);
+    expect(r.out.indexOf("fake: model ")).toBeLessThan(r.out.indexOf("fake (public): "));
+    expect(await sentToStub()).toEqual([{ path: "/echo/v1/chat/completions", authorization: "Bearer model-secret", body: { model: "model-x", messages: [{ role: "user", content: "ping" }], max_tokens: 1 } }]);
+    expect(r.calls.filter((c) => c.cmd === "version")).toHaveLength(1);
+  });
+
+  test("an endpoint that refuses the connection ends the run with exit code 2 and one message, before a case, a banner or a results folder", () => {
+    setCases(ok(2));
+    const host = `http://127.0.0.1:${closedPort()}`;
+    const folders = everyFolder();
+    const r = run(["--label", "refused"], { MODEL_BASE_URL: `${host}/v1/` });
+    expect(r.code).toBe(2);
+    const [what, check, ...more] = r.err.trim().split("\n");
+    expect(what).toStartWith("fake: the model endpoint did not answer: ");
+    expect(what).toEndWith(` (${host})`);
+    expect(check).toBe("Check MODEL_BASE_URL, MODEL_API_KEY and the model name (the-model); the run made no case.");
+    expect(more).toEqual([]); // not a stack
+    expect(r.calls.map((c) => c.cmd)).toEqual(["version"]); // akm was probed first, and no case ran
+    expect(r.out).toBe("");
+    expect(everyFolder()).toEqual(folders); // no results folder was made
+  });
+
+  test("an endpoint that answers 401 ends it the same way, with the status and the start of its body in the message, and not the key", () => {
+    setCases(ok(1));
+    const folders = everyFolder();
+    const r = run(["--label", "denied"], { MODEL_BASE_URL: `${stub}/denied/v1` });
+    expect(r.code).toBe(2);
+    const [what, check, ...more] = r.err.trim().split("\n");
+    expect(what).toStartWith(`fake: the model endpoint did not answer: HTTP 401 from ${stub}: {"error":{"message":"Incorrect API key provided: <MODEL_API_KEY>. xxxx`);
+    expect(what.slice(what.indexOf(": {") + 2)).toHaveLength(200); // the first 200 characters of the body
+    expect(check).toBe("Check MODEL_BASE_URL, MODEL_API_KEY and the model name (the-model); the run made no case.");
+    expect(more).toEqual([]);
+    expect(r.err).not.toContain("model-secret");
+    expect(r.calls.map((c) => c.cmd)).toEqual(["version"]);
+    expect(r.out).toBe("");
+    expect(everyFolder()).toEqual(folders);
+  });
+
+  test("a run that stops before the version probe sends the endpoint nothing, and an akm that cannot run is said before an endpoint that does not answer", async () => {
+    await resetStub();
+    for (const args of [["--help"], ["--bogus"], ["--cases", join(tree, "no such notes")]]) run(args);
+    const noAkm = run(["--label", "no-akm"], { AKM_BIN: commandLine([join(tree, "no-akm")]), MODEL_BASE_URL: `http://127.0.0.1:${closedPort()}/v1` });
+    expect(noAkm.code).toBe(2);
+    expect(noAkm.err).toContain("could not run");
+    expect(noAkm.err).not.toContain("did not answer");
+    run(["--label", "no-akm-stub"], { AKM_BIN: commandLine([join(tree, "no-akm")]) });
+    expect(await sentToStub()).toEqual([]);
+  });
+
+  test("AKM_EVAL_NO_PROBE=1 skips the request and the banner says so; any other value leaves it", async () => {
+    setCases(ok(1));
+    await resetStub();
+    const refusing = `http://127.0.0.1:${closedPort()}`;
+    const skipped = run(["--label", "no-probe"], { AKM_EVAL_NO_PROBE: "1", MODEL_BASE_URL: `${refusing}/v1` }); // an endpoint that would refuse
+    expect(skipped.code).toBe(0);
+    expect(skipped.out).toStartWith(`fake: model the-model at ${refusing} (provider openai, not probed)\n  search keyword\n`);
+    expect(run(["--label", "no-probe-stub"], { AKM_EVAL_NO_PROBE: "1" }).code).toBe(0);
+    expect(await sentToStub()).toEqual([]);
+    for (const other of ["0", "true", ""]) {
+      await resetStub();
+      expect([other, run(["--label", "probe-stays"], { AKM_EVAL_NO_PROBE: other }).code]).toEqual([other, 0]);
+      expect([other, (await sentToStub()).length]).toEqual([other, 1]);
+    }
+    expect(run(["--label", "probe-refused"], { AKM_EVAL_NO_PROBE: "yes", MODEL_BASE_URL: `${refusing}/v1` }).code).toBe(2);
+  });
+});
+
 describe("the cases of a run", () => {
   test("each case gets a progress line with its counter, and a row in samples.jsonl", () => {
     setCases([...ok(9), ...bad(2)]);
@@ -457,7 +662,7 @@ describe("the cases of a run", () => {
     expect(s.git_commit).toBe("unknown"); // the temp folder is no checkout
     expect(s.wall_seconds).toBeNumber();
     expect(s.config.engines.fake).toMatchObject({ provider: "openai", model: "model-x", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY" }); // the endpoint is hidden, and the key is named, never held
-    expect(s.engine).toMatchObject({ engine: "fake", model: "model-x", endpoint: "http://127.0.0.1:9" });
+    expect(s.engine).toMatchObject({ engine: "fake", model: "model-x", endpoint: stub });
     expect(JSON.stringify(s)).not.toContain("model-secret");
     expect(s.manifest).toMatchObject({ eval: "fake", corpus: "public", collector: { version: "0.1" }, settings: { strategy: "other", config_patch_sha256: null, timeout_ms: 900_000, seed: null }, completion: { selected: ["ok0", "ok1"], scored: ["ok0", "ok1"], errored: [] } });
     expect(Object.keys(s.manifest.cases)).toEqual(["ok0", "ok1"]);
@@ -597,7 +802,7 @@ describe("what a spec can set", () => {
   test("minAkm is optional: without it the usage says akm is needed, and no akm is warned of", () => {
     setCases(ok(1));
     const spec = { FAKE_SPEC: JSON.stringify({ minAkm: null }) };
-    expect(run(["--help"], spec).out).toEndWith("\n\nNeeds akm on PATH, or in AKM_BIN.\n");
+    expect(run(["--help"], spec).out).toEndWith(`\n\nNeeds akm on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
     const old = run(["--label", "no-minimum"], { ...spec, FAKE_VERSION: "0.1.0" });
     expect([old.code, old.err]).toEqual([0, ""]);
   });
