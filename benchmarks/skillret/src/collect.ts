@@ -1,5 +1,5 @@
-// The collector of the skillret benchmark: writes the skills of a corpus into akm sandboxes as assets, indexes them for keyword search and, in a
-// run without --limit, for semantic search, and asks akm search for the first 15 skills of every query, and akm curate for a sample of them. It
+// The collector of the skillret benchmark: writes the skills of a corpus into akm sandboxes as assets, indexes them for keyword search and, with
+// --semantic, for semantic search, and asks akm search for the first 15 skills of every query, and akm curate for a sample of them. It
 // builds each query's row with the scorer's `makeRow` from the ranked results akm gave. It is the COLLECTOR part of the benchmark's measurement
 // (see measurement.ts and lib/manifest.ts): the sandboxes and the configs akm runs with, the layout of the bundle, the commands and what is
 // recorded of the answers. The scoring is score.ts.
@@ -29,9 +29,6 @@ export const WORKERS = Math.min(8, availableParallelism());
  */
 export const BUILDER = [join(import.meta.dir, "akm.ts")];
 
-/** Whether a run scores the semantic search as well. A run with --limit is for checking a setup, and is scored with keyword search alone. */
-export const withSemantic = (limit?: number): boolean => limit === undefined;
-
 /** Runs `work` for every item, `workers` at a time. */
 async function inParallel<T>(items: T[], workers: number, work: (item: T) => Promise<void>): Promise<void> {
   let next = 0;
@@ -42,13 +39,13 @@ async function inParallel<T>(items: T[], workers: number, work: (item: T) => Pro
   );
 }
 
-const seconds = (s: number): string => (s >= 120 ? `${(s / 60).toFixed(1)} min` : `${Math.round(s)} s`);
+export const seconds = (s: number): string => (s >= 120 ? `${(s / 60).toFixed(1)} min` : `${Math.round(s)} s`);
 
 /** How a semantic index came to be, in words. */
 export const INDEX_STATE = { cold: "a new index", warm: "kept from an earlier run", rebuilt: "a new index, because the kept one was not what it was built as" } as const;
 
 export interface CollectContext {
-  /** Whether the run has the semantic index and its line. */
+  /** Whether the run has the semantic index and its line: --semantic. */
   semantic: boolean;
   /** A sandbox for the keyword index, for tests. Default: a new one. */
   newSandbox?: () => Sandbox;
@@ -109,6 +106,7 @@ export async function collect(corpus: Corpus, ctx: CollectContext, begin: (versi
     let builtBy: CachedIndex["builtBy"] | undefined;
     if (ctx.semantic) {
       const t0 = performance.now();
+      console.log("  the semantic index embeds every skill: about 16 minutes the first time, then it is kept in .cache/akm-index/ and reused");
       const index = await cachedIndex({ name: `${NAME}-${corpus.corpus}`, version, files: akm.skillFiles(skills), builder: BUILDER, ...ctx.cache }, async (sb) => {
         const n = await akm.load(sb, skills, true);
         indexed(n);

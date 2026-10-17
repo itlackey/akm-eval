@@ -16,11 +16,11 @@ import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolde
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type EngineSetting, canonical, endpointHost, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
-import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
+import { RUNNING, clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode } from "./akm.ts";
 import { type Context, NAME, READER_ORDER, TOP_K, collectQuestion, openSandbox, sampling } from "./collect.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Sample } from "./dataset.ts";
-import { CHAT_TIMEOUT_MS, TEMPERATURE, type Endpoint } from "./llm.ts";
+import { CHAT_TIMEOUT_MS, type Endpoint, temperatureOf } from "./llm.ts";
 import { digestFiles, readGenerated } from "./manifest.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import type { Rate } from "./metrics.ts";
@@ -28,7 +28,6 @@ import { type Row, summarize } from "./score.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
-// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 const DEFAULT_SAMPLE_SEED = 42;
 const GIVE_UP_AFTER = 3; // questions in a row that failed the same way, before the first one that did not
 
@@ -47,7 +46,6 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
   --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format.
                     It is --corpus custom. See "Corpora" in README.md. The run says which model and judge it sends the
                     chats to before starting.
-  -y, --yes         accepted for compatibility; no confirmation is required.
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
   --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json as sample_seed,
                     apart from seed, the seed that made the custom dataset.
@@ -60,10 +58,11 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     indexes them, so a question takes longer. A search that does not come back as semantic is an
                     errored call. Default: keyword search only. It is recorded in summary.json as search_mode.
   --label NAME      names the results folder: <UTC date>-<label>. Default: the model name.
-  --resume DIR      carry on a stopped run in its results folder: with the same manifest (corpus, questions, eval version,
-                    model, judge and their endpoints, akm version, command, build and uncommitted changes, and config) and
-                    code (harness_sha256), it asks only the questions that are not done.
-                    Rows made by other code are refused, not carried on: start a new run, without --resume
+  --resume DIR      carry on a stopped run in its results folder, asking only the questions that are not done. The manifest has
+                    to be the stored one: corpus, mode, eval and harness versions, model and judge with their endpoints and
+                    settings (temperature, token limits), akm version, command, build, uncommitted changes and config, and the
+                    digest of every question. Otherwise it is refused: start a new run, without --resume. So is a folder whose
+                    .running names a process that is still going
 ${modelUsage}
 ${judgeUsage}
 ${akmUsage}
@@ -93,8 +92,9 @@ interface Summary extends ReturnType<typeof summarize> {
   /** The host the model and the judge are called at. Never the path, which can name a deployment or carry a key. Null when the run has no model. */
   model_endpoint: string | null;
   judge_endpoint: string | null;
-  /** What every model and judge request sends: the temperature, and the most tokens each may answer with. Null when the run has no model. */
+  /** What the requests send: the reader's temperature and the judge's (the chat.temperature of a models.json line, else 0), and the most tokens each may answer with. Null when the run has no model. */
   temperature: number | null;
+  judge_temperature: number | null;
   max_tokens: { model: number; judge: number } | null;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
@@ -138,7 +138,7 @@ const points = (x: number | null): string => (x === null ? "n/a" : `${x >= 0 ? "
 
 function printSummary(s: Summary): void {
   const r = s.metrics.retrieval;
-  console.log(`\n${NAME} (${s.corpus}) | ${s.n_run} of ${s.sample.total} questions | model ${s.model ?? "none"} | judge ${s.judge_model ?? "none"} | akm ${s.akm_version}, ${s.search_mode} search`);
+  console.log(`\n${NAME} (${s.corpus}) | ${s.n_run} of ${s.sample.n} questions | model ${s.model ?? "none"} | judge ${s.judge_model ?? "none"} | akm ${s.akm_version}, ${s.search_mode} search`);
   const acc = s.metrics.accuracy;
   if (acc) {
     const line = (title: string, a: Rate & { n_errored: number }) => console.log(`  ${title}  ${a.correct}/${a.n}  ${pct(a.rate)}  (errored ${a.n_errored})`);
@@ -176,7 +176,7 @@ function printSideBySide(a: Summary, b: Summary): void {
 }
 
 /** The settings of the model or the judge as the manifest keeps them: the host of the endpoint, never the path. */
-const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, endpoint: endpointHost(e.baseUrl), temperature: TEMPERATURE, enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS, ...(e.chat ? { chat: e.chat } : {}) });
+const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, endpoint: endpointHost(e.baseUrl), temperature: temperatureOf(e), enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS, ...(e.chat ? { chat: e.chat } : {}) });
 
 /**
  * What differs between the manifest of a stored run and the manifest of this run, each as a clause for a message: "a different akm build
@@ -214,8 +214,33 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
   return out;
 }
 
-/** Reuse completed rows when resuming with the same recorded run settings. Retry errored questions. */
+/** Is a process with this pid running? One that has exited and is not reaped yet is a zombie: signal 0 still reaches it, and it is not running. */
+export function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM"; // it is there, and another user's
+  }
+  try {
+    return !/^State:\s*Z/m.test(readFileSync(`/proc/${pid}/status`, "utf8"));
+  } catch {
+    return true; // no /proc (macOS): signal 0 is all there is to ask
+  }
+}
+
+/** The pid in the `.running` marker of a results folder when that process is still going: a run that writes the folder. This process is none: the Docker runner starts every run as one pid, so a marker a killed run left names it. */
+function runningIn(dir: string): number | undefined {
+  let pid = Number.NaN;
+  try {
+    pid = Number.parseInt(readFileSync(join(dir, RUNNING), "utf8"), 10);
+  } catch {} // no marker: no run writes here
+  return Number.isInteger(pid) && pid > 0 && pid !== process.pid && isRunning(pid) ? pid : undefined;
+}
+
+/** Reuse completed rows when resuming with the same recorded run settings. Retry errored questions. A folder that a run is still writing is refused. */
 export function resumableRows(dir: string, now: { manifest: RunManifest; retrievalOnly: boolean }): Row[] {
+  const going = runningIn(dir);
+  if (going !== undefined) fail(`${dir} is being written by a run that is still going (pid ${going}). Stop it first, or remove ${join(dir, RUNNING)} if no run has that pid.`);
   const summaryPath = join(dir, "summary.json");
   if (!existsSync(summaryPath)) fail(`${dir} has no summary.json, so it is not a run to resume`);
   const prior = JSON.parse(readFileSync(summaryPath, "utf8")) as Summary;
@@ -342,7 +367,17 @@ export async function runCorpus(
 
   save(false, undefined, true); // even a stop during the first question leaves a checkpoint
   ctx = { ...ctx, judgeCache: new Map() };
-  const interrupted = () => { save(false, "interrupted by the operator"); clearRunning(dir); process.exit(130); };
+  const interrupted = () => {
+    save(false, "interrupted by the operator");
+    clearRunning(dir);
+    // process.exit skips the finally of main that removes the sandbox. This listener is newer than the one runAkm adds to kill the akm in flight, so it runs after it.
+    process.once("exit", () => {
+      try {
+        removeSandbox(ctx.akm.sandbox);
+      } catch {} // nothing here may change the exit code
+    });
+    process.exit(130);
+  };
   process.once("SIGINT", interrupted); process.once("SIGTERM", interrupted);
   let failedInARow = 0;
   let anyScored = false;
@@ -412,7 +447,7 @@ export function resolveEndpoints(values: { model?: string; "judge-model"?: strin
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
+  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...JUDGE_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, semantic: { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -422,10 +457,6 @@ async function main(): Promise<void> {
   if (values.help) {
     console.log(USAGE);
     return;
-  }
-  try {
-  } catch (e) {
-    fail((e as Error).message);
   }
   const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);

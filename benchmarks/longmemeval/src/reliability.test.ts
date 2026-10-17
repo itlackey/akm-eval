@@ -8,7 +8,7 @@ import type { Akm } from "./akm";
 import type { Question } from "./dataset";
 import { chat } from "./llm";
 import { rawOf, summarize } from "./score";
-import { resolveEndpoints } from "./run";
+import { isRunning, resolveEndpoints } from "./run";
 
 let server: ReturnType<typeof Bun.serve> | undefined;
 afterEach(() => server?.stop(true));
@@ -36,6 +36,25 @@ test("model chat settings override only the selected role and persist the actual
   const settings = resolveEndpoints({ model: "configured", "judge-model": "judge" }, m => { throw new Error(m); }, {}, { configured: { base_url: endpoint.baseUrl, chat: reader.chat }, judge: { base_url: endpoint.baseUrl } });
   expect(settings.model.chat).toEqual(reader.chat);
   expect(settings.judge.chat).toBeUndefined();
+});
+
+test("chat.temperature goes to the role whose line sets it, and sampling records the reader's and the judge's apart", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  server = Bun.serve({ port: 0, async fetch(req) { bodies.push(await req.json() as Record<string, unknown>); return Response.json({ choices: [{ message: { content: "blue" } }], usage }); } });
+  const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "m" };
+  const reader = { ...endpoint, chat: { temperature: 1 } };
+  await chat(reader, "q");
+  await chat(endpoint, "q");
+  expect(bodies.map((b) => b.temperature)).toEqual([1, 0]);
+  // a temperature of 0 on a line is a setting, and a line's setting wins over what a caller asks for
+  await chat({ ...endpoint, chat: { temperature: 0 } }, "q", { temperature: 0.7 });
+  expect(bodies[2]?.temperature).toBe(0);
+  expect(sampling(false, reader, endpoint)).toMatchObject({ temperature: 1, judge_temperature: 0 });
+  expect(sampling(false, endpoint, { ...endpoint, chat: { temperature: 0.5 } })).toMatchObject({ temperature: 0, judge_temperature: 0.5 });
+  expect(sampling(true, reader, endpoint)).toMatchObject({ temperature: null, judge_temperature: null });
+  const lines = { configured: { base_url: endpoint.baseUrl, chat: { temperature: 1 } }, judge: { base_url: endpoint.baseUrl, chat: { temperature: 0.3 } } };
+  const settings = resolveEndpoints({ model: "configured", "judge-model": "judge" }, m => { throw new Error(m); }, {}, lines);
+  expect([settings.model.chat, settings.judge.chat]).toEqual([{ temperature: 1 }, { temperature: 0.3 }]);
 });
 
 test("identical answers share one grade and record each real call only once", async () => {
@@ -67,6 +86,34 @@ test("an undecidable grade is a grading failure, not a wrong reader answer", asy
   expect(summarize([row])).toMatchObject({ n_scored: 0, n_errored: 1, judge_undecidable: 2 });
 });
 
+test("a judge that reasons first is read by what follows its reasoning, as the reader is", async () => {
+  let verdict = "<think>The response says blue, which is the key, so probably yes. Or is it no?</think>\n\nYes.";
+  server = Bun.serve({ port: 0, async fetch(req) {
+    const body = await req.json() as { messages: { content: string }[] };
+    return Response.json({ choices: [{ message: { content: body.messages[0]!.content.includes("Model Response:") ? verdict : "blue" } }], usage });
+  } });
+  const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "m" };
+  const yes = await collectQuestion(question, { akm, model: endpoint, judge: endpoint });
+  expect(yes.without_akm).toMatchObject({ ok: true, correct: true, decidable: true, verdict: "Yes.", error: null });
+  expect(summarize([yes])).toMatchObject({ n_scored: 1, n_errored: 0, judge_undecidable: 0 });
+  // the word yes in its thinking decides nothing
+  verdict = "<think>It could be yes, but the response is wrong.</think>No";
+  const no = await collectQuestion(question, { akm, model: endpoint, judge: endpoint });
+  expect(no.without_akm).toMatchObject({ ok: true, correct: false, verdict: "No", error: null });
+});
+
+test("a judge that ran out of tokens inside its reasoning has no verdict: a grading error that shows how its reply began", async () => {
+  server = Bun.serve({ port: 0, async fetch(req) {
+    const body = await req.json() as { messages: { content: string }[] };
+    const grade = body.messages[0]!.content.includes("Model Response:");
+    return Response.json({ choices: [{ message: { content: grade ? "<think>Let me see whether" : "blue" }, finish_reason: grade ? "length" : "stop" }], usage });
+  } });
+  const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "m" };
+  const row = await collectQuestion(question, { akm, model: endpoint, judge: endpoint });
+  expect(row.without_akm).toMatchObject({ ok: false, correct: null, verdict: "", error: "judge: undecidable verdict: <think>Let me see whether (cut off at the token limit)" });
+  expect(summarize([row])).toMatchObject({ n_scored: 0, n_errored: 1, judge_undecidable: 2 });
+});
+
 test("failed requests retain latency and retry count without inventing usage", async () => {
   server = Bun.serve({ port: 0, fetch: () => new Response("context overflow", { status: 400 }) });
   const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "m" };
@@ -74,8 +121,40 @@ test("failed requests retain latency and retry count without inventing usage", a
   expect(row.without_akm?.reader_usage).toMatchObject({ failed: true, retries: 0, prompt_tokens: null, cost_usd: null });
 });
 
+/** perl is there to make a zombie with, on a host with /proc to read it from. */
+const zombies = existsSync("/proc/self/status") && Bun.which("perl") !== null;
 
-test("SIGTERM checkpoints the first question and stops the owned AKM process", async () => {
+test("isRunning tells a running process from one that is gone", async () => {
+  const child = Bun.spawn([process.execPath, "-e", "await Bun.sleep(30_000)"], { stdout: "ignore", stderr: "ignore" });
+  expect(isRunning(child.pid)).toBe(true);
+  expect(isRunning(process.pid)).toBe(true);
+  child.kill();
+  await child.exited; // Bun reaps it
+  expect(isRunning(child.pid)).toBe(false);
+});
+
+test.skipIf(!zombies)("a zombie, which signal 0 still reaches, is not running", async () => {
+  // perl forks a child that exits at once and does not wait for it, so it stays a zombie of perl for as long as perl sleeps
+  const parent = Bun.spawn(["perl", "-e", "$| = 1; my $pid = fork(); exit 0 unless $pid; print qq($pid\\n); sleep 30"], { stdout: "pipe", stderr: "ignore" });
+  try {
+    const reader = parent.stdout.getReader();
+    let out = "";
+    while (!out.includes("\n")) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      out += new TextDecoder().decode(value);
+    }
+    const pid = Number(out);
+    expect(Number.isInteger(pid) && pid > 0).toBe(true);
+    for (let i = 0; i < 200 && !/^State:\s*Z/m.test(readFileSync(`/proc/${pid}/status`, "utf8")); i++) await Bun.sleep(10);
+    expect(() => process.kill(pid, 0)).not.toThrow();
+    expect(isRunning(pid)).toBe(false);
+  } finally {
+    parent.kill();
+  }
+});
+
+test("SIGTERM checkpoints the first question, stops the owned AKM process and removes the sandbox", async () => {
   const dir = mkdtempSync(join(tmpdir(), "longmem-stop-"));
   const assets = join(dir, "assets"); writePublicAssets(assets, [question]);
   const childScript = join(dir, "child.ts");
@@ -83,9 +162,10 @@ test("SIGTERM checkpoints the first question and stops the owned AKM process", a
   const runner = join(dir, "runner.ts");
   writeFileSync(runner, `
     import { runCorpus } from ${JSON.stringify(new URL("./run.ts", import.meta.url).pathname)};
-    import { runAkm } from ${JSON.stringify(new URL("../../../lib/akm/akm.ts", import.meta.url).pathname)};
+    import { Akm } from ${JSON.stringify(new URL("./akm.ts", import.meta.url).pathname)};
+    import { sandboxIn } from ${JSON.stringify(new URL("../../../lib/akm/akm.ts", import.meta.url).pathname)};
     const dir = ${JSON.stringify(dir)};
-    const akm = { mode: "keyword", config: () => ({}), load: () => runAkm({ dir, cmd: [${JSON.stringify(process.execPath)}, ${JSON.stringify(childScript)}], env: {} }, []) };
+    const akm = new Akm({ ...sandboxIn(dir + "/sandbox"), cmd: [${JSON.stringify(process.execPath)}, ${JSON.stringify(childScript)}] });
     await runCorpus({ name: "public", folder: dir + "/assets", rewrite: false }, { label: "stop", sampleSeed: 1 }, { akm, model: null, judge: null, version: "fixture", build: { akm_bin: "fixture", akm_build: null, akm_build_fingerprint: null } }, { results: dir + "/results" });
   `);
   const proc = Bun.spawn([process.execPath, "--no-env-file", runner], { stdout: "ignore", stderr: "pipe" });
@@ -100,10 +180,11 @@ test("SIGTERM checkpoints the first question and stops the owned AKM process", a
     expect(await Promise.race([proc.exited, Bun.sleep(3000).then(() => -1)])).toBe(130);
     expect(JSON.parse(readFileSync(join(result, "summary.json"), "utf8"))).toMatchObject({ status: "aborted", aborted_reason: "interrupted by the operator", n_run: 0 });
     expect(existsSync(join(result, ".running"))).toBe(false);
-    for (let i = 0; i < 100; i++) { try { process.kill(child, 0); await Bun.sleep(10); } catch { child = 0; break; } }
-    expect(child).toBe(0);
+    expect(existsSync(join(dir, "sandbox"))).toBe(false); // process.exit skipped the finally of main that removes it, so the handler does
+    for (let i = 0; i < 100 && isRunning(child); i++) await Bun.sleep(10);
+    expect(isRunning(child)).toBe(false);
   } finally {
-    proc.kill(); if (child) { try { process.kill(child, "SIGKILL"); } catch {} }
+    proc.kill(); if (child && isRunning(child)) { try { process.kill(child, "SIGKILL"); } catch {} }
     rmSync(dir, { recursive: true, force: true });
   }
 });

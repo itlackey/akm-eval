@@ -40,6 +40,7 @@ export const tokenLimit = (endpoint: Endpoint | null, fallback: number): number 
 export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
+  /** The last three are for tests: a run takes the defaults. */
   timeoutMs?: number;
   retries?: number;
   retryBackoffMs?: number;
@@ -50,8 +51,11 @@ const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 /** How long a request may take, unless the caller says otherwise. */
 export const CHAT_TIMEOUT_MS = 900_000;
 
-/** The temperature of every request, the benchmark's own for the model and the judge. run.ts records it in summary.json. */
+/** The temperature of a request whose role has no chat.temperature in its models.json line: the benchmark's own, for the model and the judge. */
 export const TEMPERATURE = 0;
+
+/** The temperature a role is sent: its line's chat.temperature, else TEMPERATURE. summary.json and the manifest record it, for the reader and for the judge. */
+export const temperatureOf = (endpoint: Endpoint | null): number => endpoint?.chat?.temperature ?? TEMPERATURE;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -61,7 +65,7 @@ export async function chat(endpoint: Endpoint, prompt: string, options: ChatOpti
   const body = JSON.stringify({
     model: endpoint.model,
     messages: [{ role: "user", content: prompt }],
-    temperature,
+    temperature: endpoint.chat?.temperature ?? temperature,
     ...(endpoint.chat?.max_completion_tokens !== undefined ? { max_completion_tokens: endpoint.chat.max_completion_tokens }
       : endpoint.chat?.max_tokens !== undefined ? { max_tokens: endpoint.chat.max_tokens }
       : maxTokens === undefined ? {} : { max_tokens: maxTokens }),

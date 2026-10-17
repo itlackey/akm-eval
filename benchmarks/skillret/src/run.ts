@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 // skillret: given a request, does akm rank the right skills first from a large skill library? Writes the skills of
-// SkillRet into two sandboxes as akm assets, indexes them for keyword search and for semantic search, runs `akm search`
-// on both for every query, and scores it with the benchmark's metrics. `akm curate` is run on a sample of the queries,
-// to check that it returns search's ranking. The semantic search is akm's built-in embedder, a small model that runs in
-// the akm process, and a run with --limit leaves it out. See ../README.md.
+// SkillRet into a sandbox as akm assets, indexes them for keyword search, runs `akm search` for every query, and scores it with
+// the benchmark's metrics. `akm curate` is run on a sample of the queries, to check that it returns search's ranking. With
+// --semantic the skills are indexed and searched in a second sandbox for semantic search too: akm's built-in embedder, a
+// small model that runs in the akm process. See ../README.md.
 //
-//   benchmarks/skillret/run [--corpus public|custom|all] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND]
+//   benchmarks/skillret/run [--corpus public|custom|all] [--limit N] [--repeat N] [--semantic] [--label NAME] [--akm COMMAND]
 
 import { appendFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -19,38 +19,39 @@ import { redactConfig, sha256Json } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
-import { type CollectContext, INDEX_STATE, NAME, collect, withSemantic } from "./collect.ts";
+import { type CollectContext, INDEX_STATE, NAME, collect, seconds } from "./collect.ts";
 import { type Corpus, SEED, assetsDigest, loadCorpus, readLock } from "./dataset.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { PUBLISHED } from "./published.ts";
 import { CURATE_CHECK } from "./sample.ts";
-import { type CurateAgreement, type CurateCheck, KS, type Lines, METRICS, type Scores, SYSTEMS, type System, callsFailure, failedCalls, modeOf, MODES, summarize } from "./score.ts";
+import { type CurateAgreement, type CurateCheck, KS, type Lines, METRICS, type Scores, SYSTEMS, type System, failedCalls, modeOf, MODES, summarize } from "./score.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
-// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 const labelOf = (sys: System): string => (modeOf(sys) === "semantic" ? "akm search, semantic" : "akm search");
 
 /** The label of a run without --label. */
 const defaultLabel = (version: string): string => `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
 
-const USAGE = `Usage: benchmarks/skillret/run [--corpus public|custom|all] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND]
+const USAGE = `Usage: benchmarks/skillret/run [--corpus public|custom|all] [--limit N] [--repeat N] [--semantic] [--label NAME] [--akm COMMAND]
 
-Writes the skills of SkillRet into two sandboxes as akm assets, indexes them for keyword search and for semantic search,
-asks akm search of both for the first ${akm.DEPTH} skills of every query, and scores it with the benchmark's metrics: NDCG, Recall,
-Completeness and MAP at 5, 10 and 15. akm curate is asked of ${CURATE_CHECK} of the queries, to check that it returns search's
-ranking. The semantic search is akm's built-in embedder, ${SEMANTIC_MODEL}, which runs in the akm process and is
-downloaded once into .cache/ (133 MB). The semantic index is kept in .cache/akm-index/ and reused by the next run, unless
-a skill changed or akm is not the same. Needs akm on PATH, or in AKM_BIN.
+Writes the skills of SkillRet into a sandbox as akm assets, indexes them for keyword search, asks akm search for the first
+${akm.DEPTH} skills of every query, and scores it with the benchmark's metrics: NDCG, Recall, Completeness and MAP at 5, 10
+and 15. akm curate is asked of ${CURATE_CHECK} of the queries, to check that it returns search's ranking. With --semantic the
+skills go into a second sandbox for semantic search, scored the same way. Needs akm on PATH, or in AKM_BIN.
 
   --corpus  public (default) is the test split: 6,006 skills and 4,392 queries, fetched into assets/ at the pinned
             revision. custom is a library of the same size drawn from the train split, with train queries in the
             test split's mix of one, two and three skills. It is a split of the dataset and has no folder, so it takes
             no --cases. all runs both.
-  --limit   run N queries, drawn at random in proportion to how many skills a query needs. Never the first N. Keyword
-            search only: a run of a few queries is for checking a setup, and a semantic index takes a quarter of an hour to build.
+  --limit   run N queries, drawn at random in proportion to how many skills a query needs. Never the first N: a run of a
+            few queries is for checking a setup.
   --repeat  run each corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
+  --semantic  score akm's semantic search too, with or without --limit. Without it a run scores keyword search alone. The
+              embedder is akm's built-in ${SEMANTIC_MODEL}, which runs in the akm process and is downloaded once into
+              .cache/ (133 MB). Embedding every skill takes about 16 minutes the first time: the semantic index is kept in
+              .cache/akm-index/ and reused by the next run, unless a skill changed or akm is not the same.
 ${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default label: akm-<version>.`;
 
@@ -85,7 +86,7 @@ interface Summary {
   /** The seed that drew the custom library and its queries, as text: SEED, which is in the code. Null for public, whose library is the fixed test split; a --limit draw is in `sample`. */
   seed: string | null;
   sample: Record<string, unknown>;
-  /** "aborted" when an akm call failed, so that its query is left out of the numbers or of the curate check: the run then exits with 1. Then aborted_reason says why. */
+  /** "complete" when the run asked every query, also when some calls failed: they are counted in `errored` and their queries are left out of the numbers. "aborted" when it stopped before the last query: the run then exits with 1, and aborted_reason says why. */
   status: "complete" | "aborted";
   aborted_reason: string | null;
   depth: number;
@@ -114,7 +115,6 @@ interface Summary {
   results_dir: string;
 }
 
-const seconds = (s: number): string => (s >= 120 ? `${(s / 60).toFixed(1)} min` : `${Math.round(s)} s`);
 const percent = (x: number | undefined): string => (x === undefined ? "-" : (x * 100).toFixed(2));
 
 /** A system's scores as percentages, in the order of the paper's table with MAP last. */
@@ -190,10 +190,10 @@ export interface Folders {
   results: string;
 }
 
-/** What the run fails with once its summaries are written: undefined unless one of them is aborted. The message counts the failed calls of all of them. */
-export function failureOf(summaries: Pick<Summary, "status" | "errored" | "timeouts" | "curate_check">[]): string | undefined {
-  if (!summaries.some((s) => s.status === "aborted")) return undefined;
-  return callsFailure(summaries.map(failedCalls).reduce((all, one) => ({ errored: all.errored + one.errored, timedOut: all.timedOut + one.timedOut }), { errored: 0, timedOut: 0 }));
+/** What the run fails with once its summaries are written: undefined unless one of them is aborted, a run that stopped before it asked every query. Calls that failed do not abort a run. */
+export function failureOf(summaries: Pick<Summary, "status" | "aborted_reason">[]): string | undefined {
+  const stopped = summaries.find((s) => s.status === "aborted");
+  return stopped === undefined ? undefined : (stopped.aborted_reason ?? "the run stopped before it asked every query");
 }
 
 /**
@@ -220,7 +220,7 @@ export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: 
     (row) => appendFileSync(started.samples, `${JSON.stringify(row)}\n`),
   );
   writeFileSync(started.samples, rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
-  const counts = summarize(rows);
+  const counts = summarize(rows, queries.length);
   const lock = readLock(folders.assets);
   const build = akmBuild();
   const seed = corpus.corpus === "private" ? String(SEED) : null;
@@ -277,9 +277,9 @@ export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: 
 }
 
 async function main(): Promise<void> {
-  let values: { akm?: string; corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
+  let values: { akm?: string; corpus?: string; limit?: string; repeat?: string; semantic?: boolean; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: CORPUS_OPTIONS.corpus, limit: { type: "string" }, repeat: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: CORPUS_OPTIONS.corpus, limit: { type: "string" }, repeat: { type: "string" }, semantic: { type: "boolean" }, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`skillret: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -314,7 +314,7 @@ async function main(): Promise<void> {
   for (const c of corpora) {
     const data = await loadCorpus(c === "public" ? "public" : "private", assets, limit);
     const results = c === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results");
-    const run = (runLabel: string | undefined) => runCorpus(data, { label: runLabel, limit, semantic: withSemantic(limit) }, { assets, results });
+    const run = (runLabel: string | undefined) => runCorpus(data, { label: runLabel, limit, semantic: values.semantic === true }, { assets, results });
     if (repeat === undefined) summaries.push(await run(label));
     else {
       // The repeat summary spreads n_errored. This summary counts the calls that failed for each line, and the repeat summary takes their sum.
