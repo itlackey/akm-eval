@@ -60,6 +60,8 @@ export interface RunCtx {
   version: string;
   label: string;
   limit?: number;
+  /** The results folder of the corpus run, once it is made: for an eval that writes a file of its own beside samples.jsonl (consolidate --pool's improve.json). */
+  resultsDir?: string;
   /** Which akm ran. A run takes it once at its start; without it (a test that calls runCorpus) the summary takes it when it is written. */
   build?: AkmBuild;
 }
@@ -173,6 +175,10 @@ export interface EvalSpec<Case = any, Row extends Obj = Obj, Extra extends Obj =
   abortReason?(rows: Row[], ctx: RunCtx & Extra): string | null;
   /** What the run adds to the input of a case in the manifest (see Measurement.input): reflect's recorded searches. */
   caseContext?(c: Case, ctx: RunCtx & Extra): unknown;
+  /** The manifest's `mode` (consolidate --pool) and `treatment_hints` (the embedder of consolidate and nightly), which scripts/compare shows. */
+  manifestExtras?(ctx: RunCtx & Extra, corpus: ResolvedCorpus): { mode?: string | null; treatment_hints?: RunManifest["treatment_hints"] };
+  /** The label of a run without --label, from the model name. Default: the model name as a slug. */
+  defaultLabel?(model: string): string;
   /** Setup that can fail before anything runs, with the parsed flags. Throws an Error that says what to do. Returns, for a corpus, what its cases' context has besides the common fields. */
   prepare?(values: Obj, corpora: ResolvedCorpus[], ctx: Omit<RunCtx, "version" | "build">): (corpus: ResolvedCorpus) => Partial<Extra>;
   /** Fields of the summary that are neither the common ones nor from `summarize`. `cases` are those that were selected. */
@@ -252,6 +258,7 @@ export async function runCorpus<Case, Row extends Obj, Extra extends Obj>(
   const cases = spec.selectCases(all, given.limit, given);
   const assetsDigest = spec.assetsSha256(corpus.folder, all); // before the calls, since it says what the run read
   const dir = makeResultsDir(resultsParent, given.label);
+  given.resultsDir = dir;
   const samples = join(dir, "samples.jsonl");
   writeFileSync(samples, "");
   console.log(`${name} (${corpus.name}): ${cases.length} of ${all.length} cases${spec.collectAll ? "" : `, ${given.concurrency === 1 ? "one" : given.concurrency} at a time`}`);
@@ -289,6 +296,7 @@ export async function runCorpus<Case, Row extends Obj, Extra extends Obj>(
   const manifest = buildManifest({
     measurement: spec.measurement,
     corpus: corpus.name,
+    ...spec.manifestExtras?.(ctx, corpus),
     cases: done.digests,
     akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
     config,
@@ -404,7 +412,7 @@ async function main<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Cas
   const overrides = parseOverrides(values, spec.strategy ?? "", fail);
   useAkm(values, fail);
   const { baseUrl, name: model, hasKey, provider, apiKey } = useModel(values, fail);
-  const label = values.label ?? slug(model);
+  const label = values.label ?? (spec.defaultLabel ? spec.defaultLabel(model) : slug(model));
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
   const casesFile = spec.casesFile ?? "cases.jsonl";
