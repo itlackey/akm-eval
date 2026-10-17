@@ -3,13 +3,14 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
+import { hideEndpoint } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { comparePair } from "../../../scripts/compare/src/lib.ts";
-import { endpointHost, sha256Json } from "../../../lib/provenance.ts";
+import { endpointHost, redactConfig, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, bundleFiles, distillConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { runCorpus } from "./run.ts";
+import { defaultResults, runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -17,8 +18,9 @@ afterEach(() => {
 });
 
 /**
- * An akm that does what the case's fake.json says. `improve` prints a result with one distill action and keeps the
- * proposal, if any, for `proposal list`. Every call is logged to $FAKE_LOG with the environment it saw.
+ * An akm that does what the case's fake.json says (a case with none, such as those of the public set, is skipped by distill). `improve` prints a
+ * result with one distill action and keeps the proposal, if any, for `proposal list`; `index` and `feedback` say ok, and `feedbackSleep` and
+ * `listSleep` make a feedback and a queue read slow. Every call is logged to $FAKE_LOG with the environment it saw.
  */
 const FAKE_AKM = `
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -26,14 +28,18 @@ import { join } from "node:path";
 const args = process.argv.slice(2);
 const env = process.env;
 const log = (o) => appendFileSync(env.FAKE_LOG, JSON.stringify(o) + "\\n");
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 if (args[0] === "--version") { console.log("0.9.99-test"); process.exit(0); }
 const bundle = env.AKM_BUNDLE_DIR, state = env.AKM_STATE_DIR;
 const seen = { args, bundle, leak: env.AKM_LEAK ?? null, judgeKey: env.JUDGE_API_KEY ?? null, modelKey: env.MODEL_API_KEY ?? null, cwd: process.cwd() };
+const fakeFile = join(bundle, "fake.json");
+const fake = existsSync(fakeFile) ? JSON.parse(readFileSync(fakeFile, "utf8")) : { result: { outcome: "skipped", skipReason: "nothing_reusable" } };
+if (args[0] === "index") { log(seen); console.log(JSON.stringify({ ok: true })); process.exit(0); }
+if (args[0] === "feedback") { log(seen); if (fake.feedbackSleep) await wait(fake.feedbackSleep); console.log(JSON.stringify({ ok: true })); process.exit(0); }
 if (args[0] === "improve") {
-  const fake = JSON.parse(readFileSync(join(bundle, "fake.json"), "utf8"));
   const config = JSON.parse(readFileSync(join(env.AKM_CONFIG_DIR, "config.json"), "utf8"));
-  log({ ...seen, files: readdirSync(bundle, { recursive: true }).map(String).sort(), strategy: Object.keys(config.improve.strategies), engine: config.engines.model.model });
-  if (fake.sleep) await new Promise((resolve) => setTimeout(resolve, fake.sleep));
+  log({ ...seen, files: readdirSync(bundle, { recursive: true }).map(String).sort(), strategy: Object.keys(config.improve.strategies), engine: config.engines.model.model, config });
+  if (fake.sleep) await wait(fake.sleep);
   if (fake.exit) { console.error(JSON.stringify({ ok: false, error: fake.error, code: "FAKE" })); process.exit(fake.exit); }
   if (fake.stdout !== undefined) { console.log(fake.stdout); process.exit(0); }
   if (fake.proposal) writeFileSync(join(state, "proposals.json"), JSON.stringify([fake.proposal]));
@@ -43,6 +49,7 @@ if (args[0] === "improve") {
 }
 if (args[0] === "proposal" && args[1] === "list") {
   log(seen);
+  if (fake.listSleep) await wait(fake.listSleep);
   const status = args[args.indexOf("--status") + 1];
   const file = join(state, "proposals.json");
   const all = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
@@ -70,6 +77,8 @@ interface Scenario {
   id: string;
   class: string;
   fake: Record<string, unknown>;
+  /** The feedback the case carries, which the eval records before it runs distill. */
+  feedback?: { signal: string; reason?: string }[];
 }
 
 const GOOD = "The default is 30, so pass --limit 200.";
@@ -100,7 +109,7 @@ function assetsFor(scenarios: Scenario[]): { assets: string; results: string } {
     }
     writeFileSync(join(assets, "bundles", s.id, "memories", "m.md"), memory(`The memory of ${s.id}, with enough words in it to compare. ${"More words. ".repeat(10)}`));
     writeFileSync(join(assets, "bundles", s.id, "fake.json"), JSON.stringify(s.fake));
-    return { id: s.id, class: s.class, expect: expectsLesson ? "lesson" : expectsUpdate ? "update" : "none", ...(expectsLesson ? LESSON : {}), ...(expectsUpdate ? UPDATE : {}), note: "n" };
+    return { id: s.id, class: s.class, expect: expectsLesson ? "lesson" : expectsUpdate ? "update" : "none", ...(expectsLesson ? LESSON : {}), ...(expectsUpdate ? UPDATE : {}), ...(s.feedback ? { feedback: s.feedback } : {}), note: "n" };
   });
   writeFileSync(join(assets, "cases.json"), JSON.stringify(cases));
   return { assets, results: join(root, "results") };
@@ -115,7 +124,7 @@ const corpusOf = (assets: string, custom?: Custom): ResolvedCorpus =>
 /** runCorpus on an assets folder as made by assetsFor. */
 const runFolders = (c: Parameters<typeof runCorpus>[1], folders: { assets: string; results: string }, custom?: Custom) => runCorpus(corpusOf(folders.assets, custom), c, folders.results);
 
-const ctx = { config: distillConfig("http://localhost:8080/v1", "the-model", false), baseUrl: "http://localhost:8080/v1", version: "0.9.99-test", model: "the-model", label: "t" };
+const ctx = { baseUrl: "http://localhost:8080/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t" };
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
   console.log = () => {};
@@ -148,6 +157,13 @@ afterAll(() => {
     else process.env[k] = v;
   }
 });
+
+/**
+ * The keys of the summary.json that distill wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts (0d89604), without
+ * results_dir, which is returned and not written. scripts/ledger, scripts/compare and scripts/rescore read them, so none may go. A run adds
+ * concurrency and timeout_ms to them.
+ */
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "served_models", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "metrics", "model_calls", "semantic_verification", "manifest"];
 
 const calls = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
 const samplesIn = (dir: string) => readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
@@ -223,8 +239,8 @@ describe("runCorpus", () => {
     expect(stored.metrics.lesson_updates.right).toBe(1);
   });
 
-  test("akm gets its own folders, a config with the model, the case's files and none of the caller's settings", async () => {
-    await quiet(() => runFolders(ctx, assetsFor(scenarios.slice(0, 1))));
+  test("akm gets its own folders, a config with the model, the case's files and none of the caller's settings, and the summary's config is the one it read", async () => {
+    const summary = await quiet(() => runFolders(ctx, assetsFor(scenarios.slice(0, 1))));
     const improve = calls().find((c) => c.args[0] === "improve");
     expect(improve.args).toEqual(["improve", "memories/m", "--strategy", "distill-only", "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"]);
     expect(improve.leak).toBeNull();
@@ -236,6 +252,9 @@ describe("runCorpus", () => {
     expect(improve.strategy).toEqual(["distill-only"]);
     expect(improve.engine).toBe("the-model");
     expect(existsSync(improve.bundle.replace(/\/bundle$/, ""))).toBe(false); // the sandbox is removed
+    // the config the sandbox held is distill's, and it is what the summary records (the run builds it for the summary and again for each case)
+    expect(improve.config).toEqual(distillConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
+    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8")).config).toEqual(redactConfig(hideEndpoint(improve.config, ctx.baseUrl)));
   });
 
   test("runs the strategy it is given, and records it with the config patch's path and SHA-256", async () => {
@@ -248,10 +267,10 @@ describe("runCorpus", () => {
   });
 
   test("the summary names what the run was made of: the config without secrets, the engine settings and a digest of the assets", async () => {
-    const config = distillConfig("http://localhost:8080/v1", "the-model", true);
-    config.engines.model.apiKey = "sk-literal-secret"; // a patch could put a key here
+    // a patch could put a literal key in the config: the summary has it redacted, and the key the config names is only referred to
+    const overrides = { strategy: "distill-only", configPatch: { path: "p.json", sha256: "a".repeat(64), patch: { engines: { model: { apiKey: "sk-literal-secret" } } } } };
     const folders = assetsFor(scenarios.slice(0, 1));
-    const summary = await quiet(() => runFolders({ ...ctx, config }, folders));
+    const summary = await quiet(() => runFolders({ ...ctx, hasKey: true, overrides }, folders));
     const text = readFileSync(join(summary.results_dir, "summary.json"), "utf8");
     expect(text).not.toContain("sk-literal-secret");
     const stored = JSON.parse(text);
@@ -261,9 +280,9 @@ describe("runCorpus", () => {
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored.seed).toBeNull();
     expect(stored).toMatchObject({ timeouts: 0, status: "complete" });
-
-
     expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
+    const keyed = await quiet(() => runFolders({ ...ctx, hasKey: true, label: "keyed" }, assetsFor(scenarios.slice(0, 1))));
+    expect(JSON.parse(readFileSync(join(keyed.results_dir, "summary.json"), "utf8")).config.engines.model.apiKey).toBe("$MODEL_API_KEY"); // a key is named, never held
     // the same files give the same digest, whatever their folder; another memory gives another
     const again = await quiet(() => runFolders(ctx, assetsFor(scenarios.slice(0, 1))));
     expect(again.assets_sha256).toBe(summary.assets_sha256);
@@ -308,13 +327,40 @@ describe("runCorpus", () => {
       { id: "t-exit", class: "dated-status", fake: { exit: 78, error: "engine unreachable" } },
       { id: "t-ok", class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } },
     ]);
-    const summary = await quiet(() => runFolders({ ...ctx, improveTimeoutMs: 1500 }, folders));
+    const summary = await quiet(() => runFolders({ ...ctx, timeoutMs: 1500 }, folders));
     const rows = samplesIn(summary.results_dir);
     expect(rows[0]).toMatchObject({ verdict: "error", timed_out: true, error: "akm exited 137: akm timed out after 1.5s" });
     expect("timed_out" in rows[1]).toBe(false);
     expect("timed_out" in rows[2]).toBe(false);
-    expect(summary).toMatchObject({ n_run: 3, n_scored: 1, n_errored: 2, timeouts: 1 });
-    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8")).timeouts).toBe(1);
+    expect(summary).toMatchObject({ n_run: 3, n_scored: 1, n_errored: 2, timeouts: 1, timeout_ms: 1500 });
+    const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    expect([stored.timeouts, stored.timeout_ms, stored.manifest.settings.timeout_ms]).toEqual([1, 1500, 1500]); // the timeout the run had
+  });
+
+  test("the time limit is every akm command of a case, not the improve alone: a slow feedback and a slow queue read time out too, and the feedback is recorded after an index and before improve", async () => {
+    const feedback = [{ signal: "negative", reason: "too long" }, { signal: "positive" }];
+    const skipped = { result: { outcome: "skipped", skipReason: "lesson_exists" } };
+    const before = calls().length;
+    const folders = assetsFor([
+      { id: "f-ok", class: "dated-status", fake: skipped, feedback },
+      { id: "f-slow", class: "dated-status", fake: { ...skipped, feedbackSleep: 30_000 }, feedback },
+      { id: "l-slow", class: "dated-status", fake: { ...skipped, listSleep: 30_000 } },
+    ]);
+    const summary = await quiet(() => runFolders({ ...ctx, timeoutMs: 1500 }, folders));
+    const rows = samplesIn(summary.results_dir);
+    expect(rows[0]).toMatchObject({ id: "f-ok", verdict: "right" });
+    expect(rows[1]).toMatchObject({ id: "f-slow", verdict: "error", timed_out: true, error: "akm exited 137: akm timed out after 1.5s" });
+    expect(rows[2]).toMatchObject({ id: "l-slow", verdict: "error", timed_out: true, error: "akm proposal timed out after 1.5s" });
+    expect(summary).toMatchObject({ n_run: 3, n_errored: 2, timeouts: 2 });
+    const mine = calls().slice(before);
+    // the first case: an index (akm records feedback only against an indexed asset), each feedback with its signal and reason, then improve and the queue
+    expect(mine.slice(0, 4).map((c) => c.args.join(" "))).toEqual([
+      "index --format json",
+      "feedback memories/m --negative --reason too long",
+      "feedback memories/m --positive",
+      "improve memories/m --strategy distill-only --no-sync --require-engines --json-to-stdout --format json",
+    ]);
+    expect(mine.filter((c) => c.args[0] === "improve")).toHaveLength(2); // the case whose feedback timed out never reached improve
   });
 
   test("each case has a sandbox of its own, and the queue is read back for every state", async () => {
@@ -363,32 +409,42 @@ describe("runCorpus", () => {
     expect(shown.join("\n")).not.toContain("localhost:8080");
   });
 
-  test("stops after five cases in a row that errored, and keeps what it has", async () => {
-    const folders = assetsFor(Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "dated-status", fake: { exit: 78, error: "engine unreachable" } })));
-    await expect(quiet(() => runFolders(ctx, folders))).rejects.toThrow("5 cases in a row errored, so the run stopped after 5 of 7");
+  test("stops after five cases in a row that errored, keeps what it has, and says why in the summary it writes before it fails; a scattering of errors does not stop it", async () => {
+    const bad = (id: string) => ({ id, class: "dated-status", fake: { exit: 78, error: "engine unreachable" } });
+    const ok = (id: string) => ({ id, class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } });
+    const folders = assetsFor(Array.from({ length: 7 }, (_, i) => bad(`e${i}`)));
+    const why = "5 cases in a row errored, so the run stopped after 5 of 7. Last error: akm exited 78: engine unreachable (FAKE)"; // the last error is the one of the eval's row
+    await expect(quiet(() => runFolders(ctx, folders))).rejects.toThrow(why);
     const dir = join(folders.results, readdirSync(folders.results)[0]);
     expect(samplesIn(dir)).toHaveLength(5);
-    expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ n_run: 5, n_errored: 5, n_cases: 7 });
+    const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+    expect(stored).toMatchObject({ status: "aborted", aborted_reason: why, n_run: 5, n_errored: 5, n_cases: 7 });
+    const scattered = await quiet(() => runFolders(ctx, assetsFor([bad("a"), bad("b"), ok("c"), bad("d"), bad("e"), bad("f"), bad("g"), ok("h")])));
+    expect(scattered).toMatchObject({ n_run: 8, n_scored: 2, n_errored: 6, status: "complete", aborted_reason: null });
+  });
+});
+
+describe("what summary.json holds", () => {
+  test("every key it has always had, which scripts/ledger, compare and rescore read, and concurrency and timeout_ms besides", async () => {
+    const summary = await quiet(() => runFolders(ctx, assetsFor([
+      { id: "a-good", class: "lesson-worthy", fake: { result: { outcome: "queued" }, proposal: proposal(GOOD), served: ["served-a"] } },
+      { id: "b-skip", class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" }, served: ["served-b"] } },
+    ])));
+    const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms"].sort());
+    expect(Object.keys(summary).sort()).toEqual([...Object.keys(stored), "results_dir"].sort()); // what runCorpus returns also names the folder, which the file does not
+    expect(stored).toMatchObject({ concurrency: 1, timeout_ms: 900_000, timeouts: 0 });
+    expect(stored.served_models).toEqual(["served-a", "served-b"]);
   });
 
-  test("a run that stops early says so in the summary it writes before it fails, and a whole run says it is complete", async () => {
-    const folders = assetsFor(Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "dated-status", fake: { exit: 78, error: "engine unreachable" } })));
-    await expect(quiet(() => runFolders(ctx, folders))).rejects.toThrow("stopped after 5 of 7");
-    const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
-    expect(stored).toMatchObject({ status: "aborted", n_run: 5, n_cases: 7 });
-    expect(stored.aborted_reason).toBe("5 cases in a row errored, so the run stopped after 5 of 7. Last error: akm exited 78: engine unreachable (FAKE)");
-    const whole = await quiet(() => runFolders(ctx, assetsFor(scenarios.slice(0, 2))));
-    expect(JSON.parse(readFileSync(join(whole.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "complete", aborted_reason: null });
-  });
-
-  test("also stops when the errors start after cases that were scored, but not for errors that are not in a row", async () => {
-    const ok = (id: string) => ({ id, class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } });
-    const bad = (id: string) => ({ id, class: "dated-status", fake: { exit: 78, error: "engine unreachable" } });
-    const late = assetsFor([ok("a"), ...Array.from({ length: 6 }, (_, i) => bad(`e${i}`))]);
-    await expect(quiet(() => runFolders(ctx, late))).rejects.toThrow("stopped after 6 of 7");
-    const scattered = assetsFor([bad("a"), bad("b"), ok("c"), bad("d"), bad("e"), bad("f"), bad("g"), ok("h")]);
-    const summary = await quiet(() => runFolders(ctx, scattered));
-    expect(summary).toMatchObject({ n_run: 8, n_scored: 2, n_errored: 6 });
+  test("a custom corpus puts its results in private/distill/results, whichever folder it reads, and the public one in the eval's own folder", () => {
+    const REPO = join(import.meta.dir, "..", "..", "..");
+    const custom = (folder: string): ResolvedCorpus => ({ name: "custom", folder, rewrite: false, seed: null, flag: "--cases x" });
+    // the folder that was the corpus own-feedback, whose results went to own/results-feedback, is a custom corpus like any other
+    for (const folder of [join(REPO, "private", "distill", "assets"), join(REPO, "private", "distill", "own", "assets"), join(REPO, "private", "distill", "own", "assets-feedback"), "/notes/distill"]) {
+      expect(defaultResults(custom(folder), REPO)).toBe(join(REPO, "private", "distill", "results"));
+    }
+    expect(defaultResults({ name: "public", folder: "x", rewrite: false, seed: null, flag: "--corpus public" }, REPO)).toBe(join(REPO, "evals", "distill", "results"));
   });
 });
 
@@ -448,8 +504,7 @@ describe("the manifest of a run", () => {
   test("the summary's config hides the endpoint, and the manifest holds the engines with a host and a digest and no path", async () => {
     const folders = assetsFor(scenarios.slice(0, 1));
     const url = "https://gateway.example/k-DUMMYSECRET0123/v1";
-    const config = distillConfig(url, "the-model", false);
-    const summary = await quiet(() => runFolders({ ...ctx, config, baseUrl: url }, folders));
+    const summary = await quiet(() => runFolders({ ...ctx, baseUrl: url }, folders));
     for (const file of ["summary.json", "samples.jsonl"]) {
       const text = readFileSync(join(summary.results_dir, file), "utf8");
       expect(text).not.toContain("DUMMYSECRET0123");
@@ -520,25 +575,43 @@ describe("run --corpus custom", () => {
     return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
   };
 
-  test("--cases reports its model and proceeds without a terminal or --yes", () => {
+  test("--help says what the eval does, what its flags default to, and that it needs akm and no release of it", () => {
+    const run = bun(copyOfRepo(), "run.ts", ["--help"]);
+    expect(run.code).toBe(0);
+    expect(run.out).toStartWith("Usage: evals/distill/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n\nRuns akm's distill on the memory of each case, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME\nas akm's engine, and scores the lessons it queues. Settings come from .env at the repository root.\n");
+    for (const line of [
+      "            Your own labelled memories are a custom corpus too: --cases DIR, with the feedback recorded about them in the cases that carry it.",
+      "  --limit   run N cases, taken from each class in turn",
+      "  --strategy      the akm improve strategy to run in place of distill-only.",
+      "  --concurrency  run N cases at a time, each in a sandbox of its own. Default: 1.",
+      "  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 900000.",
+    ]) expect(run.out).toContain(line);
+    expect(run.out).toEndWith("\n\nNeeds akm on PATH, or in AKM_BIN.\n");
+    expect(run.out).not.toMatch(/--yes|-y\b/);
+  }, 60_000);
+
+  test("a folder of your own, laid out like assets/, goes on to the akm check", () => {
     const tree = copyOfRepo();
     const notes = join(tree, "my notes");
     cpSync(join(EVAL, "assets"), notes, { recursive: true });
-    for (const flags of [[], ["-y"], ["--yes"]]) {
-      const run = bun(tree, "run.ts", ["--cases", notes, ...flags]);
-      expect(run.out).toContain(`The cases in ${notes} will be sent to:`);
-      expect(run.out).toContain("  model  m at http://127.0.0.1:9/v1");
-      expect(run.out).not.toContain("Continue?");
-      expect(run.err).toContain("could not run"); // missing test AKM stops execution before model calls
-    }
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).toContain("could not run");
+    const run = bun(tree, "run.ts", ["--cases", notes]);
+    expect(run.out).toContain(`The cases in ${notes} will be sent to:`);
+    expect(run.out).toContain("  model  m at http://127.0.0.1:9/v1");
+    expect(run.err).toContain("could not run"); // missing test AKM stops execution before model calls
   }, 60_000);
 
-  test("stops and says how to make the assets when there are none", () => {
-    const missing = bun(copyOfRepo(), "run.ts", ["--corpus", "custom"]);
+  test("stops before akm is asked when the custom corpus has no cases.json, and says to make the rewrite only for the rewrite", () => {
+    const tree = copyOfRepo();
+    const missing = bun(tree, "run.ts", ["--corpus", "custom"]);
     expect(missing.code).toBe(2);
-    expect(missing.err).toContain("./generate-assets --only distill");
+    expect(missing.err.trim()).toBe("distill: --corpus custom: private/distill/assets/cases.json does not exist. The folder of a custom corpus holds cases.json, as assets/ does. Make the rewrite with: ./generate-assets --only distill");
+    const empty = mkdtempSync(join(tmpdir(), "distill empty notes-")); // outside the tree, so the message names it as it was given
+    dirs.push(empty);
+    const own = bun(tree, "run.ts", ["--cases", empty]);
+    expect(own.code).toBe(2);
+    expect(own.err.trim()).toBe(`distill: --cases ${empty}: ${empty}/cases.json does not exist. The folder of a custom corpus holds cases.json, as assets/ does.`);
+    expect(own.err).not.toContain("generate-assets"); // a folder of your own is not made by it
+    expect(own.err).not.toContain("could not run");
   });
 
   test("runs on the assets generate wrote, with --corpus custom and --corpus all", () => {
@@ -546,4 +619,30 @@ describe("run --corpus custom", () => {
     expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
     for (const flags of [["--corpus", "custom"], ["--corpus", "all"]]) expect(bun(tree, "run.ts", flags).err, flags.join(" ")).toContain("could not run"); // past the checks, stopped for want of akm
   }, 120_000);
+
+  test("--concurrency and --timeout-ms reach the run through distill's flags: every case has its row, the slow one is killed, and both are recorded", () => {
+    const tree = copyOfRepo();
+    const script = join(tree, "fake-akm.ts");
+    writeFileSync(script, FAKE_AKM);
+    const calls = join(tree, "calls.jsonl");
+    const notes = assetsFor([
+      { id: "s-slow", class: "dated-status", fake: { sleep: 30_000 } },
+      { id: "s-ok", class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } },
+      { id: "s-good", class: "lesson-worthy", fake: { result: { outcome: "queued" }, proposal: proposal(GOOD) } },
+    ]).assets;
+    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: calls };
+    const p = Bun.spawnSync(["bun", join(tree, "evals", "distill", "src", "run.ts"), "--cases", notes, "--concurrency", "2", "--timeout-ms", "1500", "--label", "flags"], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
+    expect([p.exitCode, p.stderr.toString()]).toEqual([0, ""]);
+    const results = join(tree, "private", "distill", "results"); // a custom corpus of your own, in the one folder every eval has
+    const folder = join(results, readdirSync(results).find((name) => name.endsWith("-flags")) as string);
+    const stored = JSON.parse(readFileSync(join(folder, "summary.json"), "utf8"));
+    const rows = readFileSync(join(folder, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms", "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
+    expect(stored).toMatchObject({ corpus: "custom", concurrency: 2, timeout_ms: 1500, n_run: 3, n_errored: 1, timeouts: 1, status: "complete" });
+    expect(stored.manifest.settings.timeout_ms).toBe(1500);
+    expect(rows.map((r) => r.id).sort()).toEqual(["s-good", "s-ok", "s-slow"]);
+    expect(rows.find((r) => r.id === "s-slow")).toMatchObject({ verdict: "error", timed_out: true });
+    const log = readFileSync(calls, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(log.filter((c) => c.args[0] === "improve")).toHaveLength(3);
+  }, 60_000);
 });

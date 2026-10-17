@@ -19,7 +19,7 @@ evals/extract/run --corpus custom              # the rewrite: ./generate-assets 
 evals/extract/run --cases ~/notes/extract
 ```
 
-`--limit N` takes sessions from each class in turn; the first five cover every class. `--strategy` runs another strategy than `extract-only`; `--config-patch` changes the config (triage thresholds, event cut, budget). A session takes about 15 seconds on a local 27B; a run about 16 minutes, one at a time.
+`--limit N` takes sessions from each class in turn; the first five cover every class. `--strategy` runs another strategy than `extract-only`; `--config-patch` changes the config (triage thresholds, event cut, budget). A session takes about 15 seconds on a local 27B; a run about 16 minutes, one at a time. `--concurrency N` runs N sessions at a time, each in an akm sandbox of its own; the default is 1. `--timeout-ms N` stops an akm command that is still running after N milliseconds; the default is 900000 (15 minutes).
 
 Each session goes into its own akm sandbox, where akm reads Claude Code sessions (`AKM_CLAUDE_PROJECTS_DIR`), so akm never reads your own:
 
@@ -64,7 +64,7 @@ For a case that expects none, nothing may be saved, and extract must have answer
 
 Matching ignores case and punctuation; a word matches the start of a word, a number only itself, `*` up to three words. Each memory also gets a `similarity` to the case's good example, recorded and never scored.
 
-`outcomes` per class: `saved`, `empty` (no candidates, or the parser dropped all), `unusable` (a reply akm could not read, or candidates it could not queue), and `error` (timeout, endpoint; left out of the counts). Five errors in a row abort the run.
+`outcomes` per class: `saved`, `empty` (no candidates, or the parser dropped all), `unusable` (a reply akm could not read, or candidates it could not queue), and `error` (timeout, endpoint; left out of the counts). Five errored sessions in a row, in the order they finish, abort the run: no new session starts, the sessions still running finish, `summary.json` says `aborted` and why, and the run exits 1.
 
 | Metric | Meaning |
 |---|---|
@@ -77,7 +77,7 @@ For scale: saving nothing gives `insights` 0/40, `routine` 20/20, `planted` 2/4.
 
 ## What the summary reports
 
-`summary.json`: `metrics`, the counts run, scored and errored, `timeouts`, `status`, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256` (over `cases.json` and every session), `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per session with the class, outcome, whether it was correct, each memory saved (text, type, confidence, `similarity`), the facts missed, `forbidden`, `ambiguous`, the model's reason when it saved nothing, the seconds, and the raw output it was scored from. `akm proposal extract` reports no usage, so the model names the endpoint served are not recorded.
+`summary.json`: `metrics`, the counts run, scored and errored, `timeouts`, `concurrency` and `timeout_ms` (the time limit of an akm command, in milliseconds), `status`, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256` (over `cases.json` and every session), `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per session with the class, outcome, whether it was correct, each memory saved (text, type, confidence, `similarity`), the facts missed, `forbidden`, `ambiguous`, the model's reason when it saved nothing, the seconds, and the raw output it was scored from. `akm proposal extract` reports no usage, so the model names the endpoint served are not recorded.
 
 ## Notes
 

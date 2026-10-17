@@ -19,7 +19,7 @@ evals/distill/run --corpus custom              # the rewrite: ./generate-assets 
 evals/distill/run --cases ~/notes/distill
 ```
 
-`--limit N` takes cases from each class in turn, so a short run covers every class. `--strategy` runs another strategy than `distill-only`; `--config-patch` changes the config. A case takes 10 to 40 seconds on a local 27B (2 when skipped); a run about twenty minutes.
+`--limit N` takes cases from each class in turn, so a short run covers every class. `--strategy` runs another strategy than `distill-only`; `--config-patch` changes the config. A case takes 10 to 40 seconds on a local 27B (2 when skipped); a run about twenty minutes. `--concurrency N` runs N cases at a time, each in an akm sandbox of its own; the default is 1. `--timeout-ms N` stops an akm command that is still running after N milliseconds; the default is 900000 (15 minutes).
 
 Each case gets its own akm bundle with the memory and any asset or lesson the case includes, then:
 
@@ -32,7 +32,7 @@ The model must return one JSON object; akm asks with a schema. An endpoint that 
 
 ## Run your own set
 
-`--cases DIR`: a folder laid out like `assets/` (`cases.json` and `bundles/<id>/`; fields in `assets/README.md`). A lesson case needs `required` and `forbidden` lists and may add `contradicts`. A case may carry `"feedback": [{"signal": "positive"|"negative", "reason": "..."}]`, recorded with `akm feedback` before distill runs. Results go to `private/distill/own/results/`.
+`--cases DIR`: a folder laid out like `assets/` (`cases.json` and `bundles/<id>/`; fields in `assets/README.md`). A lesson case needs `required` and `forbidden` lists and may add `contradicts`. A case may carry `"feedback": [{"signal": "positive"|"negative", "reason": "..."}]`, recorded with `akm feedback` before distill runs. Results go to `private/distill/results/`.
 
 ## The cases
 
@@ -69,11 +69,11 @@ A case that expects none is right when nothing is queued (a skip or a rejection 
 | `by_class`, `outcomes` | per class; what distill did (`lesson`, `update`, `skipped`, `rejected`, `invalid`, `error`) |
 | `bad_by` | why lessons failed: `missing_fact`, `forbidden_claim`, `contradiction`, `too_long`, `copied` |
 
-An `error` (timeout, endpoint, empty reply) is left out; five in a row abort the run. For scale: a distill that queues a lesson for every memory has `wrong_lessons` 16/16; one that queues nothing has `good_lessons` 0/40 and `wrong_lessons` 0/16; one that pastes the memory back fails every lesson on `copied`. One lesson case is 2.5 points, one update case 2.5, one no-lesson case 6: a case or two is noise.
+An `error` (timeout, endpoint, empty reply) is left out. Five errored cases in a row, in the order they finish, abort the run: no new case starts, the cases still running finish, `summary.json` says `aborted` and why, and the run exits 1. For scale: a distill that queues a lesson for every memory has `wrong_lessons` 16/16; one that queues nothing has `good_lessons` 0/40 and `wrong_lessons` 0/16; one that pastes the memory back fails every lesson on `copied`. One lesson case is 2.5 points, one update case 2.5, one no-lesson case 6: a case or two is noise.
 
 ## What the summary reports
 
-`summary.json`: `metrics`, the counts run, scored and errored, `timeouts` (akm past 15 minutes), `status` and `aborted_reason`, `served_models`, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256` (over `cases.json` and every bundle file), `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per case with the class, outcome, verdict, the lesson as queued, the facts missed, `forbidden`, `contradicted`, `ambiguous`, the length ratio, the gate's decision, the judge's `scores`, `calls`, the seconds, and the raw `improve` and `proposals` it was scored from. A rejected lesson's text is `rejected_lesson`, where akm reports it.
+`summary.json`: `metrics`, the counts run, scored and errored, `timeouts` (akm past the time limit), `concurrency` and `timeout_ms` (the limit, in milliseconds), `status` and `aborted_reason`, `served_models`, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256` (over `cases.json` and every bundle file), `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per case with the class, outcome, verdict, the lesson as queued, the facts missed, `forbidden`, `contradicted`, `ambiguous`, the length ratio, the gate's decision, the judge's `scores`, `calls`, the seconds, and the raw `improve` and `proposals` it was scored from. A rejected lesson's text is `rejected_lesson`, where akm reports it.
 
 ## Replay the pass bar
 

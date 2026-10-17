@@ -14,7 +14,8 @@ import type { LoadedCase } from "./lib.ts";
 import { type Case, type Outcome, type Row, type Saved, makeRow } from "./score.ts";
 
 export const NAME = "extract";
-const EXTRACT_TIMEOUT_MS = 15 * 60_000; // one session, on a slow local model: one call, and one more if the reply cannot be read
+/** How long one akm command of a case may run without --timeout-ms, in milliseconds. One session on a slow local model is one call, and one more if the reply cannot be read. */
+export const EXTRACT_TIMEOUT_MS = 15 * 60_000;
 
 /** The strategy that gives extract its engine and settings. */
 export const STRATEGY = "extract-only";
@@ -106,7 +107,7 @@ export interface CaseContext {
   model: string;
   hasKey: boolean;
   overrides?: Overrides;
-  /** How long akm may take on a session, in milliseconds. */
+  /** How long one akm command may run, in milliseconds. A run always sets it (--timeout-ms); without it EXTRACT_TIMEOUT_MS applies. */
   timeoutMs?: number;
 }
 

@@ -17,7 +17,7 @@ export const NAME = "distill";
 /** The strategy that runs distill and nothing else. */
 export const STRATEGY = "distill-only";
 
-/** How long one akm command of a case may run, in milliseconds: one case is two model calls on a slow local model. */
+/** How long one akm command of a case may run without --timeout-ms, in milliseconds: one case is two model calls on a slow local model. */
 export const IMPROVE_TIMEOUT_MS = 15 * 60_000;
 
 /** The states a proposal can be in. The queue is read back for each. */
@@ -93,13 +93,14 @@ export function trimImprove(improve: unknown): Improved {
   };
 }
 
-/** What one case needs of the run: the akm config, the model's endpoint (to keep it out of what akm says), the strategy and patch, and the time limit of the improve command. */
+/** What one case needs of the run: the model and its endpoint (which is also kept out of what akm says), the strategy and patch, and the time limit of an akm command. */
 export interface CaseContext {
-  config: Record<string, unknown>;
   baseUrl: string;
+  model: string;
+  hasKey: boolean;
   overrides?: Overrides;
-  /** How long `akm improve` may run, in milliseconds. The default is IMPROVE_TIMEOUT_MS. */
-  improveTimeoutMs?: number;
+  /** How long one akm command may run, in milliseconds. A run always sets it (--timeout-ms); without it IMPROVE_TIMEOUT_MS applies. */
+  timeoutMs?: number;
 }
 
 /** One case: a new sandbox with the case's bundle, distill run on its memory alone, and the queue read back. */
@@ -108,17 +109,18 @@ export async function runCase(c: LoadedCase, ctx: CaseContext): Promise<Row> {
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
   const hide = <T>(value: T): T => hideEndpoint(value, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
   const failed = (message: string, timedOut = false): Row => makeRow(c, { error: hide(message), seconds: seconds(), timedOut });
+  const opts = { timeoutMs: ctx.timeoutMs ?? IMPROVE_TIMEOUT_MS }; // every akm command of the case has the same limit
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
   try {
-    writeConfig(sandbox, ctx.config);
+    writeConfig(sandbox, configFor(ctx));
     cpSync(c.dir, join(sandbox.dir, "bundle"), { recursive: true });
-    if (c.feedback?.length) await runAkmJson(sandbox, ["index"]); // akm records feedback only against an indexed asset
+    if (c.feedback?.length) await runAkmJson(sandbox, ["index"], opts); // akm records feedback only against an indexed asset
     for (const f of c.feedback ?? []) {
-      const fb = await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])]);
+      const fb = await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])], opts);
       if (fb.code !== 0) return failed(exitMessage(fb.code, fb.stderr, fb.stdout), fb.timedOut);
     }
     const args = ["improve", memoryRef(c), "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"];
-    const { stdout, stderr, code, timedOut } = await runAkm(sandbox, args, { timeoutMs: ctx.improveTimeoutMs ?? IMPROVE_TIMEOUT_MS });
+    const { stdout, stderr, code, timedOut } = await runAkm(sandbox, args, opts);
     if (timedOut) return failed(exitMessage(code, stderr, stdout), true);
     let improve: unknown;
     try {
@@ -128,7 +130,7 @@ export async function runCase(c: LoadedCase, ctx: CaseContext): Promise<Row> {
     }
     if (code !== 0) return failed(exitMessage(code, stderr, stdout));
     const listed = [];
-    for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"])) });
+    for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"], opts)) });
     return makeRow(c, { improve: hide(trimImprove(improve)), proposals: lessonProposals(listed), seconds: seconds() });
   } catch (e) {
     const message = (e as Error).message;
