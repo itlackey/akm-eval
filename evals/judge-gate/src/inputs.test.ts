@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CASES, RUBRIC, casesSha256, privateAssetsProblem, rubricVersion } from "./inputs.ts";
+import { CASES, RUBRIC, casesSha256, rubricVersion } from "./inputs.ts";
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -63,17 +63,5 @@ describe("rubricVersion", () => {
 
   test("the public assets state one", () => {
     expect(rubricVersion(join(import.meta.dir, "..", "assets"))).toBe(2);
-  });
-});
-
-describe("privateAssetsProblem", () => {
-  const where = "private/judge-gate/assets";
-
-  test("is undefined when the folder has cases, and says how to make them when it has none", () => {
-    expect(privateAssetsProblem(assetsWith("private\n"), where)).toBeUndefined();
-    const none = join(tmp(), "assets");
-    mkdirSync(none);
-    expect(privateAssetsProblem(none, where)).toBe(`the private assets are missing (${where}/cases.jsonl). Make them with: ./generate-assets --only judge-gate`);
-    expect(privateAssetsProblem(join(tmp(), "no-such-folder"), where)).toContain("the private assets are missing");
   });
 });

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultOverrides } from "../../../lib/akm/overrides.ts";
 import { assemble, explode } from "./generate.ts";
-import { type Case, type Row, STRATEGY, atLeast, configFor, errorRow, hasVerdict, hideEndpoints, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases, verdictOf } from "./lib.ts";
+import { type Case, type Row, STRATEGY, configFor, errorRow, hasVerdict, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases, verdictOf } from "./lib.ts";
 
 const make = (n: number, label: "good" | "bad", extra: Partial<Case> = {}): Case => ({
   id: `id-${label}-${n}`,
@@ -246,50 +246,12 @@ describe("errorRow", () => {
   });
 });
 
-describe("hideEndpoints and verdictOf", () => {
-  test("hideEndpoints writes every endpoint of a config as <MODEL_BASE_URL>, and changes nothing else or the config it was given", () => {
-    const config = {
-      defaults: { llmEngine: "judge" },
-      engines: { judge: { kind: "llm", model: "m", endpoint: "https://user:pass@host.example/v1?key=SECRET/chat/completions", temperature: 0 }, other: { endpoint: "http://other:1/v1/chat/completions" } },
-      embedding: { endpoint: "http://embed:2/v1" },
-      list: [{ endpoint: "http://in-a-list/v1" }],
-    };
-    const before = JSON.stringify(config);
-    const hidden = hideEndpoints(config);
-    expect(hidden).toEqual({
-      defaults: { llmEngine: "judge" },
-      engines: { judge: { kind: "llm", model: "m", endpoint: "<MODEL_BASE_URL>", temperature: 0 }, other: { endpoint: "<MODEL_BASE_URL>" } },
-      embedding: { endpoint: "<MODEL_BASE_URL>" },
-      list: [{ endpoint: "<MODEL_BASE_URL>" }],
-    });
-    expect(JSON.stringify(hidden)).not.toContain("SECRET");
-    expect(JSON.stringify(config)).toBe(before);
-  });
-
-  test("hideEndpoints leaves a config with no endpoint, and a value that is not a string, as it is", () => {
-    expect(hideEndpoints({ engines: { a: { model: "m" } }, n: null, endpoint: 3 })).toEqual({ engines: { a: { model: "m" } }, n: null, endpoint: 3 });
-    expect(hideEndpoints(null)).toBeNull();
-  });
-
-  test("verdictOf keeps the fields the scorer reads, masks the endpoint in the reason, and leaves a reply that is not an object as it is", () => {
+describe("verdictOf", () => {
+  test("keeps the fields the scorer reads, masks the endpoint in the reason, and leaves a reply that is not an object as it is", () => {
     const parsed = { ok: true, pass: false, score: 2, reviewNeeded: true, reason: "tried http://host/v1 and failed", criteria: { need: 2 }, engine: "judge", usage: { note: "http://host/v1" } };
     expect(verdictOf(parsed, "http://host/v1")).toEqual({ pass: false, score: 2, reviewNeeded: true, reason: "tried <MODEL_BASE_URL> and failed", criteria: { need: 2 }, engine: "judge" });
     expect(verdictOf({ pass: true, score: 4 }, "http://host/v1")).toEqual({ pass: true, score: 4, reviewNeeded: undefined, reason: undefined, criteria: undefined, engine: undefined });
     for (const reply of [null, 7, "text", [1, 2]]) expect(verdictOf(reply, "http://host/v1")).toBe(reply);
-  });
-});
-
-describe("atLeast", () => {
-  const min = "0.9.25-alpha.2";
-  test("puts a prerelease below its release and orders prereleases by their tag", () => {
-    for (const v of ["0.9.25-alpha.2", "0.9.25-alpha.3", "0.9.25-alpha.10", "0.9.25-beta.1", "0.9.25-rc.1", "0.9.25", "0.9.26", "0.10.0", "1.0.0-alpha.1"]) expect(atLeast(v, min)).toBe(true);
-    for (const v of ["0.9.25-alpha.1", "0.9.25-alpha", "0.9.24", "0.9.24-rc.1", "0.8.99"]) expect(atLeast(v, min)).toBe(false);
-    expect(atLeast("0.9.25-alpha.2", "0.9.25")).toBe(false);
-    expect(atLeast("0.9.25", "0.9.25")).toBe(true);
-  });
-
-  test("refuses a string that is not a version", () => {
-    expect(() => atLeast("latest", min)).toThrow("not a version");
   });
 });
 

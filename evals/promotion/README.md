@@ -31,7 +31,7 @@ evals/promotion/run --model qwen3-27b
 evals/promotion/run --cases ~/notes/night-2026-10-07
 ```
 
-promotion has no rewrite: its custom corpus is `--cases DIR` only, and `--corpus custom` alone stops. `--limit N` takes one proposal of each category in turn. `--strategy` replaces `promotion` in the drain; `--config-patch` changes the config. One call per proposal, about 3k tokens; 20 proposals take 3 to 4 minutes on a local 27B. The judge must answer `{"decision": "accept" | "reject" | "defer", "reason": ...}`. The eval sets temperature 0 and thinking off.
+promotion has no rewrite: its custom corpus is `--cases DIR` only, and `--corpus custom` alone stops. `--limit N` takes one proposal of each category in turn. `--strategy` replaces `promotion` in the drain; `--config-patch` changes the config; `--timeout-ms N` sets how many milliseconds the drain may run (default 7200000, two hours), while the steps around it keep 30 minutes. One call per proposal, about 3k tokens; 20 proposals take 3 to 4 minutes on a local 27B. The judge must answer `{"decision": "accept" | "reject" | "defer", "reason": ...}`. The eval sets temperature 0 and thinking off.
 
 ## Run your own set
 
@@ -61,7 +61,7 @@ An unreadable reply is a defer, so the eval cannot tell the two apart. One good 
 
 ## What the summary reports
 
-`summary.json`: `metrics`, the counts run and errored, `timeouts` (failed calls whose text says they timed out), `status` and `aborted_reason` (aborted when no proposal got a verdict), `calls` (model calls, failures and served model names, from akm's events table; null if unreadable), the drain's seconds, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per proposal with its label, category, ref, `outcome`, the judge's reason (rejections only on 0.9.26; every verdict from 0.9.27-alpha.2) and any error.
+`summary.json`: `metrics`, the counts run and errored, `timeouts` (failed calls whose text says they timed out), `status` and `aborted_reason` (aborted when no proposal got a verdict), `calls` (model calls, failures and served model names, from akm's events table; null if unreadable), the drain's seconds, `timeout_ms`, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per proposal with its label, category, ref, `outcome`, the judge's reason (rejections only on 0.9.26; every verdict from 0.9.27-alpha.2) and any error.
 
 ## Depends on akm's private schema
 

@@ -12,9 +12,8 @@ import { type Case, type Row, makeRow } from "./score.ts";
 
 export const NAME = "judge-gate";
 
-/** How many cases run at a time. */
-export const CONCURRENCY = 2;
-const JUDGE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model
+/** How long akm gets for one case unless --timeout-ms says otherwise: a slow local model takes minutes. */
+export const JUDGE_TIMEOUT_MS = 15 * 60_000;
 
 /**
  * `akm improve judge` reads the feedback as one string and judges it as negative feedback only when the
@@ -66,10 +65,10 @@ export function verdictOf(parsed: unknown, baseUrl: string): unknown {
 }
 
 /** What one case needs of the run: the sandbox with the config written, the model endpoint (masked in the row), and the time limit of one case. */
-export interface CaseContext {
+interface CaseContext {
   sandbox: Sandbox;
   baseUrl: string;
-  /** The time limit of one case, in milliseconds. Tests shorten it. */
+  /** The time limit of one case, in milliseconds. A run always sets it (--timeout-ms); without it JUDGE_TIMEOUT_MS applies. */
   timeoutMs?: number;
 }
 

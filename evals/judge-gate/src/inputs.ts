@@ -1,7 +1,7 @@
 // What a judge-gate run records of its inputs: the digest of the cases file, and the generated.json that generate writes beside the
 // private cases. run.ts, generate.ts and the tests use them.
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sha256Files } from "../../../lib/provenance.ts";
 
@@ -26,7 +26,7 @@ export function rubricVersion(assets: string): number {
 }
 
 /** Runs `f` with `dir` as the working folder, and then puts the old one back. sha256Files reads the paths it is given, so a digest that holds on another machine needs paths relative to a fixed folder. */
-export function inFolder<T>(dir: string, f: () => T): T {
+function inFolder<T>(dir: string, f: () => T): T {
   const before = process.cwd();
   process.chdir(dir);
   try {
@@ -38,9 +38,3 @@ export function inFolder<T>(dir: string, f: () => T): T {
 
 /** assets_sha256 of summary.json: the digest of the cases file of an assets folder, named by its place in it. It changes when a case or a label does. */
 export const casesSha256 = (assets: string): string => inFolder(assets, () => sha256Files([CASES]));
-
-/** Why run --corpus private cannot start from `assets`: the cases are missing. Undefined when it can. */
-export function privateAssetsProblem(assets: string, where = assets): string | undefined {
-  if (!existsSync(join(assets, CASES))) return `the private assets are missing (${where}/${CASES}). Make them with: ./generate-assets --only judge-gate`;
-  return undefined;
-}

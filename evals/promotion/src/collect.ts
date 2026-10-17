@@ -18,10 +18,11 @@ import { type Case, type Raw, type Row, makeRow } from "./score.ts";
 export const NAME = "promotion";
 
 /** The name akm gives the sandbox's one bundle, which its refs carry: `bundle//knowledge/<name>`. */
-export const BUNDLE = "bundle";
+const BUNDLE = "bundle";
 export const STRATEGY = "promotion";
 
-const DRAIN_TIMEOUT_MS = 2 * 60 * 60_000; // one call per proposal, one at a time, on a slow local model
+/** How long the drain may run unless --timeout-ms says otherwise: one call per proposal, one at a time, on a slow local model. */
+export const DRAIN_TIMEOUT_MS = 2 * 60 * 60_000;
 const STEP_TIMEOUT_MS = 30 * 60_000;
 
 /** A UUID made from the case id, so a planted proposal has the id shape akm gives its own, and the same id on every run. */
@@ -49,7 +50,7 @@ export function promotionConfig(baseUrl: string, model: string, hasKey: boolean)
 }
 
 /** What a run needs of the model and the strategy to write the akm config. */
-export interface ConfigContext {
+interface ConfigContext {
   baseUrl: string;
   model: string;
   hasKey: boolean;
@@ -79,7 +80,7 @@ export const PROPOSAL_COLUMNS = ["id", "stash_dir", "ref", "status", "source", "
 export const EVENT_COLUMNS = ["event_type", "metadata_json"] as const;
 
 /** The minimum of a SQLite handle that `schemaProblem` needs, which bun:sqlite's Database has. */
-export interface SchemaDb {
+interface SchemaDb {
   query(sql: string): { all(): unknown[] };
 }
 
@@ -209,10 +210,12 @@ export function callStats(sandbox: Sandbox): Calls | null {
   }
 }
 
-/** What the collection needs of the run: the model's endpoint, to keep it out of the rows, and the strategy the drain runs. */
-export interface CollectContext {
+/** What the collection needs of the run: the model's endpoint, to keep it out of the rows, the strategy the drain runs, and how long the drain may take. */
+interface CollectContext {
   baseUrl: string;
   overrides?: Overrides;
+  /** How long the drain may run, in milliseconds (--timeout-ms). The steps around it keep STEP_TIMEOUT_MS. Without it DRAIN_TIMEOUT_MS applies. */
+  timeoutMs?: number;
 }
 
 /**
@@ -224,7 +227,7 @@ export async function collect(sandbox: Sandbox, cases: Case[], libraryDir: strin
   await plant(sandbox, cases, libraryDir);
   console.log("  planted; the judge reads them one at a time");
   const args = ["proposal", "drain", "--judgment", "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--yes"];
-  const drain = await runAkm(sandbox, [...args, "--format", "json"], { timeoutMs: DRAIN_TIMEOUT_MS });
+  const drain = await runAkm(sandbox, [...args, "--format", "json"], { timeoutMs: ctx.timeoutMs ?? DRAIN_TIMEOUT_MS });
   if (drain.code !== 0) fail(hideEndpoint(failureMessage("akm proposal drain", drain.code, drain.stderr), ctx.baseUrl), 1);
   let drained: Drained;
   try {
