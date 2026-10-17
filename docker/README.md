@@ -15,10 +15,12 @@ docker run --rm --init --user "$(id -u):$(id -g)" \
 ```
 
 Use a dedicated working folder, not a source checkout. The entrypoint copies
-shipped code/dependencies there and preserves `.env`, `models.json`, results,
-custom corpora and caches. Results retain their usual `evals/<name>/results/`,
+shipped code/dependencies there on first use and when the image revision
+changes, and preserves `.env`, `models.json`, results, custom corpora and
+caches. Results retain their usual `evals/<name>/results/`,
 `benchmarks/<name>/results/` and `private/` paths inside this folder. The host
-UID/GID keeps saved files editable. Removing the container keeps these files.
+UID/GID keeps saved files editable. Removing the container keeps these files,
+and edits made inside the work folder survive until the next image change.
 
 The other guides' short commands go after the image name. `--help` starts no
 eval. Use the same image digest and settings when resuming. Public image tags
@@ -70,6 +72,8 @@ have different `akm_build` identities. Standalone Git clones work directly;
 worktrees also need their referenced Git directory mounted at its original path.
 A checkout with different runtime dependencies needs an image containing those
 matching dependencies; this recipe does not install them at startup.
+The Harbor evals (Agent A/B and Terminal-Bench) take `--akm akm-cli@x.y.z` or a
+checkout folder instead and cannot use this recipe.
 
 For a build-only comparison, keep the runner image digest, cases, labels, model
 and engine settings, semantic mode, machine and cache condition fixed. Check the

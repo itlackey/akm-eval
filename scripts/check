@@ -33,9 +33,9 @@ run_typecheck() {
 
 run_python() {
   command -v uv > /dev/null || { echo "check: uv is needed for the Python suites. See https://docs.astral.sh/uv/" >&2; return 1; }
-  # The Harbor release is pinned in lib/harbor/harbor.ts, once.
+  # The Harbor release is pinned in lib/harbor/harbor.ts, once; lib/harbor/pin.ts reads it.
   local harbor
-  harbor="$(sed -n 's/^export const PINS = .*harbor: "\([0-9][0-9.]*\)".*/\1/p' lib/harbor/harbor.ts)"
+  harbor="$(bun lib/harbor/pin.ts harbor)"
   [ -n "$harbor" ] || { echo "check: could not read the Harbor pin from lib/harbor/harbor.ts" >&2; return 1; }
   uv run --no-project --python 3.12 --with "harbor==$harbor" --with pytest pytest lib/harbor || return 1
 }

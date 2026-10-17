@@ -30,7 +30,7 @@ RUN npm ci --prefix /opt/akm-cli --omit=dev \
     && ln -s /opt/akm-cli/node_modules/.bin/akm /usr/local/bin/akm
 COPY lib/ ./lib/
 # Warm the exact uv invocations used by runHarbor, scripts/check and asset generation.
-RUN harbor_version="$(sed -n 's/^export const PINS = .*harbor: "\([0-9][0-9.]*\)".*/\1/p' lib/harbor/harbor.ts)" \
+RUN harbor_version="$(bun lib/harbor/pin.ts harbor)" \
     && test -n "$harbor_version" \
     && uv run --no-project --python 3.12 --with "harbor==$harbor_version" harbor --version \
     && uv run --no-project --python 3.12 --with "harbor==$harbor_version" --with pytest python -c 'import harbor, pytest' \

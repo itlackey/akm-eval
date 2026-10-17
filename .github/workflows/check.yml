@@ -1,10 +1,11 @@
-# Runs scripts/check on every push and pull request: the typecheck of every src folder, the Python suites and bun test.
+# Runs scripts/check on every pull request and every push to main: the typecheck of every src folder, the Python suites and bun test.
 # Every test uses a fake akm, so the job needs no akm, no Docker, no model and no secret. The job that runs the evals against a
 # real akm is akm-smoke.yml.
 name: check
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:

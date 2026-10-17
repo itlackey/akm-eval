@@ -23,7 +23,8 @@ jobs:
         run: |
           docker run --rm --init -i --network none akm-eval:build bash -eu <<'CHECK'
           node --version; bun --version; akm --version; docker compose version
-          version=$(sed -n 's/^export const PINS = .*harbor: "\([0-9][0-9.]*\)".*/\1/p' lib/harbor/harbor.ts)
+          version=$(bun lib/harbor/pin.ts harbor)
+          test -n "$version"
           uv run --no-project --python 3.12 --with "harbor==$version" harbor --version
           for command in evals/*/run benchmarks/*/run; do "$command" --help > /dev/null; done
           CHECK
