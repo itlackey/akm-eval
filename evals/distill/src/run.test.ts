@@ -17,6 +17,9 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
+/** The last line of every usage text: what the driver says of its one request to the model (lib/run.ts). */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
+
 /**
  * An akm that does what the case's fake.json says (a case with none, such as those of the public set, is skipped by distill). `improve` prints a
  * result with one distill action and keeps the proposal, if any, for `proposal list`; `index` and `feedback` say ok, and `feedbackSleep` and
@@ -583,10 +586,10 @@ describe("run --corpus custom", () => {
       "            Your own labelled memories are a custom corpus too: --cases DIR, with the feedback recorded about them in the cases that carry it.",
       "  --limit   run N cases, taken from each class in turn",
       "  --strategy      the akm improve strategy to run in place of distill-only.",
-      "  --concurrency  run N cases at a time, each in a sandbox of its own. Default: 1.",
+      "  --concurrency  run N cases at a time. Default: 1.",
       "  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 900000.",
     ]) expect(run.out).toContain(line);
-    expect(run.out).toEndWith("\n\nNeeds akm on PATH, or in AKM_BIN.\n");
+    expect(run.out).toEndWith(`\n\nNeeds akm on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
     expect(run.out).not.toMatch(/--yes|-y\b/);
   }, 60_000);
 
@@ -630,7 +633,7 @@ describe("run --corpus custom", () => {
       { id: "s-ok", class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } },
       { id: "s-good", class: "lesson-worthy", fake: { result: { outcome: "queued" }, proposal: proposal(GOOD) } },
     ]).assets;
-    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: calls };
+    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_EVAL_NO_PROBE: "1", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: calls }; // nothing listens on port 9, and the run is not to ask it
     const p = Bun.spawnSync(["bun", join(tree, "evals", "distill", "src", "run.ts"), "--cases", notes, "--concurrency", "2", "--timeout-ms", "1500", "--label", "flags"], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
     expect([p.exitCode, p.stderr.toString()]).toEqual([0, ""]);
     const results = join(tree, "private", "distill", "results"); // a custom corpus of your own, in the one folder every eval has

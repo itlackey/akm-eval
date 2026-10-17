@@ -37,9 +37,10 @@ export function uuidOf(id: string): string {
  * judgment tier only judges, and promotion lint does not block (akm 0.9.26 prints its findings as non-blocking).
  * The bundle is indexed with akm's built-in embedder, as retrieval and skillret do, because a judge that is shown the nearest
  * notes of a promotion's source memory finds them by their stored vectors. The engine runs at temperature 0 with thinking off, as distill's does.
+ * `provider` is the provider kind of the engine (openai, anthropic, ...).
  */
-export function promotionConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey, "judge");
+export function promotionConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, "judge", provider);
   config.engines.judge.temperature = 0;
   config.engines.judge.enableThinking = false;
   const { semanticSearchMode, embedding } = semanticConfig();
@@ -54,11 +55,13 @@ interface ConfigContext {
   baseUrl: string;
   model: string;
   hasKey: boolean;
+  /** The provider kind of akm's engine. Default: openai. */
+  provider?: string;
   overrides?: Overrides;
 }
 
 /** The akm config of a run: the promotion config with the strategy and the config patch merged in. */
-export const configFor = (ctx: ConfigContext): Record<string, any> => patchedConfig(promotionConfig(ctx.baseUrl, ctx.model, ctx.hasKey), ctx.overrides ?? defaultOverrides(STRATEGY));
+export const configFor = (ctx: ConfigContext): Record<string, any> => patchedConfig(promotionConfig(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.provider), ctx.overrides ?? defaultOverrides(STRATEGY));
 
 /** A sandbox for one run, with the config written. The config names the model key as $MODEL_API_KEY; semantic: the embedder's model is kept in .cache/. */
 export function openSandbox(ctx: ConfigContext): Sandbox {

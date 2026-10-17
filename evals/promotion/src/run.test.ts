@@ -43,10 +43,13 @@ const tmp = (): string => {
 
 const BASE_URL = "http://localhost:1/v1";
 
+/** The last line of every usage text: what the driver says of its one request to the model (lib/run.ts). */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
+
 /**
  * The keys of the summary.json that promotion wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts, without
  * results_dir, which is returned and not written. The website, scripts/ledger, compare and rescore read them, so none may go. A run adds timeout_ms
- * to them, and concurrency, which lib/run.ts writes for an eval with no pool too (always 1: promotion has one drain).
+ * to them. It adds no concurrency: promotion has one drain and no pool, and lib/run.ts writes none for an eval that runs its own cases (collectAll).
  */
 const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_errored", "timeouts", "seconds", "calls", "metrics", "model_calls", "semantic_verification", "manifest"];
 
@@ -263,6 +266,17 @@ describe("runCorpus", () => {
     expect(written.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
   });
 
+  test("gives the engine the provider kind of the context, in the config akm reads and in the summary, and openai without one", async () => {
+    const { ctx, seen, folders } = setup(cases.slice(0, 2));
+    const summary = await quiet(() => runPublic({ ...ctx, provider: "groq" }, folders));
+    expect(seen("seen.json").config.engines.judge.provider).toBe("groq");
+    expect(stored(summary.results_dir).summary.config.engines.judge.provider).toBe("groq");
+    const plain = setup(cases.slice(0, 2));
+    const again = await quiet(() => runPublic(plain.ctx, plain.folders));
+    expect(plain.seen("seen.json").config.engines.judge.provider).toBe("openai");
+    expect(stored(again.results_dir).summary.config.engines.judge.provider).toBe("openai");
+  });
+
   test("the digest of the assets is the same for the same files in another folder, and changes with a case or a library note", () => {
     const a = setup(cases);
     const b = setup(cases);
@@ -425,13 +439,14 @@ describe("runCorpus", () => {
     await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("pending proposals");
   });
 
-  test("the summary has every key it has always had, which the website, scripts/ledger, compare and rescore read, and timeout_ms and concurrency besides", async () => {
+  test("the summary has every key it has always had, which the website, scripts/ledger, compare and rescore read, and timeout_ms besides, and no concurrency: it has one drain, not a pool", async () => {
     const { ctx, folders } = setup(cases.slice(0, 3));
     const summary = await quiet(() => runPublic(ctx, folders));
     const { summary: written } = stored(summary.results_dir);
-    expect(Object.keys(written).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms"].sort());
+    expect(Object.keys(written).sort()).toEqual([...SUMMARY_KEYS, "timeout_ms"].sort());
+    expect("concurrency" in written).toBe(false);
     expect(Object.keys(summary).sort()).toEqual([...Object.keys(written), "results_dir"].sort()); // what runCorpus returns also names the folder, which the file does not
-    expect(written).toMatchObject({ timeout_ms: 7_200_000, concurrency: 1, timeouts: 0, n_run: 3 });
+    expect(written).toMatchObject({ timeout_ms: 7_200_000, timeouts: 0, n_run: 3 });
     expect(written.calls).toEqual({ n: 3, failures: 0, served: { "served-model": 3 } });
   });
 });
@@ -639,7 +654,7 @@ describe("the command", () => {
     const run = (label: string, flags: string[]) => {
       const [log, own] = [join(tree, `${label}.calls.jsonl`), join(tree, `${label}.tmp`)];
       mkdirSync(own);
-      const env = { ...process.env, ...MODEL, MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, TMPDIR: own };
+      const env = { ...process.env, ...MODEL, MODEL_NAME: "m", MODEL_API_KEY: "", AKM_EVAL_NO_PROBE: "1", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, TMPDIR: own }; // nothing listens on port 9, and the run is not to ask it
       const done = Bun.spawnSync(["bun", join(tree, "evals", "promotion", "src", "run.ts"), "--corpus", "public", "--limit", "4", "--label", label, ...flags], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
       const results = join(tree, "evals", "promotion", "results");
       const folder = join(results, readdirSync(results).find((name) => name.endsWith(`-${label}`)) as string);
@@ -655,7 +670,7 @@ describe("the command", () => {
       expect(r.leftover).toEqual([]);
       expect(r.rows).toHaveLength(4);
       expect(r.summary).toMatchObject({ n_run: 4, status: "complete" });
-      expect(Object.keys(r.summary).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms", "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
+      expect(Object.keys(r.summary).sort()).toEqual([...SUMMARY_KEYS, "timeout_ms", "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
     }
     expect([plain.summary.timeout_ms, plain.summary.manifest.settings.timeout_ms]).toEqual([7_200_000, 7_200_000]);
     expect([set.summary.timeout_ms, set.summary.manifest.settings.timeout_ms]).toEqual([20_000, 20_000]);
@@ -694,7 +709,7 @@ describe("the command", () => {
     expect(out).toContain("  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 7200000.\n");
     expect(out).not.toContain("--concurrency");
     expect(out).not.toMatch(/--yes|-y\b/);
-    expect(out).toEndWith("\n\nNeeds akm on PATH, or in AKM_BIN.\n");
+    expect(out).toEndWith(`\n\nNeeds akm on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
     const refused = await cli(["--concurrency", "2"], MODEL);
     expect(refused.code).toBe(2);
     expect(refused.err).toContain("Unknown option '--concurrency'");

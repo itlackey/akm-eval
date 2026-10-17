@@ -16,6 +16,9 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
+/** The last line of every usage text: what the driver says of its one request to the model (lib/run.ts). */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
+
 /**
  * An akm that does what $FAKE_SCENARIOS says for the session it is asked about. `proposal extract` prints an
  * extract result with one session and keeps the proposals, if any, for `proposal list`. Every call is logged to
@@ -514,10 +517,10 @@ describe("the command", () => {
       "            The default custom corpus is private/extract/assets, made by ./generate-assets.",
       "  --limit   run N sessions, taken from each class in turn",
       "  --strategy      the akm improve strategy to run in place of extract-only.",
-      "  --concurrency  run N cases at a time, each in a sandbox of its own. Default: 1.",
+      "  --concurrency  run N cases at a time. Default: 1.",
       "  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 900000.",
     ]) expect(run.out).toContain(line);
-    expect(run.out).toEndWith(`\n\nTested with akm ${MIN_AKM} or later on PATH, or in AKM_BIN.\n`);
+    expect(run.out).toEndWith(`\n\nTested with akm ${MIN_AKM} or later on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
     expect(run.out).not.toMatch(/--yes|-y\b/);
   }, 60_000);
 
@@ -550,7 +553,7 @@ describe("the command", () => {
   test("warns about an akm older than the tested release, and goes on", () => {
     const tree = copyOfRepo();
     writeFileSync(join(tree, "old-akm.ts"), 'console.log("akm 0.9.25");');
-    const done = bun(tree, [], { AKM_BIN: commandLine(["bun", join(tree, "old-akm.ts")]) });
+    const done = bun(tree, [], { AKM_BIN: commandLine(["bun", join(tree, "old-akm.ts")]), AKM_EVAL_NO_PROBE: "1" }); // the subject is the akm, and nothing listens on port 1: the run is not to ask it
     expect(done.code).toBe(1); // that akm answers every command with its version, so every session errors and the run gives up
     expect(done.err).toContain(`akm 0.9.25 predates the tested release ${MIN_AKM}; continuing with the requested build.`);
     expect(done.err).toMatch(/5 cases in a row errored, so the run stopped after 5 of \d+\./);
@@ -565,7 +568,7 @@ describe("the command", () => {
       { id: "s-ok", class: "routine", fake: empty() },
       { id: "s-good", class: "insight", fake: saves(proposal("p1", "Exit 75: a stale pid file.")) },
     ]).assets;
-    const run = bun(tree, ["--cases", notes, "--concurrency", "2", "--timeout-ms", "3000", "--label", "flags"], { AKM_BIN: commandLine(["bun", script]) });
+    const run = bun(tree, ["--cases", notes, "--concurrency", "2", "--timeout-ms", "3000", "--label", "flags"], { AKM_BIN: commandLine(["bun", script]), AKM_EVAL_NO_PROBE: "1" }); // nothing listens on port 1, and the run is not to ask it
     expect([run.code, run.err]).toEqual([0, ""]);
     const results = join(tree, "private", "extract", "results"); // a custom corpus of your own, in the one folder every eval has
     const folder = join(results, readdirSync(results).find((name) => name.endsWith("-flags")) as string);

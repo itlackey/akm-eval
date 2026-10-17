@@ -73,11 +73,14 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
   assetsSha256: (folder) => casesSha256(folder),
   // The sandbox holds the config, so one is opened for the cases of a run and removed after them; that counts its model calls for the summary.
   openRun: async (ctx) => {
-    const sandbox = openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides);
+    const sandbox = openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider);
     return { sandbox, close: () => removeSandbox(sandbox) };
   },
-  configFor: (ctx) => configFor(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides),
+  configFor: (ctx) => configFor(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider),
   runCase: judgeCase,
+  // A reply with no verdict counts toward giving up, errored or not: with the endpoint down, or a model that answers nothing the judge can read,
+  // akm routes every case to review with a score of -1, and those rows are not errored. The reason is the error, else akm's own.
+  giveUpOn: (row) => (hasVerdict(row) ? null : row.error || row.reason || "no verdict"),
   progress: (c, row) => {
     const note = row.error ?? (hasVerdict(row) ? "" : row.reason);
     return `${c.label.padEnd(4)} ${row.outcome.padEnd(6)} ${row.seconds}s  ${c.id.slice(0, 8)}${note ? `  ${note.slice(0, 120)}` : ""}`;

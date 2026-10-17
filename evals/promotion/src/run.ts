@@ -91,10 +91,7 @@ const SPEC: EvalSpec<Case, Row, Opened> = {
     return { sandbox, library: libraryOf(corpus.folder), batch: { seconds: 0, bundle: "" }, close: () => removeSandbox(sandbox) };
   },
   configFor,
-  // The proposals are never run one at a time: collectAll takes them as one batch.
-  runCase: () => {
-    throw new Error("promotion runs its proposals as one batch (collectAll), not one case at a time");
-  },
+  // The proposals are never run one at a time, so there is no runCase: collectAll takes them as one batch.
   collectAll: async (cases, ctx, record) => {
     try {
       const { rows, seconds } = await collect(ctx.sandbox, cases, ctx.library, ctx);

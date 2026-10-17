@@ -178,6 +178,14 @@ describe("judgeConfig", () => {
     expect(c.defaults.improveStrategy).toBe("tight");
     expect(Object.keys(c.improve.strategies)).toEqual([STRATEGY]);
   });
+
+  test("gives the engine the provider kind it is asked for, and openai without one: the rest of the config does not change with it", () => {
+    const plain = judgeConfig("http://localhost:8080/v1/", "m", true) as any;
+    expect(plain.engines.judge.provider).toBe("openai");
+    const other = judgeConfig("http://localhost:8080/v1/", "m", true, STRATEGY, "anthropic") as any;
+    expect(other.engines.judge.provider).toBe("anthropic");
+    expect({ ...other, engines: { judge: { ...other.engines.judge, provider: "openai" } } }).toEqual(plain);
+  });
 });
 
 describe("configFor", () => {
@@ -188,6 +196,12 @@ describe("configFor", () => {
   test("--strategy makes that strategy the default of the config", () => {
     const c = configFor("http://localhost:8080/v1/", "m", true, { strategy: "tight", configPatch: null });
     expect(c.defaults.improveStrategy).toBe("tight");
+  });
+
+  test("takes the provider kind of the engine last, and the config patch can still change it", () => {
+    expect(configFor("http://localhost:8080/v1/", "m", true, defaultOverrides(STRATEGY), "groq").engines.judge.provider).toBe("groq");
+    const patch = { path: "patches/p.json", sha256: "abc", patch: { engines: { judge: { provider: "ollama" } } } };
+    expect(configFor("http://localhost:8080/v1/", "m", true, { strategy: STRATEGY, configPatch: patch }, "groq").engines.judge.provider).toBe("ollama");
   });
 
   test("--config-patch merges into the config after it, and can define the strategy that --strategy names", () => {

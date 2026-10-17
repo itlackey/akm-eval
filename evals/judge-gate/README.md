@@ -33,7 +33,7 @@ The custom rewrite changes names, numbers and the like across each case's source
 
 ## How a case is scored
 
-akm's verdict becomes an outcome: `pass`, `review` (not rejected, not good enough to pass alone), `reject` or `error`. Only `pass` counts as passed. A verdict of score -1 routed to review (the judge gave no readable verdict) counts as `review` with a null `score`. `error` is akm failing, timing out, or printing no verdict; errored cases are left out of the counts. The run stops, `aborted`, after 5 cases in a row that errored.
+akm's verdict becomes an outcome: `pass`, `review` (not rejected, not good enough to pass alone), `reject` or `error`. Only `pass` counts as passed. A verdict of score -1 routed to review (the judge gave no readable verdict) counts as `review` with a null `score`. `error` is akm failing, timing out, or printing no verdict; errored cases are left out of the counts. The run stops, `aborted`, after 5 cases in a row that errored or got no verdict.
 
 | Metric | Meaning |
 |---|---|

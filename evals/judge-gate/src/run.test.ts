@@ -31,6 +31,9 @@ afterEach(() => {
 
 const BASE_URL = "http://localhost:9/v1";
 
+/** The last line of every usage text: what the driver says of its one request to the model (lib/run.ts). */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
+
 /**
  * The keys of the summary.json that judge-gate wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts, without
  * results_dir, which is returned and not written. The website, scripts/ledger, compare and rescore read them, so none may go. A run adds
@@ -70,6 +73,7 @@ else if (word === "REJECT") console.log(JSON.stringify({ ok: true, engine: "judg
 else if (word === "NOVERDICT") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reviewNeeded: true, reason: "judge timeout/error" }));
 else if (word === "UNREADABLE") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reviewNeeded: true, reason: "judge parse failed — routed to review" }));
 else if (word === "REWORDED") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reviewNeeded: true, reason: "the model's reply was not understood" }));
+else if (word === "SILENT") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reviewNeeded: true }));
 else if (word === "FAILCLOSED") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reason: "no engine configured — cannot judge, failing closed" }));
 else if (word === "LEAK") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: 1.5, reason: "connect to ${BASE_URL}/chat/completions failed" }));
 else if (word === "HANG") await Bun.sleep(60000);
@@ -300,13 +304,24 @@ describe("runCorpus", () => {
     test("is removed when the run gives up too, and the model calls it recorded are in the summary of a run that completes", async () => {
       takeModelCalls(); // another test's calls are not this one's
       const dead = setup(repeat(8, { word: "CRASH", label: "bad" }));
-      await expect(quiet(() => runPublic(dead.ctx, dead.folders))).rejects.toThrow("5 cases in a row errored");
+      await expect(quiet(() => runPublic(dead.ctx, dead.folders))).rejects.toThrow("5 cases in a row gave no result");
       expect(dead.leftover()).toEqual([]);
       takeModelCalls();
       const { ctx, leftover, folders } = setup(repeat(5, { word: "PASS", label: "good" }), { FAKE_USAGE: "1" });
       const summary = await quiet(() => runPublic(ctx, folders));
       expect(summary.model_calls).toMatchObject({ calls: 5, errors: 0 }); // removing the sandbox counts its calls, before the summary takes them
       expect(leftover()).toEqual([]);
+    });
+
+    test("gives the engine the provider kind of the context, in the config akm reads and in the summary, and openai without one", async () => {
+      const { ctx, calls, folders } = setup([{ word: "PASS", label: "good" }]);
+      await quiet(() => runPublic({ ...ctx, provider: "groq" }, folders));
+      expect(calls().find((c) => c.at === "start").config.engines.judge.provider).toBe("groq");
+      expect(resultsOf(folders).summary.config.engines.judge.provider).toBe("groq");
+      const plain = setup([{ word: "PASS", label: "good" }]);
+      await quiet(() => runPublic(plain.ctx, plain.folders));
+      expect(plain.calls().find((c) => c.at === "start").config.engines.judge.provider).toBe("openai");
+      expect(resultsOf(plain.folders).summary.config.engines.judge.provider).toBe("openai");
     });
 
     test("gives the cases of a run the config of its overrides: the strategy is the default, and the config patch is merged", async () => {
@@ -322,17 +337,51 @@ describe("runCorpus", () => {
   });
 
   describe("giving up", () => {
-    // The pool gives up on five errored rows in a row (lib/run.test.ts). judge-gate has always given up on five rows in a row that got no verdict,
-    // and a review that akm routes there with a score of -1 (what a model that answers nothing the judge can read, or an endpoint that is down,
-    // makes of every case) is not errored, so the pool counts none of them. lib/run.ts has no way for a spec to say which rows count: until it has,
-    // this stays a todo (bun test --todo runs it).
-    test.todo("five replies in a row that akm could not read stop the run, since the model gave no verdict either", async () => {
-      const { ctx, folders } = setup(repeat(10, { word: "UNREADABLE", label: "bad" }));
-      await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow();
-      const { summary } = resultsOf(folders);
-      expect(summary).toMatchObject({ status: "aborted", n_errored: 0 });
-      expect(summary.n_run).toBeLessThan(10);
+    // The pool gives up on five rows in a row that the spec's giveUpOn names (lib/run.test.ts), and without one on five errored rows. judge-gate has always given
+    // up on five rows in a row that got no verdict: an errored row, and a review that akm routes there with a score of -1, which is what a model that answers nothing
+    // the judge can read, or an endpoint that is down, makes of every case, and which is not errored. So its spec names every row with no verdict.
+    const unread = (n: number): Spec[] => repeat(n, { word: "UNREADABLE", label: "bad" });
+    const gaveNoResult = "5 cases in a row gave no result, so the run stopped after";
+
+    test("five replies in a row that akm could not read stop the run, since the model gave no verdict either", async () => {
+      const { ctx, leftover, folders } = setup(unread(10));
+      const reason = /^5 cases in a row gave no result, so the run stopped after [56] of 10\. Last error: judge parse failed — routed to review$/;
+      const message = await quiet(() => runPublic(ctx, folders)).then(() => "", (e: Error) => e.message);
+      const [what, check, ...more] = message.split("\n");
+      expect(what).toMatch(reason);
+      expect(check).toStartWith("Check MODEL_BASE_URL"); // what to check is the driver's to say (lib/run.test.ts)
+      expect(more).toEqual([]);
+      const { summary, rows } = resultsOf(folders);
+      expect(summary).toMatchObject({ status: "aborted", n_cases: 10, n_errored: 0 });
+      expect(summary.aborted_reason).toMatch(reason);
+      expect(summary.n_run).toBeGreaterThanOrEqual(5);
+      expect(summary.n_run).toBeLessThanOrEqual(6); // two run at a time: the one that was running when the fifth came in finishes, and no other begins
+      expect(rows).toHaveLength(summary.n_run);
+      expect(rows.every((r) => r.outcome === "review" && r.score === null && r.error === undefined)).toBe(true); // reviews, which are scored: none of them is errored
       expect(summary.metrics.bad.n).toBe(summary.n_run);
+      expect(leftover()).toEqual([]);
+    });
+
+    test("a reply with a verdict starts the count again, a judged review too: a review with no score is the one that is no verdict", async () => {
+      for (const word of ["PASS", "REVIEW", "REJECT"]) {
+        const { ctx, folders } = setup([...unread(4), { word, label: "bad" }, ...unread(4)]);
+        const summary = await quiet(() => runPublic({ ...ctx, concurrency: 1 }, folders)); // one at a time, so the rows are in the order of the cases
+        expect([word, summary.status, summary.aborted_reason, summary.n_run]).toEqual([word, "complete", null, 9]);
+      }
+    });
+
+    test("an errored row and a review with no verdict count together, as they did before the run was the driver's, and the reason is the fifth's: its error, else akm's", async () => {
+      const words = ["CRASH", "UNREADABLE", "FAILCLOSED", "NOVERDICT", "REWORDED", "PASS", "PASS", "PASS"];
+      const { ctx, calls, folders } = setup(words.map((word) => ({ word, label: "bad" as const })));
+      await expect(quiet(() => runPublic({ ...ctx, concurrency: 1 }, folders))).rejects.toThrow(`${gaveNoResult} 5 of 8. Last error: the model's reply was not understood`);
+      expect(calls().filter((c) => c.at === "start").map((c) => c.word)).toEqual(words.slice(0, 5)); // the passes never began
+      expect(resultsOf(folders).summary).toMatchObject({ status: "aborted", n_run: 5, n_errored: 2 }); // the crash and the refusal to judge
+    });
+
+    test("a reply with no verdict and no reason to give says so in the reason for giving up", async () => {
+      const { ctx, folders } = setup(repeat(6, { word: "SILENT", label: "good" }));
+      await expect(quiet(() => runPublic({ ...ctx, concurrency: 1 }, folders))).rejects.toThrow(`${gaveNoResult} 5 of 6. Last error: no verdict`);
+      expect(resultsOf(folders).summary.aborted_reason).toBe(`${gaveNoResult} 5 of 6. Last error: no verdict`);
     });
   });
 
@@ -397,7 +446,7 @@ describe("runCorpus", () => {
       const priv = setup([{ word: "PASS", label: "good" }]);
       expect((await quiet(() => runCorpus(corpusOf(priv.folders.assets, { rewrite: true, seed: "7" }), priv.ctx, priv.folders.results))).rubric_version).toBe(version);
       const dead = setup(repeat(8, { word: "CRASH", label: "bad" }));
-      await expect(quiet(() => runPublic(dead.ctx, dead.folders))).rejects.toThrow("5 cases in a row errored");
+      await expect(quiet(() => runPublic(dead.ctx, dead.folders))).rejects.toThrow("5 cases in a row gave no result");
       expect(resultsOf(dead.folders).summary).toMatchObject({ status: "aborted", rubric_version: version });
     });
   });
@@ -489,7 +538,7 @@ describe("the command", () => {
     const run = (label: string, flags: string[]) => {
       const [log, own] = [join(tree, `${label}.calls.jsonl`), join(tree, `${label}.tmp`)];
       mkdirSync(own);
-      const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "model-secret", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, FAKE_MS: "300", TMPDIR: own };
+      const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "model-secret", AKM_EVAL_NO_PROBE: "1", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, FAKE_MS: "300", TMPDIR: own }; // nothing listens on port 9, and the run is not to ask it
       const done = Bun.spawnSync(["bun", join(tree, "evals", "judge-gate", "src", "run.ts"), "--cases", notes, "--label", label, ...flags], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
       const results = join(tree, "private", "judge-gate", "results");
       const folder = join(results, readdirSync(results).find((name) => name.endsWith(`-${label}`)) as string);
@@ -529,7 +578,7 @@ describe("the usage text", () => {
     expect(text).toContain("  --concurrency  run N cases at a time");
     expect(text).toContain("Default: 2.\n");
     expect(text).toContain("  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 900000.\n");
-    expect(text).toEndWith("\n\nTested with akm 0.9.25-alpha.2 or later on PATH, or in AKM_BIN.\n");
+    expect(text).toEndWith(`\n\nTested with akm 0.9.25-alpha.2 or later on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
     expect(text).not.toMatch(/--yes|-y\b/);
   });
 });

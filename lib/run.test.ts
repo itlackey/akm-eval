@@ -41,11 +41,13 @@ else if (args[0] === "case") {
 `;
 
 /**
- * An eval that is only a spec: one akm call per case, scored ok or error. Its own flag is --note, which its setup, its cases' input and its summary carry,
- * and --note reverse selects from the end (selectCases is given the context). FAKE_CTX gets the context of every case, FAKE_CASES_FILE names the cases
- * file, and FAKE_SPEC is JSON that replaces fields of the spec. The rest of what a spec can have is switched on by the environment: FAKE_NO_STRATEGY,
- * FAKE_SHARED (a sandbox for all the cases of a run, opened and closed as FAKE_RUNS logs), FAKE_BATCH (runs the cases itself, last first, and with
- * FAKE_BATCH_ABORT gives up for that reason; "stray" records a row of no case) and FAKE_ABORT (gives up when no case was ok).
+ * An eval that is only a spec: one akm call per case, scored ok or error, or silent for a case that is answered with nothing (a row that is not errored and
+ * has no result). Its own flag is --note, which its setup, its cases' input and its summary carry, and --note reverse selects from the end (selectCases is
+ * given the context). FAKE_CTX gets the context of every case, FAKE_CASES_FILE names the cases file, and FAKE_SPEC is JSON that replaces fields of the spec.
+ * The rest of what a spec can have is switched on by the environment: FAKE_NO_STRATEGY, FAKE_SHARED (a sandbox for all the cases of a run, opened and closed
+ * as FAKE_RUNS logs), FAKE_BATCH (runs the cases itself, last first, and with FAKE_BATCH_ABORT gives up for that reason; "stray" records a row of no case),
+ * FAKE_NO_RUNCASE (takes runCase out of the spec), FAKE_GIVEUP (giveUpOn names the rows whose outcome is in the list, such as "silent,error", by their error
+ * or their reason) and FAKE_ABORT (gives up when no case was ok).
  */
 const FIXTURE = `
 import { createHash } from "node:crypto";
@@ -88,7 +90,7 @@ const spec = {
     const sandbox = ctx.sandbox ?? createSandbox("fake");
     try {
       await runAkmJson(sandbox, ["case", c.id, String(c.ms ?? 0), c.fail ?? "", c.gate ?? ""], { timeoutMs: ctx.timeoutMs });
-      return { id: c.id, outcome: "ok", seconds: seconds() };
+      return c.silent ? { id: c.id, outcome: "silent", reason: "no word from " + c.id, seconds: seconds() } : { id: c.id, outcome: "ok", seconds: seconds() };
     } catch (e) {
       const error = e.message.slice(0, 300);
       return { id: c.id, outcome: "error", error, ...(/timed out/.test(error) ? { timed_out: true } : {}), seconds: seconds() };
@@ -117,10 +119,11 @@ if (process.env.FAKE_SHARED) {
   };
 }
 if (process.env.FAKE_BATCH) {
+  const runOne = spec.runCase; // taken here: FAKE_NO_RUNCASE takes it out of the spec below, and a batch has no use for it there
   spec.collectAll = async (cases, ctx, record) => {
     const rows = [];
     for (const c of [...cases].reverse()) {
-      const row = await spec.runCase(c, ctx);
+      const row = await runOne(c, ctx);
       rows.push(row);
       record(row);
     }
@@ -129,6 +132,8 @@ if (process.env.FAKE_BATCH) {
   };
 }
 if (process.env.FAKE_ABORT) spec.abortReason = (rows) => (rows.some((r) => r.outcome === "ok") ? null : "no case was ok, so there is no result");
+if (process.env.FAKE_GIVEUP) { const counted = process.env.FAKE_GIVEUP.split(","); spec.giveUpOn = (row) => (counted.includes(row.outcome) ? (row.error ?? row.reason) : null); }
+if (process.env.FAKE_NO_RUNCASE) delete spec.runCase;
 Object.assign(spec, JSON.parse(process.env.FAKE_SPEC ?? "{}"));
 await runEval(spec);
 `;
@@ -157,15 +162,17 @@ const server = Bun.serve({
 console.log(server.port);
 `;
 
-/** A case of the fake eval: it waits `ms`, and for the file `gate` if it has one, then fails with `fail` if it has one. A case with `throw` makes the eval throw. */
+/** A case of the fake eval: it waits `ms`, and for the file `gate` if it has one, then fails with `fail` if it has one. A case with `throw` makes the eval throw, and one with `silent` is answered with nothing: its row is not errored. */
 interface Case {
   id: string;
   ms?: number;
   fail?: string;
   gate?: string;
   throw?: boolean;
+  silent?: boolean;
 }
 const ok = (n: number, ms = 0, name = "ok"): Case[] => Array.from({ length: n }, (_, i) => ({ id: `${name}${i}`, ms }));
+const silent = (n: number, name = "silent"): Case[] => Array.from({ length: n }, (_, i) => ({ id: `${name}${i}`, silent: true }));
 const bad = (n: number, ms = 0, name = "bad"): Case[] => Array.from({ length: n }, (_, i) => ({ id: `${name}${i}`, ms, fail: "boom" }));
 const held = (n: number, name = "held"): Case[] => Array.from({ length: n }, (_, i) => ({ id: `${name}${i}`, gate: `${name}${i}` }));
 const lines = (cases: Case[]): string => `${cases.map((c) => JSON.stringify(c)).join("\n")}\n`;
@@ -929,6 +936,34 @@ describe("a spec that is not one case after another", () => {
     expect(gaveUp.out).toContain("fake public: 2 of 2 cases, 0 errored\n"); // the summary is written and printed before the run fails
   });
 
+  test("the summary of a collectAll spec has no concurrency key, since there is no pool, and every other key a pool's summary has", () => {
+    setCases(ok(2));
+    const batch = run(["--label", "keys-batch"], { FAKE_BATCH: "1" });
+    const wide = run(["--label", "keys-batch-wide"], { FAKE_BATCH: "1", FAKE_SPEC: JSON.stringify({ defaultConcurrency: 3 }) }); // a default width does not make a pool of a batch
+    const pool = run(["--label", "keys-pool"]);
+    expect([batch.code, wide.code, pool.code]).toEqual([0, 0, 0]);
+    const [a, b, c] = [resultsOf("keys-batch")[0]?.summary, resultsOf("keys-batch-wide")[0]?.summary, resultsOf("keys-pool")[0]?.summary];
+    expect(["concurrency" in a, "concurrency" in b]).toEqual([false, false]);
+    expect(c.concurrency).toBe(1);
+    expect(Object.keys(a).sort()).toEqual(Object.keys(c).filter((key) => key !== "concurrency").sort());
+    expect(Object.keys(b).sort()).toEqual(Object.keys(a).sort());
+    expect(a.timeout_ms).toBe(900_000); // the limit of its akm commands is there
+  });
+
+  test("a spec with collectAll needs no runCase, and a spec with neither is a bug of the eval, said before any case runs", () => {
+    setCases(ok(3));
+    const batch = run(["--label", "no-runcase"], { FAKE_BATCH: "1", FAKE_NO_RUNCASE: "1" });
+    expect([batch.code, batch.err]).toEqual([0, ""]);
+    const [done] = resultsOf("no-runcase");
+    expect(done?.rows.map((row) => row.id)).toEqual(["ok2", "ok1", "ok0"]); // the batch ran them, in its own order
+    expect(done?.summary).toMatchObject({ status: "complete", aborted_reason: null, n_cases: 3, n_run: 3, n_scored: 3 });
+    expect(batch.out).toContain("fake (public): 3 of 3 cases\n");
+    const neither = run(["--label", "neither"], { FAKE_NO_RUNCASE: "1" });
+    expect(neither.code).not.toBe(0);
+    expect(neither.err).toContain("fake: the spec has neither runCase nor collectAll");
+    expect(started(neither.calls)).toEqual([]);
+  });
+
   test("a row that collectAll records for a case that was not selected is a bug of the eval, and stops the run", () => {
     setCases(ok(2));
     const r = run(["--label", "stray"], { FAKE_BATCH: "stray" });
@@ -1011,5 +1046,57 @@ describe("the run gives up", () => {
     const r = run(["--label", "repeat-giveup", "--repeat", "2"]);
     expect(r.code).toBe(1);
     expect(resultsOf("repeat-giveup").map((d) => d.summary.label)).toEqual(["repeat-giveup-r1"]);
+  });
+});
+
+describe("giveUpOn: what counts toward giving up", () => {
+  test("five rows in a row that it names stop the run though none errored, and the text says they gave no result, with the fifth's reason", () => {
+    setCases(silent(8));
+    const r = run(["--label", "silent-giveup"], { FAKE_GIVEUP: "silent" });
+    const reason = "5 cases in a row gave no result, so the run stopped after 5 of 8. Last error: no word from silent4";
+    expect(r.code).toBe(1);
+    expect(r.err.trim().split("\n")).toEqual([`fake: ${reason}`, CHECK]);
+    expect(started(r.calls)).toEqual(["silent0", "silent1", "silent2", "silent3", "silent4"]); // no case starts after them
+    const [done] = resultsOf("silent-giveup");
+    expect(done?.rows).toHaveLength(5);
+    expect(done?.summary).toMatchObject({ status: "aborted", aborted_reason: reason, n_cases: 8, n_run: 5, n_scored: 5, n_errored: 0 });
+    expect(done?.summary.manifest.completion).toMatchObject({ scored: ["silent0", "silent1", "silent2", "silent3", "silent4"], errored: [] });
+    expect(r.out).toContain("fake public: 5 of 8 cases, 0 errored\n"); // the summary is printed before the run fails
+  });
+
+  test("a row it does not name starts the count again, and it replaces the rule that errored rows count: an errored row it does not name is not counted", () => {
+    const silentOnly = { FAKE_GIVEUP: "silent" };
+    setCases([...silent(4, "x"), ...ok(1), ...silent(4, "y")]);
+    expect(run(["--label", "silent-reset"], silentOnly).code).toBe(0);
+    expect(resultsOf("silent-reset")[0]?.summary).toMatchObject({ status: "complete", aborted_reason: null, n_run: 9, n_errored: 0 });
+    setCases(bad(8)); // eight errors in a row, and the hook names none of them
+    expect(run(["--label", "errors-unnamed"], silentOnly).code).toBe(0);
+    expect(resultsOf("errors-unnamed")[0]?.summary).toMatchObject({ status: "complete", aborted_reason: null, n_run: 8, n_errored: 8 });
+  });
+
+  test("rows of both kinds count together when it names both, and the reason is the fifth's: its reason, or its error when it errored", () => {
+    const both = { FAKE_GIVEUP: "silent,error" };
+    setCases([...bad(2, 0, "b"), ...silent(3), ...ok(3)]);
+    const r = run(["--label", "both"], both);
+    expect(r.code).toBe(1);
+    expect(r.err).toStartWith("fake: 5 cases in a row gave no result, so the run stopped after 5 of 8. Last error: no word from silent2\n");
+    expect(started(r.calls)).toEqual(["b0", "b1", "silent0", "silent1", "silent2"]);
+    expect(resultsOf("both")[0]?.summary).toMatchObject({ status: "aborted", n_run: 5, n_errored: 2 });
+    expect(run(["--label", "silent-alone"], { FAKE_GIVEUP: "silent" }).code).toBe(0); // named alone, the three silent rows are three in a row, and the errors before them are not counted
+    setCases([...silent(2), ...bad(3, 0, "c"), ...ok(3)]);
+    const last = run(["--label", "error-last"], both);
+    expect(last.code).toBe(1);
+    expect(last.err).toMatch(/^fake: 5 cases in a row gave no result, so the run stopped after 5 of 8\. Last error: akm case failed \(exit 70\): .*boom/);
+  });
+
+  test("without it the rule is as it was: errored rows count, with their error, and rows that are not errored never do", () => {
+    setCases(bad(6));
+    const errored = run(["--label", "default-rule"]);
+    expect(errored.code).toBe(1);
+    expect(errored.err).toMatch(/^fake: 5 cases in a row errored, so the run stopped after 5 of 6\. Last error: akm case failed \(exit 70\): .*boom/);
+    expect(errored.err).not.toContain("gave no result");
+    setCases(silent(8)); // eight rows with no result in a row, and none of them errored
+    expect(run(["--label", "default-silent"]).code).toBe(0);
+    expect(resultsOf("default-silent")[0]?.summary).toMatchObject({ status: "complete", aborted_reason: null, n_run: 8, n_errored: 0 });
   });
 });

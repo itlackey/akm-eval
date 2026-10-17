@@ -33,10 +33,10 @@ export const STRATEGY = "default";
 /**
  * The akm config the judge runs under: one LLM engine, named as reflect's quality gate engine. Requests use temperature 0 and ask for
  * no thinking, as distill and extract do, so that two runs differ by the model and not by the sampling. `strategy` is the improve
- * strategy the config makes the default; akm's judge takes its gate from it.
+ * strategy the config makes the default; akm's judge takes its gate from it. `provider` is the provider kind of the engine (openai, anthropic, ...).
  */
-export function judgeConfig(baseUrl: string, model: string, hasKey: boolean, strategy = STRATEGY): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey, "judge");
+export function judgeConfig(baseUrl: string, model: string, hasKey: boolean, strategy = STRATEGY, provider = "openai"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, "judge", provider);
   config.engines.judge.temperature = 0;
   config.engines.judge.enableThinking = false;
   config.defaults.improveStrategy = strategy;
@@ -45,12 +45,12 @@ export function judgeConfig(baseUrl: string, model: string, hasKey: boolean, str
 }
 
 /** The config the eval writes: the judge config with the strategy of the overrides as the default, and the config patch, if any, merged into it after. */
-export const configFor = (baseUrl: string, model: string, hasKey: boolean, overrides: Overrides): Record<string, any> => patchedConfig(judgeConfig(baseUrl, model, hasKey, overrides.strategy), overrides);
+export const configFor = (baseUrl: string, model: string, hasKey: boolean, overrides: Overrides, provider = "openai"): Record<string, any> => patchedConfig(judgeConfig(baseUrl, model, hasKey, overrides.strategy, provider), overrides);
 
 /** A sandbox for the run, with the config written: every case of the run goes through it. The config names the model key as $MODEL_API_KEY. */
-export function openSandbox(baseUrl: string, model: string, hasKey: boolean, overrides: Overrides = defaultOverrides(STRATEGY)): Sandbox {
+export function openSandbox(baseUrl: string, model: string, hasKey: boolean, overrides: Overrides = defaultOverrides(STRATEGY), provider = "openai"): Sandbox {
   const sandbox = createSandbox(NAME, { keepModelKey: true });
-  writeConfig(sandbox, configFor(baseUrl, model, hasKey, overrides));
+  writeConfig(sandbox, configFor(baseUrl, model, hasKey, overrides, provider));
   return sandbox;
 }
 
