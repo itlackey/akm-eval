@@ -639,6 +639,7 @@ describe("the command", () => {
     expect(run([]).err).toContain("name the model: pass --model ID, or set MODEL_NAME in .env");
     const help = run(["--help"]).out;
     expect(help).toContain("Tested with akm 0.9.26 or later");
+    expect(help).toContain("  --timeout-ms   akm improve's own wall-clock budget, which akm is given as its --timeout-ms; the eval stops akm 10 minutes after it. Default: 2700000.\n");
     expect(help).toEndWith(`\n${PROBE_NOTE}\n`);
     expect(help).toMatch(/--repeat[\s\S]*--strategy[\s\S]*in place of default[\s\S]*--config-patch/);
   });

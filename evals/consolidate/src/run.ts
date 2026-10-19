@@ -221,6 +221,7 @@ const POOL_SPEC: EvalSpec<PoolCase, PoolRow, PoolExtra> = {
   manifestExtras: (ctx) => ({ mode: "pool", treatment_hints: { embedder: ctx.embedder ?? "deterministic" } }),
   printSummary: printPool,
   usage: {
+    timeout: "akm improve's own wall-clock budget, which akm is given as its --timeout-ms; the eval stops akm 10 minutes after it",
     about: `Runs akm's consolidate on the whole public pool, as a real night does: the 80 memories of assets/pool in one sandbox and a single
 \`akm improve\`, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its engine, scored a cluster at a time against the labels.
 Settings come from .env at the repository root. Written for akm 0.9.26. It reads the public pool only, so leave out --corpus custom, --corpus all,

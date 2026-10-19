@@ -115,12 +115,12 @@ export function endpointHost(url: unknown): string | null {
   return id === null ? null : new URL(id).origin;
 }
 
-/** The settings of an engine that are the model's, not the akm config's: a summary's `engine` records them, and the config digest of scripts/compare leaves them out. */
+/** The settings of an engine that are the model's, not the akm config's: a summary's `engine` records them, and the manifest's `config.redacted` leaves them out. */
 export const ENGINE_KEYS = ["model", "endpoint", "temperature", "enableThinking", "timeoutMs"] as const;
 
 /**
- * An akm config without the settings of its engines that are the model's (ENGINE_KEYS): what the config axis of a comparison digests, and
- * what the manifest keeps as `config.redacted`. The model's settings are the model axis.
+ * An akm config without the settings of its engines that are the model's (ENGINE_KEYS): what the manifest keeps as `config.redacted`,
+ * which scripts/compare shows as `config`. The model's settings are in `engines`.
  */
 export function withoutEngineSettings(x: unknown): unknown {
   if (Array.isArray(x)) return x.map(withoutEngineSettings);

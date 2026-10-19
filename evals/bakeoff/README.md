@@ -14,7 +14,7 @@ Five of akm's model-backed jobs are scored by no other eval. This eval runs thos
 | `session-summary` | 8 | `akm proposal extract --type claude --session-id <id> --strategy bakeoff-session-summary` | `sessions/claude/<id>.md`: the summary and a `## Key topics` list |
 | `consolidate-promote` | 8 | `akm improve --strategy bakeoff-consolidate-promote` | the promotions in consolidate's plan, `consolidation.planned` |
 
-Each strategy runs its one process. Memory inference is behind `experimental.improveAutonomy`, which the config sets. Semantic search is off, so consolidate's pair pass finds no pairs.
+Each strategy runs its one process. Memory inference is behind `experimental.improveAutonomy`, which the config sets. Without `--semantic`, semantic search is off, so consolidate's pair pass finds no pairs.
 
 ## Run
 

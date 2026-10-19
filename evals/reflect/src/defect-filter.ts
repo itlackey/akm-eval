@@ -24,7 +24,7 @@ Runs the defect filter of the akm checkout DIR on each labelled edit and counts 
                 does not have the filter off (its defectFilter lists empty) is refused, with or without --rescore.
                 The source of each edit is read from the current cases, by case id.
   --rescore     omit proposals whose case no longer exists, reporting the missing case ids.
-  --judge-gate  the 106 labelled reflect proposals of evals/judge-gate (good or bad by review), public or private.
+  --judge-gate  the 135 labelled proposals of evals/judge-gate (106 made by reflect, 29 written to the rubric), public or private.
 
 Prints JSON: for each set of edits, the good and bad ones, how many the filter refused and by which rule, and the refused edits.
 A --reflect set also carries "inputs": the corpus folder the replay read, and any missing case ids.`;
@@ -90,7 +90,7 @@ function filterOnProblem(dir: string, summary: Record<string, any>): string | nu
 
 /** What a replay of a reflect run read, for the report: the corpus and the code the run recorded, and the ones the replay used. */
 export interface Inputs {
-  /** "stored" when the run read the cases and ran the code that are here now. "rescore" when --rescore was given. */
+  /** "stored" when every case of the run is here now. "rescore" when --rescore was given: proposals of missing cases are left out. */
   mode: "stored" | "rescore";
   corpus: "public" | "custom" | "private";
   /** The folder of the cases the replay read, from the repository root. */
@@ -103,7 +103,7 @@ export interface Inputs {
 export interface ReplayOptions {
   /** The repository the cases are read from. This one, but for tests. */
   root?: string;
-  /** Replay a run that read other cases or ran other code, and report both. */
+  /** Replay a run with case ids the cases here no longer have, leaving those proposals out. */
   rescore?: boolean;
 }
 

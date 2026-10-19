@@ -2,8 +2,8 @@
 
 The [benchmark ledger](https://itlackey.github.io/akm-eval/) builds from this
 repository's committed `reports/` tree. Every public result has a row, including
-repeats and pilots. Stopped/running snapshots are Diagnostic,
-and legacy summaries carry an explicit completion-status note. Private corpora
+repeats and pilots. Stopped, aborted and running snapshots, and legacy
+summaries without a recorded status, are Diagnostic, with a note. Private corpora
 remain excluded. The build makes no model calls.
 
 The design adapts [fwdslsh/website](https://github.com/fwdslsh/website)'s palette,
@@ -81,7 +81,8 @@ measures and individual test metrics. No row selection is needed.
 aggregate score across tests. Paired task/answer benchmarks use the AKM arm;
 search uses keyword nDCG@10. Original scores and denominators remain available
 independently. Compare the same test, collection, mode, eval/scoring versions and
-selected input set. Use the saved-run CLI to verify exact input compatibility.
+selected input set. To confirm identical inputs, compare `assets_sha256` and `manifest.cases`
+in the two `summary.json` files; `scripts/compare/run` shows settings, not input digests.
 Unknown measurements display —, distinct from recorded zeroes.
 
 **Paired gain** comes from the recorded shared-case comparison. It need not

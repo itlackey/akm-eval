@@ -5,13 +5,14 @@
 //
 //   benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
 //                              [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
+//                              [--model ID] [--judge-model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, resolveCorpora } from "../../../lib/corpus.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type EngineSetting, canonical, endpointHost, sha256File } from "../../../lib/provenance.ts";
@@ -44,7 +45,7 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     private/longmemeval/assets/, made by ./generate-assets. all runs both and prints the two
                     results side by side.
   --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format.
-                    It is --corpus custom. See "Corpora" in README.md. The run says which model and judge it sends the
+                    It is --corpus custom. See "Corpora" in the repository's README.md. The run says which model and judge it sends the
                     chats to before starting.
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
   --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json as sample_seed,
@@ -480,7 +481,7 @@ async function main(): Promise<void> {
   }
   const label = values.label ?? slug(endpoints?.model.model ?? "retrieval");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
-  await confirmCases(values, endpoints === null ? [] : [{ role: "model", name: endpoints.model.model, baseUrl: endpoints.model.baseUrl }, { role: "judge", name: endpoints.judge.model, baseUrl: endpoints.judge.baseUrl }]);
+  await announceCases(values, endpoints === null ? [] : [{ role: "model", name: endpoints.model.model, baseUrl: endpoints.model.baseUrl }, { role: "judge", name: endpoints.judge.model, baseUrl: endpoints.judge.baseUrl }]);
 
   const sandbox = openSandbox(searchMode);
   try {

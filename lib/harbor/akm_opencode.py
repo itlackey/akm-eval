@@ -30,7 +30,7 @@ agent folder and into the trial's context (`metadata["akm"]`), with what `akm --
 plugin carries, how many assets the index holds, the AKM_* settings the arm ran with, the lockfile each install came
 from and a digest of the dependency tree each one holds (`npm ls --all --json`). After the run,
 `akm_plugin_status.json` holds the verdict on the plugin; Harbor keeps only the first exception of a trial, so an
-`AgentTimeoutError` hides the error raised here, and the file is how run.ts finds the plugin failure.
+`AgentTimeoutError` hides the error raised here, and the file is how loadRunTrials (lib/harbor/harbor.ts) finds the plugin failure.
 """
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ AKM_ENV = {
 # running the akm this arm installed.
 FIXED_AKM_ENV = frozenset([k for k in AKM_ENV if k.endswith("_DIR")] + ["AKM_OPENCODE_CLI"])
 
-# Files the arm leaves in a trial's agent folder, for run.ts to read. Both hold JSON.
+# Files the arm leaves in a trial's agent folder, for loadRunTrials in lib/harbor/harbor.ts to read. Both hold JSON.
 INSTALL_FILE = "akm_install.json"
 PLUGIN_STATUS_FILE = "akm_plugin_status.json"
 
@@ -238,7 +238,7 @@ class AkmOpenCode(EvalOpenCode):
         return await super().exec_as_agent(environment, command=command, env={**AKM_ENV, **self.options.akm_env, **(env or {})}, cwd=cwd, timeout_sec=timeout_sec)
 
     def _record(self, name: str, data: dict) -> None:
-        """Leaves `data` as JSON in the trial's agent folder, where run.ts reads it. A folder that cannot be written is only logged."""
+        """Leaves `data` as JSON in the trial's agent folder, where loadRunTrials in lib/harbor/harbor.ts reads it. A folder that cannot be written is only logged."""
         try:
             self.logs_dir.mkdir(parents=True, exist_ok=True)
             (self.logs_dir / name).write_text(f"{json.dumps(data, indent=2)}\n")

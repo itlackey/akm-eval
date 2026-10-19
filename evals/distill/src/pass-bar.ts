@@ -122,7 +122,7 @@ export function readScores(scores: Record<string, unknown> | null, id: string, v
 
 /** What a read of a distill run used, for the report: the corpus and the scorer the run recorded, and the ones the read used. */
 export interface Inputs {
-  /** "stored" when the run was scored by the scorer and against the cases here now. "rescore" when --rescore was given. */
+  /** "stored" when every case of the run is here now. "rescore" when --rescore was given: rows of missing cases are left out. */
   mode: "stored" | "rescore";
   corpus: string;
   /** The folder of the cases the read used, from the repository root. */
@@ -137,7 +137,7 @@ export interface Inputs {
 export interface ReplayOptions {
   /** The repository the cases are read from. This one, but for tests. */
   root?: string;
-  /** Read a run that was scored by another scorer or against other cases, and report both. */
+  /** Read a run with case ids the cases here no longer have, leaving those rows out. */
   rescore?: boolean;
   /** The folder of the cases, from the repository root or absolute, when the summary does not say where they are. */
   cases?: string;

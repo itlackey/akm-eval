@@ -324,7 +324,7 @@ describe("the flags and the usage", () => {
     for (const flag of ["--help", "-h"]) {
       const r = run([flag]);
       expect([r.code, r.err, r.calls]).toEqual([0, "", []]);
-      expect(r.out).toStartWith("Usage: evals/fake/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--note TEXT] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n\nRuns the fake eval.\n");
+      expect(r.out).toStartWith("Usage: evals/fake/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--note TEXT] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n\nRuns the fake eval.\n");
       for (const line of [
         "  --corpus  public (default)",
         "  --cases   the folder of a custom corpus of your own",
@@ -843,7 +843,7 @@ describe("a spec with no strategy", () => {
     const none = { FAKE_NO_STRATEGY: "1" };
     const help = run(["--help"], none).out;
     expect(help).not.toContain("--strategy");
-    expect(help).toContain("[--note TEXT] [--config-patch FILE] [--label NAME]");
+    expect(help).toContain("[--note TEXT] [--config-patch FILE] [--semantic] [--label NAME]");
     expect(help).toContain("  --semantic      enable native bge-small-en-v1.5 semantic search");
     expect(help).toContain("  --config-patch  FILE: a JSON file deep-merged");
     const refused = run(["--strategy", "other"], none);

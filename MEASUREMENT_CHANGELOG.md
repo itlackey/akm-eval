@@ -15,7 +15,13 @@ current scoring rules to unchanged inputs: it records the current scoring versio
 while retaining the original collector version. New inputs require collection.
 Add a release entry here when a version changes.
 
-## Unreleased
+## 0.7
+
+reflect (collection and scoring 0.4), longmemeval (0.3) and agent-ab and
+terminal-bench (0.4) have new collection versions; nightly (scoring 0.4) and
+retrieval (scoring 0.3) have new scoring versions only. The other evals keep
+their 0.6 versions, and the shared driver changed no eval's version. See
+[release notes](releases/v0.7.md).
 
 - Shared driver, no version changes: reflect, distill, extract, judge-gate, promotion, bakeoff, consolidate and nightly run on one driver, `lib/run.ts`. What each asks akm, its cases and its scoring are unchanged (the akm invocations were diffed old against new), and so are the eval and scoring versions: saved runs compare as before.
 - Those evals gain `--concurrency` (not nightly, promotion or `consolidate --pool`, which run as one batch) and `--timeout-ms`. Summaries record `concurrency` and `timeout_ms`, and `manifest.settings.timeout_ms` is the effective timeout.

@@ -22,7 +22,9 @@ changes, and preserves `.env`, `models.json`, results, custom corpora and
 caches. Results retain their usual `evals/<name>/results/`,
 `benchmarks/<name>/results/` and `private/` paths inside this folder. The host
 UID/GID keeps saved files editable. Removing the container keeps these files,
-and edits made inside the work folder survive until the next image change.
+and edits made inside the work folder survive until the next image change. The copy adds and replaces
+files but deletes none: a file a newer image no longer ships stays in the folder, so start a new working
+folder after an upgrade that removed files (0.7 removed `retired/`).
 
 The other guides' short commands go after the image name. `--help` starts no
 eval. Use the same image digest and settings when resuming. Public image tags
@@ -127,6 +129,10 @@ to continue. LongMemEval has its own matching `--resume` folder too.
 docker build --build-arg VCS_REF="$(git describe --always --dirty)" -t akm-eval:local .
 docker run --rm akm-eval:local --help
 ```
+
+A working folder is refreshed only when `VCS_REF` changes. A build without it, or a second build of the
+same dirty tree, keeps the old revision, so the folder keeps the old code: give each local build a
+unique ref, such as `"$(git describe --always --dirty)-$(date +%s)"`, or use a new working folder.
 
 The Dockerfile installs packages and warms the native embedding model during
 build; startup installs nothing. `.github/workflows/container.yml` builds,

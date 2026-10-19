@@ -1,4 +1,4 @@
-// scripts/rescore on retrieval: the runs are built from the raw outputs in fixtures/ of evals/retrieval/golden, scored with the eval's own scorer, and
+// scripts/rescore on retrieval: the runs are built from the raw outputs in evals/retrieval/fixtures/, scored with the eval's own scorer, and
 // written as results folders of the public corpus. The golden cases are queries of the public library and of the books, with the grades they have in
 // assets/ today, so a run is scored again against the repository's own labels.
 
@@ -23,7 +23,7 @@ const BOOKS = ["legal-standard-deduction-current", "culinary-sear-steaming-not-b
 // The scorer goldens remain frozen; this suite tests rescoring against the current public judgments.
 const current = ["library", "books"].flatMap(collection => MEASUREMENT.loadCases(ROOT, { corpus: "public", collection }));
 const CASES = FIXTURE_CASES.map(c => current.find(now => now.id === c.id) as Case);
-/** The case ids of a collection: the books are the two cases of the golden folder with a banned asset. */
+/** The case ids of a collection: the books are the two cases of fixtures/ with a banned asset. */
 const idsOf = (collection: "library" | "books"): string[] => CASES.map((c) => c.id).filter((id) => BOOKS.includes(id) === (collection === "books"));
 const LIBRARY = { library_sha256: "1".repeat(64), bundles_sha256: null };
 

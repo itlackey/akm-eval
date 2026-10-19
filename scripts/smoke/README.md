@@ -46,7 +46,7 @@ Each eval runs twice. The first run answers every call with the smallest value t
 | `evals/promotion` | `outcome: accept` | `defer` |
 | `evals/bakeoff` | `outcome: output` for all five processes | `unusable` |
 
-The first run must also have no row error, no `aborted`, exit 0, and use every canned reply: an unused one means akm sent requests the table was not written for. The canned replies are checked against the pinned release and `0.10.261003-beta`. Bakeoff uses five cases, one per process; the others use one case and one reply for all cases: it shows that an eval can reach and read a success, not that it tells a good model from a bad one. `evals/promotion` needs akm's embedding model (133 MB from huggingface.co, kept in `.cache/models`).
+The first run must also have no row error, no `aborted`, exit 0, and use every canned reply: an unused one means akm sent requests the table was not written for. The canned replies are checked against the pinned release (`0.10.261003-beta`). Bakeoff uses five cases, one per process; the others use one case and one reply for all cases: it shows that an eval can reach and read a success, not that it tells a good model from a bad one. `evals/promotion` needs akm's embedding model (133 MB from huggingface.co, kept in `.cache/models`).
 
 ## What it skips
 

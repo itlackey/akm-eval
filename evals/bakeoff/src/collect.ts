@@ -53,7 +53,7 @@ const only = (on: Record<string, unknown>) => ({
 /**
  * The akm config of a run: the model under test as the one engine, at temperature 0 and with thinking off, and a strategy for each process
  * that runs through improve. Memory inference writes a derived memory and rewrites the frontmatter of its parent, which akm keeps behind
- * `experimental.improveAutonomy`. Semantic search is off, so consolidate's pair pass finds no pairs and the promotion pass sees the pool in
+ * `experimental.improveAutonomy`. Without --semantic, semantic search is off, so consolidate's pair pass finds no pairs and the promotion pass sees the pool in
  * the order it was written.
  */
 export function bakeoffConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai"): Record<string, any> {

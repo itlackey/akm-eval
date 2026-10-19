@@ -581,7 +581,7 @@ describe("run --corpus custom", () => {
   test("--help says what the eval does, what its flags default to, and that it needs akm and no release of it", () => {
     const run = bun(copyOfRepo(), "run.ts", ["--help"]);
     expect(run.code).toBe(0);
-    expect(run.out).toStartWith("Usage: evals/distill/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n\nRuns akm's distill on the memory of each case, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME\nas akm's engine, and scores the lessons it queues. Settings come from .env at the repository root.\n");
+    expect(run.out).toStartWith("Usage: evals/distill/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n\nRuns akm's distill on the memory of each case, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME\nas akm's engine, and scores the lessons it queues. Settings come from .env at the repository root.\n");
     for (const line of [
       "            Your own labelled memories are a custom corpus too: --cases DIR, with the feedback recorded about them in the cases that carry it.",
       "  --limit   run N cases, taken from each class in turn",

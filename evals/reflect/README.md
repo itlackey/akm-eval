@@ -67,7 +67,7 @@ For scale, with a scripted model on akm 0.9.26: never proposing anything fixes 0
 
 ## What the summary reports
 
-`summary.json`: `metrics`, the counts run, scored and errored, `timeouts` (akm past 15 minutes, or its retrieval check timing out), `retrieval_queries`, `served` (the model names the responses gave), `status` and `aborted_reason` (it aborts after five errored cases in a row), the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per case with the outcome, each check, the fields changed and their new text, the proposal, akm's reason, and the seconds.
+`summary.json`: `metrics`, the counts run, scored and errored, `timeouts` (akm past `--timeout-ms`, default 15 minutes, or its retrieval check timing out), `concurrency`, `timeout_ms`, `retrieval_queries`, `served` (the model names the responses gave), `status` and `aborted_reason` (it aborts after five errored cases in a row), the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per case with the outcome, each check, the fields changed and their new text, the proposal, akm's reason, and the seconds.
 
 ## Measure akm's gates
 
@@ -86,7 +86,7 @@ evals/reflect/run --config-patch evals/reflect/patches/judge-on.json --label jud
 evals/reflect/run --config-patch evals/reflect/patches/judge-on.json --retrieval-queries --label judge-queries
 ```
 
-`evals/reflect/defect-filter --akm-src DIR` replays the defect filter of the akm checkout DIR on edits whose quality is known: `--reflect RESULTS_DIR` (a run made with `patches/defect-filter-off.json`; others are refused) or `--judge-gate public|private` (judge-gate's 106 labelled proposals). It prints, per set, how many good and bad edits the filter refused and by which rule. A replay reads each note from the cases here now, so it stops when the run read other cases; `--rescore` replays anyway and reports what differs.
+`evals/reflect/defect-filter --akm-src DIR` replays the defect filter of the akm checkout DIR on edits whose quality is known: `--reflect RESULTS_DIR` (a run made with `patches/defect-filter-off.json`; others are refused) or `--judge-gate public|private` (the 135 labelled proposals of judge-gate: 106 made by reflect, 29 written to the rubric). It prints, per set, how many good and bad edits the filter refused and by which rule. A replay reads each note from the cases here now, so it refuses a run with a case id the cases here no longer have; `--rescore` leaves those proposals out and lists them in `inputs.missing_cases`.
 
 ## Notes
 

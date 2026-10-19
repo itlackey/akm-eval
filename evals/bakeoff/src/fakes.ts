@@ -1,6 +1,6 @@
 // A fake akm for the tests of the bakeoff eval: a script that answers the commands the collector runs, the way akm 0.9.26 does, from a plan the
 // test sets in FAKE_PLAN. It keeps its state in the sandbox, logs every call to FAKE_LOG, and writes the files akm writes (a derived memory,
-// an enriched memory, a session asset) into the bundle. It is not code of the eval: only tests import it (see testFile in lib/provenance.ts).
+// an enriched memory, a session asset) into the bundle. It is not code of the eval: only tests import it.
 //
 // FAKE_PLAN is a JSON object. What each process does is looked up by the name of the file it reads, or by the process for a pool:
 //   infer[<memory name>]     { derived: <file text> } | { skip: true } | { provider: true } | { crash: true } | { slow: true }

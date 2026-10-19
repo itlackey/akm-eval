@@ -570,7 +570,7 @@ describe("the usage text", () => {
     const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), "--help"], { stdout: "pipe", stderr: "pipe" });
     const text = done.stdout.toString();
     expect(done.exitCode).toBe(0);
-    expect(text).toStartWith("Usage: evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n");
+    expect(text).toStartWith("Usage: evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n");
     expect(text).toContain("--strategy      the akm improve strategy to run in place of default");
     expect(text).toContain("--config-patch  FILE");
     expect(text).toContain("not held-out data");

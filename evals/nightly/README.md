@@ -11,7 +11,7 @@ Each run plants the library in its own akm sandbox and runs:
 ```
 akm index --full
 akm feedback <ref> --negative --reason "<reason>"        # each item's feedback
-akm improve --strategy default --require-engines --no-sync --timeout-ms 2700000 --json-to-stdout
+akm improve --strategy default --require-engines --no-sync --timeout-ms <--timeout-ms, default 2700000> --json-to-stdout
 akm proposal drain --promote --strategy default --yes
 akm proposal list --status <state> --detail full
 ```

@@ -2,10 +2,10 @@
 // judge-gate: runs akm's reflect quality judge, with the model under test as the judge, on labelled
 // proposals. See ../README.md.
 //
-//   evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]
+//   evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]
 //
 // The flags, the setup, the pool of workers and the summary are lib/run.ts. This file is what is judge-gate's: the spec that says what a case
-// is and how it is shown. Every case of a run goes through one akm sandbox, two at a time.
+// is and how it is shown. Every case of a run goes through one akm sandbox, two at a time unless --concurrency says otherwise.
 
 import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";

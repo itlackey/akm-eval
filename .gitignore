@@ -1,5 +1,6 @@
 /private
-# akm's embedding model, downloaded once and shared by the sandboxes of every semantic run (lib/akm)
+# akm's embedding model, downloaded once and shared by the sandboxes of every semantic run (lib/akm); the semantic indexes of retrieval
+# and SkillRet; the Harbor setup cache (lib/harbor)
 /.cache
 /.site-output
 /.browser-results

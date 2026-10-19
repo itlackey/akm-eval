@@ -1,6 +1,6 @@
-// `--strategy NAME` and `--config-patch FILE`, for the evals that run an akm improve strategy: they let a run use another strategy,
-// or another config, than the eval's own, to measure it against the default. Each eval parses the two with parseOverrides, writes its
-// config through patchedConfig, passes `strategy` to akm, and puts overrideSummary in its summary.json.
+// `--strategy NAME`, `--config-patch FILE` and `--semantic`, for the evals on lib/run.ts: they let a run use another strategy, another
+// config or semantic search, to measure it against the eval's own. The driver parses them with parseOverrides and records
+// overrideSummary in summary.json; each eval writes its config through patchedConfig and passes `strategy` to akm.
 //
 //   const overrides = parseOverrides(values, "reflect-only", fail);
 //   writeConfig(sandbox, patchedConfig(reflectConfig(...), overrides));

@@ -4,7 +4,7 @@
 
 """Tests for the akm arm. No Docker and no network. Run them with the Harbor release the eval pins:
 
-    PYTHONPATH=lib/harbor uv run --no-project --python 3.12 --with harbor==0.24.0 --with pytest pytest lib/harbor
+    PYTHONPATH=lib/harbor uv run --no-project --python 3.12 --with "harbor==$(bun lib/harbor/pin.ts harbor)" --with pytest pytest lib/harbor
 """
 
 import asyncio

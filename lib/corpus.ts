@@ -15,7 +15,7 @@ const ROOT = resolve(import.meta.dir, "..");
 /** The options of the flags, for parseArgs, and their lines of the usage text. */
 export const CORPUS_OPTIONS = { corpus: { type: "string" }, cases: { type: "string" } } as const;
 export const corpusUsage = `  --corpus  public (default) is the committed cases. custom is the rewrite in private/<eval>/assets that ./generate-assets makes.
-            all runs public and custom and prints them side by side. See "Corpora" in README.md.
+            all runs public and custom and prints them side by side. See "Corpora" in the repository's README.md.
   --cases   the folder of a custom corpus of your own, in the eval's format. It is --corpus custom. The run says which model it sends the
             cases to before starting.`;
 
@@ -94,11 +94,10 @@ export interface Recipient {
 const shown = (baseUrl: string | undefined): string => (baseUrl === undefined ? "its provider's own endpoint" : (endpointIdentity(baseUrl)?.split("?")[0] ?? "an endpoint that is not a URL"));
 
 /**
- * Says where explicitly selected custom cases are sent: the folder, and each model or judge with its endpoint. It asks nothing, and `yes`
- * is only here so that a caller that passes its parsed flags still compiles.
+ * Says where explicitly selected custom cases are sent: the folder, and each model or judge with its endpoint. It asks nothing.
  */
-export async function confirmCases(
-  values: { cases?: string; yes?: boolean },
+export async function announceCases(
+  values: { cases?: string },
   to: Recipient[],
   io: { log?: (line: string) => void } = {},
 ): Promise<void> {

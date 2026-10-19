@@ -15,9 +15,10 @@ akm index --full                                          # with akm's embedding
 (writes each proposal into the pending queue, as a promotion of consolidate)
 akm proposal drain --judgment --strategy promotion --yes
 akm proposal list --status rejected --detail full
+akm proposal list --status pending --detail full
 ```
 
-The index uses akm's embedding model (133 MB, downloaded once into `.cache/models/`), so a judge that is shown a promotion's nearest notes (akm #1067 and later) finds them. The `promotion` strategy is the lab's triage block with `applyMode: queue`, so an accepted proposal is staged, not written; the judge decides the same either way. A proposal is *accepted* when akm stages it, *rejected* when the judge rejects it, and *deferred* when the judge defers or gives no usable reply. A failed model call is an error, left out of the counts.
+The index uses akm's embedding model (133 MB, downloaded once into `.cache/models/`), so a judge that is shown a promotion's nearest notes (akm #1067 and later) finds them. Semantic search is therefore always on in promotion: `--semantic` changes nothing it asks akm, and only records the patch. The `promotion` strategy is the lab's triage block with `applyMode: queue`, so an accepted proposal is staged, not written; the judge decides the same either way. A proposal is *accepted* when akm stages it, *rejected* when the judge rejects it, and *deferred* when the judge defers or gives no usable reply. A failed model call is an error, left out of the counts.
 
 ## Run
 
@@ -69,7 +70,7 @@ No command queues a proposal without a model, so the eval writes rows into the `
 
 ## Results so far
 
-The public runs on akm 0.10.261003-beta, three repeats, are in [`reports/0.10.261003-beta/promotion/`](../../reports/0.10.261003-beta/promotion/). The table below is older: `chat/qwen3.8-27b`, thinking off, 2026-10-07. The lab's own set has 65 real promotions (4 good, 61 bad).
+The public runs are in [`reports/0.10.261005-beta/promotion/`](../../reports/0.10.261005-beta/promotion/) and [`reports/0.10.261003-beta/semantic-2026-10-14/promotion/`](../../reports/0.10.261003-beta/semantic-2026-10-14/promotion/). The table below is older: `chat/qwen3.8-27b`, thinking off, 2026-10-07. The lab's own set has 65 real promotions (4 good, 61 bad).
 
 | | 0.9.26 | #1067 (judge shown the 5 nearest notes) |
 |---|---:|---:|

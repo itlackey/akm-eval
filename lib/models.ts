@@ -11,7 +11,8 @@
 //
 // `--model gpt-5.6-terra` then goes to that URL with the key held in OPENAI_API_KEY (set it in .env), and the id names a line, not a gateway model.
 // An eval calls useModel once, after it parses its flags. It writes the resolved settings back to MODEL_BASE_URL, MODEL_NAME and
-// MODEL_API_KEY, which is where the akm sandbox reads the key ($MODEL_API_KEY in the config) and where the harbor evals read theirs.
+// MODEL_API_KEY, which is where the akm sandbox reads the key ($MODEL_API_KEY in the config). The harbor evals resolve the same
+// rule through modelSettings in lib/harbor/harbor.ts.
 // The provider kind akm gives the engine (`provider` in the config it writes) is the line's `provider`, else MODEL_PROVIDER, else openai.
 //
 // The judge takes the first of these that names an endpoint, and its key goes with it:
@@ -174,7 +175,7 @@ export function resolveModel(role: "model" | "judge", flag: string | undefined, 
 
 /**
  * The model under test for this run, from the parsed flags. It writes the settings to MODEL_BASE_URL, MODEL_NAME, MODEL_API_KEY and
- * MODEL_PROVIDER in `env` (process.env), so the akm sandbox and the harbor evals read the same ones, and returns them. `fail` ends the run with a message.
+ * MODEL_PROVIDER in `env` (process.env), so the akm sandbox reads the same ones, and returns them. `fail` ends the run with a message.
  */
 export function useModel(values: { model?: string }, fail: (message: string) => never, env: Env = process.env, entries?: Record<string, ModelEntry>): ModelSettings & { hasKey: boolean } {
   let m: ModelSettings;
