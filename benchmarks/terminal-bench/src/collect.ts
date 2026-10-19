@@ -47,7 +47,7 @@ export interface LibraryCount {
  * The assets akm indexes in `library`, counted with the akm on this machine (AKM_BIN, else akm on PATH) as the akm arm seeds it: the
  * type folders copied into a new bundle in a sandbox, a full index, and `akm info`. Facts are the scaffold's, not the library's.
  * Count them here and not by files: a file is not an asset (317 files, 259 assets in the public library on akm 0.9.26), and the number
- * changes with every library edit and with akm's rules. The akm arm's own akm may count otherwise, so runCorpus holds that akm to this
+ * changes with every library edit and with akm's rules. The akm arm's own akm may count otherwise, so collect holds that akm to this
  * number only when it is the same version (enforcedAssets). When no akm can count, the number is null and `reason` says why.
  */
 export async function measureLibrary(library: string): Promise<LibraryCount & { reason?: string }> {

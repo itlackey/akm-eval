@@ -2,14 +2,14 @@
 // agent-ab: runs the same tasks with opencode alone and with opencode plus the akm plugin, in Harbor, and reports
 // how often each passes and whether the agent called akm. See ../README.md.
 //
-//   evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--concurrency N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
+//   evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--concurrency N] [--label NAME] [--model NAME] [--semantic] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import {
   AKM_ARM_OPTIONS,
   CONCURRENT_TRIALS,
@@ -47,7 +47,7 @@ export { jobConfig, taskNames };
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 
-const USAGE = `Usage: evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--concurrency N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
+const USAGE = `Usage: evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--concurrency N] [--label NAME] [--model NAME] [--semantic] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
 Runs each task with opencode alone and with opencode plus the akm plugin, in Harbor, on the model in MODEL_NAME.
 Settings come from .env at the repository root.
@@ -268,7 +268,7 @@ async function main(): Promise<void> {
   const { model, env, modelLimits, modelReasoningEffort } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
-  await confirmCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
+  await announceCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
   const wide = dockerNetworkWarning(NAME, concurrency ?? CONCURRENT_TRIALS);
   if (wide) console.warn(wide);
 

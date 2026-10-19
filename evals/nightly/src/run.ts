@@ -170,6 +170,7 @@ const SPEC: EvalSpec<Planted, Row, Extra> = {
   printSummary,
   sideBySide,
   usage: {
+    timeout: "akm improve's own wall-clock budget, which akm is given as its --timeout-ms; the eval stops akm 10 minutes after it",
     about: `Runs one night of akm improve, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its engine, on a library
 of planted items, then drains the proposals as the nightly does, and checks the result. Settings come from .env at the
 repository root.

@@ -12,7 +12,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, completionsUrl, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal } from "../../../lib/cli.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, resolveCorpora } from "../../../lib/corpus.ts";
 import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, useJudge } from "../../../lib/models.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
@@ -530,7 +530,7 @@ async function main(): Promise<number> {
   }
   const { baseUrl, name: model } = judgeSettings;
   try {
-    await confirmCases(values, [{ role: "judge", name: model, baseUrl }]);
+    await announceCases(values, [{ role: "judge", name: model, baseUrl }]);
   } catch (e) {
     if (!(e instanceof Fatal)) throw e;
     console.error(`retrieval label: ${e.message}`);

@@ -2,7 +2,7 @@
 // reflect: runs akm's reflect on one asset at a time, with the model under test as its engine, and scores what it
 // proposes with checks that need no judge. See ../README.md.
 //
-//   evals/reflect/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--retrieval-queries] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]
+//   evals/reflect/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--retrieval-queries] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]
 //
 // The flags, the setup, the pool of workers and the summary are lib/run.ts. This file is what is reflect's: the spec that says what a case is and
 // how it is shown, and the --retrieval-queries flag.

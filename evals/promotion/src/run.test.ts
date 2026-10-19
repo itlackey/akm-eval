@@ -702,11 +702,11 @@ describe("the command", () => {
   test("the usage names what promotion adds to the flags every eval has: no rewrite, no --concurrency, a drain limit, no akm floor", async () => {
     const { out, code } = await cli(["--help"], MODEL);
     expect(code).toBe(0);
-    expect(out).toStartWith("Usage: evals/promotion/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--timeout-ms N]\n");
+    expect(out).toStartWith("Usage: evals/promotion/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--timeout-ms N]\n");
     expect(out).toContain("promotion has no rewrite: its custom corpus is --cases DIR only. The folder holds cases.jsonl and library/");
     expect(out).toContain("  --limit   run N proposals, one of each category in turn\n");
     expect(out).toContain("--strategy      the akm improve strategy to run in place of promotion");
-    expect(out).toContain("  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 7200000.\n");
+    expect(out).toContain("  --timeout-ms   how long the drain may run; the other akm commands keep their own limits. Default: 7200000.\n");
     expect(out).not.toContain("--concurrency");
     expect(out).not.toMatch(/--yes|-y\b/);
     expect(out).toEndWith(`\n\nNeeds akm on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);

@@ -3,13 +3,14 @@
 // Harbor, and reports how often each passes and whether the agent called akm. See ../README.md.
 //
 //   benchmarks/terminal-bench/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--attempts N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
+//                                 [--concurrency N] [--resume DIR] [--semantic]
 
 import { existsSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import {
   AKM_ARM_OPTIONS,
   CONCURRENT_TRIALS,
@@ -48,7 +49,7 @@ import { MEASUREMENT, caseOf } from "./measurement.ts";
 const BENCH_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(BENCH_DIR, "..", "..");
 
-const USAGE = `Usage: benchmarks/terminal-bench/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--attempts N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
+const USAGE = `Usage: benchmarks/terminal-bench/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--attempts N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE] [--concurrency N] [--resume DIR] [--semantic]
 
 Runs the tasks of Terminal-Bench 2.1 with opencode alone and with opencode plus the akm plugin, in Harbor, on the model
 in MODEL_NAME. Settings come from .env at the repository root. Harbor fetches the tasks at run time.
@@ -349,7 +350,7 @@ async function main(): Promise<void> {
   const { model, env, modelLimits, modelReasoningEffort } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
-  await confirmCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
+  await announceCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
   // A resumed run keeps the concurrency it started with (runCorpus refuses another), so that is the width to warn about.
   const wide = dockerNetworkWarning(NAME, concurrency ?? savedConcurrency(values.resume) ?? CONCURRENT_TRIALS);
   if (wide) console.warn(wide);

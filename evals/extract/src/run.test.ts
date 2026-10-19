@@ -512,7 +512,7 @@ describe("the command", () => {
   test("--help says what the eval does, what its flags default to, and what akm it needs", () => {
     const run = bun(copyOfRepo(), ["--help"]);
     expect(run.code).toBe(0);
-    expect(run.out).toStartWith("Usage: evals/extract/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n\nRuns akm's extract on each session, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as\nakm's engine, and scores the memories it saves. Settings come from .env at the repository root.\n");
+    expect(run.out).toStartWith("Usage: evals/extract/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n\nRuns akm's extract on each session, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as\nakm's engine, and scores the memories it saves. Settings come from .env at the repository root.\n");
     for (const line of [
       "            The default custom corpus is private/extract/assets, made by ./generate-assets.",
       "  --limit   run N sessions, taken from each class in turn",

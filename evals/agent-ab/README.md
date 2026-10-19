@@ -69,7 +69,7 @@ The six were chosen because the control failed every attempt in an earlier run, 
 The rewrite renames the tools and changes numbers across tasks and libraries together (akm keeps its name). `generate` keeps a task only when its solution passes its verifier, its starting workspace does not, the public solution does not, and its library holds every `library_tokens` literal. Harbor can check the tasks with no model: `-a oracle` should score 1 and `-a nop` 0:
 
 ```
-uv run --no-project --python 3.12 --with harbor==0.24.0 harbor run -p evals/agent-ab/tasks -a oracle -o evals/agent-ab/results/check -y
+uv run --no-project --python 3.12 --with "harbor==$(bun lib/harbor/pin.ts harbor)" harbor run -p evals/agent-ab/tasks -a oracle -o evals/agent-ab/results/check -y
 ```
 
 ## The two arms

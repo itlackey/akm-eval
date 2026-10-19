@@ -2,7 +2,7 @@
 // promotion: plants labelled promotion proposals in akm's queue, runs akm's drain with its judgment tier, with the model
 // under test as the judge, and counts which proposals it accepts. See ../README.md.
 //
-//   evals/promotion/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--timeout-ms N]
+//   evals/promotion/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--timeout-ms N]
 //
 // The flags, the setup and the summary are lib/run.ts. This file is what is promotion's: the spec that says what a corpus is and how it is shown,
 // and the batch: all the proposals of a run go into one sandbox and one drain, so there is no pool of workers and no --concurrency.
@@ -112,8 +112,10 @@ const SPEC: EvalSpec<Case, Row, Opened> = {
   printSummary,
   sideBySide,
   usage: {
+    timeout: "how long the drain may run; the other akm commands keep their own limits",
     about: `Plants labelled promotion proposals in akm's queue, runs \`akm proposal drain --judgment\` with the model in MODEL_BASE_URL,
-MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts. Settings come from .env at the repository root.`,
+MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts. Settings come from .env at the repository root. Semantic search is always on, since the
+judge is shown each proposal's nearest notes, so --semantic changes nothing the run asks akm.`,
     corpus: `            promotion has no rewrite: its custom corpus is --cases DIR only. The folder holds cases.jsonl and library/ (see "Run your own
             set" in evals/promotion/README.md). Results of a custom corpus go to private/promotion/results/.`,
     limit: "run N proposals, one of each category in turn",

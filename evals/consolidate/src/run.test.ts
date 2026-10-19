@@ -565,6 +565,8 @@ describe("the command", () => {
     expect(pool).toContain("Default: 7200000.");
     expect(pool).toContain("Without --label the results folder is named <UTC date>-<model name>-pool.");
     expect(pool).not.toContain("--concurrency");
+    expect(pool).toContain("Default: <model name>-pool.");
+    expect(pool).toContain("  --timeout-ms   akm improve's own wall-clock budget");
     expect(pool).not.toMatch(/--embedder|--yes/);
     for (const help of [pairs, pool]) expect(help).toEndWith(`\n${PROBE_NOTE}\n`);
   });

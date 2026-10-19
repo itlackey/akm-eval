@@ -3,7 +3,7 @@
 #
 #   pinned  the akm release this repository pins, in the contract mode: the stub answers each model call with a reply that is valid, and the
 #           leg fails unless every eval reaches the outcome it counts as its work (a proposal, a lesson, a memory, a verdict, a retirement,
-#           an accepted promotion), and the outcome it has for a reply akm cannot read. This leg is required: when it fails, the workflow fails.
+#           an accepted promotion, a bakeoff output), and the outcome it has for a reply akm cannot read. This leg is required: when it fails, the workflow fails.
 #           It is the leg every pull request runs; make "smoke (pinned)" a required status check to gate merges on it.
 #   latest  the latest release, in the startup mode: the stub answers {}, and the leg shows that akm still takes the commands and that the
 #           JSON the evals read before the model is readable. It is advisory (continue-on-error), a warning that a change to akm that the evals

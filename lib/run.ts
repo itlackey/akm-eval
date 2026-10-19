@@ -26,7 +26,7 @@ import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, ov
 import { type SemanticVerification, takeSemanticVerification } from "./akm/semantic.ts";
 import { type ModelCalls, takeModelCalls } from "./akm/usage.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "./cli.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "./corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, corpusUsage, resolveCorpora } from "./corpus.ts";
 import { type Measurement, type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf } from "./manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "./models.ts";
 import { type Probe, probeModel } from "./probe.ts";
@@ -187,8 +187,11 @@ export interface EvalSpec<Case = any, Row extends Obj = Obj, Extra extends Obj =
   printSummary(summary: Summary): void;
   /** The rows of the table that is printed when public and custom both ran, as [label, public, custom]. Without it there is no table. */
   sideBySide?(a: Summary, b: Summary): [string, string, string][];
-  /** The eval's part of --help: what it does, the lines that go with the corpus flags, what --limit selects, and the eval's own flags (`flags` in the synopsis, `extra` in the list). */
-  usage: { about: string; corpus?: string; limit: string; flags?: string; extra?: string };
+  /**
+   * The eval's part of --help: what it does, the lines that go with the corpus flags, what --limit selects, and the eval's own flags (`flags` in the synopsis,
+   * `extra` in the list). `timeout` is what --timeout-ms bounds when that is not each akm command (a batch's own budget), for --help and the banner.
+   */
+  usage: { about: string; corpus?: string; limit: string; flags?: string; extra?: string; timeout?: string };
   /** The eval's own flags, for parseArgs. They arrive in the `values` that `prepare` reads. */
   options?: NonNullable<ParseArgsConfig["options"]>;
 }
@@ -339,6 +342,12 @@ export async function runCorpus<Case, Row extends Obj, Extra extends Obj>(
   return summary;
 }
 
+/** The default of --label as --help says it: the model name, or the eval's own name for it (consolidate --pool's <model name>-pool). */
+function labelDefault(spec: EvalSpec): string {
+  const own = spec.defaultLabel?.("model");
+  return own?.startsWith("model") && own !== "model" ? `<model name>${own.slice("model".length)}` : "the model name";
+}
+
 /** The usage text: the flags every run takes, and the eval's own pieces. */
 function usageOf(spec: EvalSpec): string {
   const { about, corpus, limit, flags, extra } = spec.usage;
@@ -352,11 +361,11 @@ function usageOf(spec: EvalSpec): string {
     overridesUsage(spec.strategy),
     modelUsage,
     akmUsage,
-    `  --label   names the results folder: <UTC date>-<label>. Default: the model name.`,
+    `  --label   names the results folder: <UTC date>-<label>. Default: ${labelDefault(spec)}.`,
     ...(spec.collectAll ? [] : [`  --concurrency  run N cases at a time. Default: ${spec.defaultConcurrency ?? 1}.`]),
-    `  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: ${spec.defaultTimeoutMs}.`,
+    `  --timeout-ms   ${spec.usage.timeout ?? "stop an akm command that is still running after N milliseconds"}. Default: ${spec.defaultTimeoutMs}.`,
   ];
-  const synopsis = `[--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N]${flags ? ` ${flags}` : ""}${spec.strategy === undefined ? "" : " [--strategy NAME]"} [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]${spec.collectAll ? "" : " [--concurrency N]"} [--timeout-ms N]`;
+  const synopsis = `[--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N]${flags ? ` ${flags}` : ""}${spec.strategy === undefined ? "" : " [--strategy NAME]"} [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND]${spec.collectAll ? "" : " [--concurrency N]"} [--timeout-ms N]`;
   const needs = spec.minAkm ? `Tested with akm ${spec.minAkm} or later on PATH, or in AKM_BIN.` : "Needs akm on PATH, or in AKM_BIN.";
   const asks = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
   return `Usage: ${relative(ROOT, spec.dir)}/run ${synopsis}\n\n${about}\n\n${flagLines.join("\n")}\n\n${needs}\n${asks}`;
@@ -383,7 +392,7 @@ function banner<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Case, R
     `  temperature ${engine.temperature ?? "unset"}, thinking ${thinking}`,
     ...(spec.strategy === undefined ? [] : [`  strategy ${ctx.overrides.strategy}`]),
     ...(ctx.overrides.configPatch ? [`  config patch ${ctx.overrides.configPatch.path}`] : []),
-    `  ${spec.collectAll ? "" : `concurrency ${ctx.concurrency}, `}timeout ${ctx.timeoutMs / 1000}s per akm command`,
+    `  ${spec.collectAll ? "" : `concurrency ${ctx.concurrency}, `}timeout ${ctx.timeoutMs / 1000}s ${spec.usage.timeout ? `(${spec.usage.timeout})` : "per akm command"}`,
     `  akm ${ctx.version}${ctx.build?.akm_build ? ` build ${ctx.build.akm_build}` : ""}`,
   ].join("\n");
 }
@@ -424,7 +433,7 @@ async function main<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Cas
     asFatal(() => spec.loadCases(c.folder)); // a cases file that does not read stops the run here, not after the first corpus has run
   }
   const extra = asFatal(() => spec.prepare?.(values, corpora, { baseUrl, model, hasKey, provider, overrides, timeoutMs, concurrency, label, limit })) ?? (() => ({}));
-  await confirmCases(values, [{ role: "model", name: model, baseUrl }]);
+  await announceCases(values, [{ role: "model", name: model, baseUrl }]);
 
   const probe = asFatal(() => createSandbox(name));
   let version: string;

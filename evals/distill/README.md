@@ -28,7 +28,7 @@ akm improve memories/<name> --strategy distill-only --no-sync --require-engines 
 akm proposal list --status <state> --detail full      # pending, accepted, rejected, reverted
 ```
 
-The model must return one JSON object; akm asks with a schema. An endpoint that answers an unservable schema with a 5xx makes every case error. A case is two calls and about 2k tokens. The eval sets temperature 0 and thinking off. akm runs with keyword search only.
+The model must return one JSON object; akm asks with a schema. An endpoint that answers an unservable schema with a 5xx makes every case error. A case is two calls and about 2k tokens. The eval sets temperature 0 and thinking off. akm runs with keyword search only, unless `--semantic` is given.
 
 ## Run your own set
 
@@ -79,7 +79,7 @@ An `error` (timeout, endpoint, empty reply) is left out. Five errored cases in a
 
 akm's judge scores a lesson 1 to 5 on `reusable` (`novelty` before 0.9.27-alpha.2), `nonRedundancy` and `grounding`. It passes when the first two are 4 or more; grounding counts only toward rejection.
 
-`evals/distill/pass-bar [--rescore] [--cases DIR] RESULTS_DIR...` routes each judged lesson of distill runs under akm's bar (`shipped`) and one that puts grounding in the pass test (`with-grounding`), and counts the good and bad lessons that pass, go to review and are rejected under each. `mismatch` should be 0. It judges lessons by the cases and checks here now, so it reads a run only when its manifest's case digests match the cases now; `--rescore` reads it anyway and reports what differs.
+`evals/distill/pass-bar [--rescore] [--cases DIR] RESULTS_DIR...` routes each judged lesson of distill runs under akm's bar (`shipped`) and one that puts grounding in the pass test (`with-grounding`), and counts the good and bad lessons that pass, go to review and are rejected under each. `mismatch` should be 0. It judges lessons by the cases and checks here now, so it refuses a run with a case id the cases here no longer have; `--rescore` leaves those rows out and lists them in `inputs.missing_cases`.
 
 ## Notes
 

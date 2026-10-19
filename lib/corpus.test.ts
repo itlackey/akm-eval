@@ -3,7 +3,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { CORPUS_OPTIONS, type Recipient, confirmCases, corpusUsage, resolveCorpora } from "./corpus.ts";
+import { CORPUS_OPTIONS, type Recipient, announceCases, corpusUsage, resolveCorpora } from "./corpus.ts";
 
 const LIB = import.meta.dir;
 const REPO = resolve(LIB, "..");
@@ -179,7 +179,7 @@ describe("custom-case destinations", () => {
   const judge: Recipient = { role: "judge", name: "qwen3-32b", baseUrl: "https://gateway.example/v1" };
   const report = async (to: Recipient[], values: { cases?: string; yes?: boolean } = { cases: "~/notes/distill" }) => {
     const shown: string[] = [];
-    await confirmCases(values, to, { log: line => shown.push(line) });
+    await announceCases(values, to, { log: line => shown.push(line) });
     return shown;
   };
 
@@ -267,21 +267,21 @@ describe("every run that sends --cases reports its destinations before setup", (
 
   test("the scan finds the shared run, which takes --cases, and not skillret, which takes none", () => {
     expect(runs.find((r) => r.file === "lib/run.ts")?.source).toMatch(/\.\.\.CORPUS_OPTIONS/); // so the check below has at least this one to make, however many evals are specs of it
-    expect(runs.find((r) => r.file === "benchmarks/skillret/src/run.ts")?.source).not.toMatch(/confirmCases|\.\.\.CORPUS_OPTIONS/);
+    expect(runs.find((r) => r.file === "benchmarks/skillret/src/run.ts")?.source).not.toMatch(/announceCases|\.\.\.CORPUS_OPTIONS/);
   });
 
-  test("each calls confirmCases once, in main, before it makes a sandbox or asks akm for its version", () => {
+  test("each calls announceCases once, in main, before it makes a sandbox or asks akm for its version", () => {
     const wrong: string[] = [];
     for (const { file, source } of runs.filter((r) => takesCases(r.source))) {
-      const calls = source.split("confirmCases(").length - 1;
+      const calls = source.split("announceCases(").length - 1;
       if (SENDS_NONE.includes(file)) {
         if (calls !== 0) wrong.push(`${file}: sends nothing to a model but reports recipients`);
         continue;
       }
       const main = source.slice(Math.max(source.indexOf("async function main"), 0));
-      const asked = main.indexOf("confirmCases(");
+      const asked = main.indexOf("announceCases(");
       const firstUse = Math.min(...["createSandbox(", "openSandbox(", "akmArm(", "akmVersion(", "labelCollection("].map((use) => (main.indexOf(use) < 0 ? Infinity : main.indexOf(use))));
-      if (calls !== 1) wrong.push(`${file}: calls confirmCases ${calls} times`);
+      if (calls !== 1) wrong.push(`${file}: calls announceCases ${calls} times`);
       else if (asked > firstUse) wrong.push(`${file}: reports recipients after it has made a sandbox`);
     }
     expect(wrong).toEqual([]);
