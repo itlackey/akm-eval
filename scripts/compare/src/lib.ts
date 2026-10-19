@@ -2,6 +2,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { canonical, redactConfig } from "../../../lib/provenance.ts";
+import { evalSettingsOf } from "../../../lib/manifest.ts";
 import { comparisonFields, coreColumns, scoreColumns, type Cell } from "../../ledger/src/comparison.ts";
 import { scores } from "../../ledger/src/presentation.ts";
 
@@ -95,7 +96,7 @@ export function comparePair(a: Run, b: Run): PairReport {
     eval_version: m.collector?.version ?? null, scoring_version: m.scorer?.version ?? r.summary.scoring_version ?? null, model: r.summary.model ?? null,
     akm: m?.akm ?? { version: r.summary.akm_version ?? null, bin: r.summary.akm_bin ?? null, build: r.summary.akm_build ?? null },
     config: m?.config?.redacted ?? r.summary.config ?? null, settings: m?.settings ?? r.summary.config_patch ?? null,
-    engines: m?.engines ?? r.summary.engine ?? null, benchmark_settings: m?.treatment_hints ?? null, judge_model: r.summary.judge_model ?? null,
+    engines: m?.engines ?? r.summary.engine ?? null, benchmark_settings: evalSettingsOf(m), judge_model: r.summary.judge_model ?? null,
     semantic_index: r.summary.semantic_index ?? null, semantic_model: r.summary.semantic_model ?? null,
     workers: r.summary.workers ?? null, attempts: r.summary.attempts ?? null, search_mode: r.summary.search_mode ?? null });
   const as = settings(a, am), bs = settings(b, bm);

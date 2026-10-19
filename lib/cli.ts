@@ -1,9 +1,10 @@
 // What the run.ts of every eval and benchmark shares: the failure that ends a run with a message, the build a run was made of,
 // the label a model name makes, and the two texts that get written into results or printed: the model endpoint hidden, and
-// what akm said when a command failed.
+// what akm said when a command failed. And the flags of every generate script.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseArgs } from "node:util";
 import { completionsUrl } from "./akm/akm.ts";
 
 /** A failure that ends the run with a message. It is thrown, so the sandbox is cleaned up on the way out. */
@@ -30,6 +31,30 @@ export function gitCommit(root: string): string {
   }
   const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
   return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
+}
+
+/**
+ * The --seed and --out of a generate script, or the exit code to end it with: 0 after --help or -h, which print the usage, and 2 after a
+ * flag it does not take or a missing or invalid value, which print the usage to stderr. `usage` is the script's own Usage line.
+ */
+export function generateArgs(argv: string[], usage: string, seedOk: (seed: string) => boolean = () => true): { seed: string; out: string } | number {
+  const text = `${usage}\n\nMakes this eval's private corpus from its public one, rewritten with seed N, into OUT/assets. ./generate-assets runs it for every eval.`;
+  let values: { seed?: string; out?: string; help?: boolean };
+  try {
+    ({ values } = parseArgs({ args: argv, options: { seed: { type: "string" }, out: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }));
+  } catch (e) {
+    console.error(`${(e as Error).message}\n${text}`);
+    return 2;
+  }
+  if (values.help) {
+    console.log(text);
+    return 0;
+  }
+  if (values.seed === undefined || values.out === undefined || !seedOk(values.seed)) {
+    console.error(text);
+    return 2;
+  }
+  return { seed: values.seed, out: values.out };
 }
 
 export const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");

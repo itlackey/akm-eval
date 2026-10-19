@@ -31,7 +31,7 @@ export function manifested(s: Record<string, any>, ids: string[]): Record<string
       config: s.config,
       engines: Object.fromEntries(Object.entries<any>(engines).map(([name, e]) => [name, { model: e.model ?? null, endpoint: endpointHost(e.endpoint), temperature: e.temperature ?? null, enableThinking: e.enableThinking ?? null, timeoutMs: e.timeoutMs ?? null }])),
       settings: { strategy: s.strategy, config_patch_sha256: s.config_patch?.sha256, timeout_ms: s.timeout_ms, seed: s.seed == null ? null : String(s.seed) },
-      treatment_hints: s.embedder ? { embedder: s.embedder } : {},
+      eval_settings: s.embedder ? { embedder: s.embedder } : {},
       completion: { selected: ids, scored: ids, errored: [] },
     }),
   };

@@ -10,8 +10,8 @@
 
 import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import { GENERATED, type LoadedCase, checkSaved, loadCases, mentions, sessionText } from "./lib.ts";
+import { generateArgs } from "../../../lib/cli.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -80,11 +80,9 @@ export function install(staged: string, out: string): void {
 }
 
 function main(): void {
-  const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
-  if (values.seed === undefined || values.out === undefined) {
-    console.error("Usage: evals/extract/generate --seed N --out private/extract");
-    process.exit(2);
-  }
+  const args = generateArgs(Bun.argv.slice(2), "Usage: evals/extract/generate --seed N --out private/extract");
+  if (typeof args === "number") process.exit(args);
+  const values = args;
   const out = resolve(values.out);
   const work = join(out, ".work"); // in the same folder as the result, so the rename stays on one disk
   const staged = join(work, "staged");

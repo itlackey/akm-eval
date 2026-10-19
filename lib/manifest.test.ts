@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HARNESS_VERSION, type Measurement, REPO_ROOT, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, manifestProblems, measuredEvals, readManifest } from "./manifest.ts";
+import { HARNESS_VERSION, type Measurement, REPO_ROOT, buildManifest, caseDigests, completionOf, corpusFolderOf, evalSettingsOf, loadMeasurement, manifestProblems, measuredEvals, readManifest } from "./manifest.ts";
 import { sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
@@ -94,16 +94,30 @@ describe("the manifest", () => {
       akm: { version: "0.9.26", bin: "akm" },
       config,
       settings: { strategy: "s", config_patch_sha256: sha256Text("p"), timeout_ms: 5000, seed: "42" },
-      treatment_hints: { embedder: "real" },
+      eval_settings: { embedder: "real" },
       completion: { selected: ["a"], scored: ["a"], errored: [] },
     });
 
   test("is sound and holds the version, the akm, the settings and the hints", () => {
     const m = build();
     expect(manifestProblems(m)).toEqual([]);
-    expect(m).toMatchObject({ manifest_version: 1, eval: "toy", corpus: "public", collection: null, mode: null, harness_version: HARNESS_VERSION, akm: { version: "0.9.26", bin: "akm", build: null, build_fingerprint: null }, settings: { strategy: "s", config_patch_sha256: sha256Text("p"), timeout_ms: 5000, seed: "42" }, treatment_hints: { embedder: "real" } });
+    expect(m).toMatchObject({ manifest_version: 1, eval: "toy", corpus: "public", collection: null, mode: null, harness_version: HARNESS_VERSION, akm: { version: "0.9.26", bin: "akm", build: null, build_fingerprint: null }, settings: { strategy: "s", config_patch_sha256: sha256Text("p"), timeout_ms: 5000, seed: "42" }, eval_settings: { embedder: "real" } });
     expect(m.collector).toEqual({ version: "0.2" });
     expect(m.scorer).toEqual({ version: "0.2" });
+  });
+
+  test("a manifest from before 0.7.1, with treatment_hints in place of eval_settings, is sound and read under the current name", () => {
+    const { eval_settings, ...m } = build();
+    const old = { ...m, treatment_hints: eval_settings };
+    expect(manifestProblems(old)).toEqual([]);
+    const read = readManifest({ eval: "toy", corpus: "public", manifest: old });
+    expect(read.kind).toBe("manifest");
+    if (read.kind !== "manifest") return;
+    expect(read.manifest.eval_settings).toEqual({ embedder: "real" });
+    expect(read.manifest).not.toHaveProperty("treatment_hints");
+    expect(old).toHaveProperty("treatment_hints"); // the saved object is left as it is
+    expect([evalSettingsOf(old), evalSettingsOf(build()), evalSettingsOf(undefined)]).toEqual([{ embedder: "real" }, { embedder: "real" }, null]);
+    expect(build()).not.toHaveProperty("treatment_hints"); // nothing writes the old name
   });
 
   test("a scoring-only revision preserves the collector version", () => {
@@ -149,7 +163,7 @@ describe("the manifest", () => {
     expect(mutate((x) => (x.completion.scored = ["a", "zzz"]))).toEqual(["completion.scored and completion.errored name a case that was not selected"]);
     expect(mutate((x) => (x.completion.errored = ["a"]))).toEqual(["a case is both scored and errored"]);
 
-    expect(mutate((x) => (x.treatment_hints = { embedder: ["real"] }))).toEqual(["treatment_hints is an object of strings, numbers, booleans and nulls"]);
+    expect(mutate((x) => (x.eval_settings = { embedder: ["real"] }))).toEqual(["eval_settings is an object of strings, numbers, booleans and nulls"]);
     expect(mutate((x) => (x.rescored_from = { results: "a/b", scorer: null, at: "now", dropped: [] }))).toEqual(["rescored_from needs results (a folder name), scorer (or null), at and dropped"]);
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: null, at: "now", dropped: [] }))).toEqual([]);
     expect(mutate((x) => (x.settings.timeout_ms = "soon")).join()).toContain("settings needs strategy");

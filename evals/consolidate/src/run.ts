@@ -9,7 +9,7 @@
 // the spec of `--pool`, which is a run of its own: one sandbox with the whole pool of notes and a single `akm improve`, scored a cluster at a time.
 // `--pool` is not a flag of either spec: it picks the spec, and is taken out of the flags before they are read.
 //
-// What a run says of how akm embedded the notes goes to its manifest as a treatment hint, which scripts/compare shows. The pool run keeps its own marks:
+// What a run says of how akm embedded the notes goes to its manifest's eval_settings, which scripts/compare shows. The pool run keeps its own marks:
 // the manifest's mode is "pool", its folder is named <model>-pool without --label, and akm's result of the one improve run is written to improve.json
 // beside samples.jsonl and summary.json.
 
@@ -134,7 +134,7 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
     return counts.n_scored > 0 && counts.n_paired === 0 ? `akm paired none of the notes, so its judge never ran. ${NONE_PAIRED[ctx.embedder ?? "deterministic"]}` : null;
   },
   summaryExtras: (_cases, _rows, ctx) => ({ embedder: ctx.embedder ?? "deterministic" }),
-  manifestExtras: (ctx) => ({ treatment_hints: { embedder: ctx.embedder ?? "deterministic" } }),
+  manifestExtras: (ctx) => ({ eval_settings: { embedder: ctx.embedder ?? "deterministic" } }),
   printSummary,
   sideBySide,
   usage: {
@@ -218,7 +218,7 @@ const POOL_SPEC: EvalSpec<PoolCase, PoolRow, PoolExtra> = {
     return { rows, aborted: failed ? `the pool run failed: ${failed.error}` : undefined };
   },
   summaryExtras: (cases, _rows, ctx) => ({ mode: "pool", embedder: ctx.embedder ?? "deterministic", n_notes: cases.reduce((n, c) => n + c.notes.length, 0), n_clusters: cases.length, n_cases: 1 }), // the one pool run is the one case
-  manifestExtras: (ctx) => ({ mode: "pool", treatment_hints: { embedder: ctx.embedder ?? "deterministic" } }),
+  manifestExtras: (ctx) => ({ mode: "pool", eval_settings: { embedder: ctx.embedder ?? "deterministic" } }),
   printSummary: printPool,
   usage: {
     timeout: "akm improve's own wall-clock budget, which akm is given as its --timeout-ms; the eval stops akm 10 minutes after it",

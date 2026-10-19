@@ -543,7 +543,7 @@ describe("runPool", () => {
       expect(manifestProblems(stored.manifest)).toEqual([]);
       expect(stored.mode).toBe("pool");
       expect(readManifest(stored).kind).toBe("manifest"); // it is "invalid" when the summary says a mode that the manifest does not
-      expect(stored.manifest).toMatchObject({ eval: "consolidate", corpus: "public", mode: "pool", treatment_hints: { embedder: "deterministic" }, settings: { strategy: "consolidate", timeout_ms: 90_000, seed: null } });
+      expect(stored.manifest).toMatchObject({ eval: "consolidate", corpus: "public", mode: "pool", eval_settings: { embedder: "deterministic" }, settings: { strategy: "consolidate", timeout_ms: 90_000, seed: null } });
       expect(Object.keys(stored.manifest.cases)).toEqual(pool.clusters.map((c) => c.id));
       expect(stored.manifest.completion).toMatchObject({ selected: pool.clusters.map((c) => c.id), errored: [] });
       // every cluster is run beside every other note, so a change to any note changes the input digest of every cluster
@@ -571,7 +571,7 @@ describe("runPool", () => {
       const summary = await quiet(() => runPool({ ...ctx, newSandbox, embedder: "real", overrides: { strategy: "consolidate", configPatch: null } }, join(root, "results")));
       expect(summary).toMatchObject({ embedder: "real", status: "complete", n_errored: 0 });
       expect(summary.config).toMatchObject({ embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
-      expect(summary.manifest).toMatchObject({ mode: "pool", treatment_hints: { embedder: "real" } });
+      expect(summary.manifest).toMatchObject({ mode: "pool", eval_settings: { embedder: "real" } });
     } finally {
       delete process.env.FAKE_EMBEDDER;
       rmSync(root, { recursive: true, force: true });
@@ -585,7 +585,7 @@ describe("runPool", () => {
       const summary = await quiet(() => runPool({ ...ctx, overrides: { strategy: "consolidate", configPatch: null } }, join(root, "results")));
       expect(summary).toMatchObject({ embedder: "deterministic", n_errored: 0 });
       expect(summary.config.embedding).toBeUndefined();
-      expect(summary.manifest).toMatchObject({ mode: "pool", treatment_hints: { embedder: "deterministic" } });
+      expect(summary.manifest).toMatchObject({ mode: "pool", eval_settings: { embedder: "deterministic" } });
     } finally {
       delete process.env.FAKE_EMBEDDER;
       rmSync(root, { recursive: true, force: true });

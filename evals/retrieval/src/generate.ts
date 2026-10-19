@@ -17,12 +17,12 @@
 
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import { akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { TOOLS } from "../../../lib/rewrite/lexicon.ts";
 import * as akm from "./akm.ts";
 import { GENERATED, filesUnder } from "./inputs.ts";
 import { type Qrel, type Query, RELEVANT, parseQrels, parseQueries } from "./lib.ts";
+import { generateArgs } from "../../../lib/cli.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -298,11 +298,9 @@ export async function generate(opts: Options): Promise<Result> {
 }
 
 async function main(): Promise<number> {
-  const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
-  if (values.seed === undefined || values.out === undefined) {
-    console.error("Usage: evals/retrieval/generate --seed N --out private/retrieval");
-    return 2;
-  }
+  const args = generateArgs(Bun.argv.slice(2), "Usage: evals/retrieval/generate --seed N --out private/retrieval");
+  if (typeof args === "number") return args;
+  const values = args;
   const made = await generate({ seed: values.seed, out: values.out });
   for (const c of made.collections) {
     console.log(`retrieval: ${c.name}: ${c.queries} queries, ${c.qrels} qrels and the library${made.installed ? ` written to ${join(values.out, c.target)}` : " made"}`);

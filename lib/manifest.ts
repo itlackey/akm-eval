@@ -121,8 +121,10 @@ export interface RunManifest {
   settings: { strategy: string | null; config_patch_sha256: string | null; timeout_ms: number | null; seed: string | null };
   /** The settings of every engine the config uses. `endpoint` is the host only: never a path. */
   engines: Record<string, EngineSetting>;
-  /** Settings that change what a run measures and belong to its scope, such as `embedder`. */
-  treatment_hints: Record<string, string | number | boolean | null>;
+  /** The eval's own settings that change what a run measures, such as consolidate's `embedder` or agent-ab's `attempts`. */
+  eval_settings: Record<string, string | number | boolean | null>;
+  /** eval_settings as manifests before 0.7.1 named it. Only read from disk: readManifest and evalSettingsOf take it, and nothing writes it. */
+  treatment_hints?: Record<string, string | number | boolean | null>;
   completion: Completion;
   /** Set only on a result made by scripts/rescore. */
   rescored_from?: RescoredFrom;
@@ -140,7 +142,7 @@ export interface ManifestInput<Case = any> {
   /** The engines, when they are not those of `config` (a run read from a summary that recorded them). */
   engines?: Record<string, EngineSetting>;
   settings?: Partial<RunManifest["settings"]>;
-  treatment_hints?: RunManifest["treatment_hints"];
+  eval_settings?: RunManifest["eval_settings"];
   completion: Completion;
 }
 
@@ -161,7 +163,7 @@ export function buildManifest(input: ManifestInput): RunManifest {
     config: { redacted },
     settings: { strategy: input.settings?.strategy ?? null, config_patch_sha256: input.settings?.config_patch_sha256 ?? null, timeout_ms: input.settings?.timeout_ms ?? null, seed: input.settings?.seed ?? null },
     engines: input.engines ?? (input.config === undefined ? {} : engineSettings(input.config).engines),
-    treatment_hints: input.treatment_hints ?? {},
+    eval_settings: input.eval_settings ?? {},
     completion: input.completion,
   };
 }
@@ -216,7 +218,8 @@ export function manifestProblems(x: unknown): string[] {
       if (!isObject(e) || !nullable(isString)(e.model) || !nullable(isHost)(e.endpoint)) out.push(`the engine ${name} needs a model and an endpoint that is a host with no path`);
     }
   }
-  if (!isObject(x.treatment_hints) || !Object.values(x.treatment_hints).every((v) => v === null || ["string", "number", "boolean"].includes(typeof v))) out.push("treatment_hints is an object of strings, numbers, booleans and nulls");
+  const evalSettings = x.eval_settings ?? x.treatment_hints; // treatment_hints: its name before 0.7.1
+  if (!isObject(evalSettings) || !Object.values(evalSettings).every((v) => v === null || ["string", "number", "boolean"].includes(typeof v))) out.push("eval_settings is an object of strings, numbers, booleans and nulls");
   const c = x.completion;
   if (!isObject(c) || !isIdList(c.selected) || !isIdList(c.scored) || !isIdList(c.errored)) out.push("completion needs the lists selected, scored and errored of case ids");
   else {
@@ -243,8 +246,14 @@ export function readManifest(summary: Obj): ManifestReading {
     const m = summary.manifest as RunManifest;
     for (const k of ["eval", "corpus", "collection", "mode"] as const) if (summary[k] !== undefined && (summary[k] ?? null) !== m[k]) problems.push(`the manifest says ${k} is ${JSON.stringify(m[k])} and the summary says ${JSON.stringify(summary[k])}`);
   }
-  return problems.length > 0 ? { kind: "invalid", problems } : { kind: "manifest", manifest: summary.manifest as RunManifest };
+  if (problems.length > 0) return { kind: "invalid", problems };
+  // A manifest from before 0.7.1 names eval_settings treatment_hints: it is read under the current name, and the file is left as it is.
+  const { treatment_hints, ...m } = summary.manifest as RunManifest;
+  return { kind: "manifest", manifest: { ...m, eval_settings: m.eval_settings ?? treatment_hints ?? {} } };
 }
+
+/** The eval's own settings of a manifest as it was saved, whatever its age: eval_settings, else treatment_hints (before 0.7.1), else null. */
+export const evalSettingsOf = (m: Partial<RunManifest> | null | undefined): RunManifest["eval_settings"] | null => m?.eval_settings ?? m?.treatment_hints ?? null;
 
 // ---- finding an eval's declaration -------------------------------------------------------------------------------------------
 

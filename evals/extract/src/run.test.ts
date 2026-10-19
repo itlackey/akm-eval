@@ -382,7 +382,7 @@ describe("the manifest of a run", () => {
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(stored).kind).toBe("manifest");
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
-    expect(manifest).toMatchObject({ manifest_version: 1, eval: "extract", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {} });
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "extract", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, eval_settings: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: "extract-only", config_patch_sha256: null, timeout_ms: 900_000, seed: null }); // the timeout the run had, which it used to record as null
     const loaded = loadCases(folders.assets);

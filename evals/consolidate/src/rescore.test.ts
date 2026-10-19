@@ -31,7 +31,7 @@ function stored(mode: "case" | "pool", lines: { case: string; raw: any }[], edit
     cases: caseDigests(MEASUREMENT, used),
     akm: { version: "0.9.99-test", bin: "akm" },
     settings: { strategy: "consolidate" },
-    treatment_hints: { embedder: "deterministic" },
+    eval_settings: { embedder: "deterministic" },
     completion: completionOf(MEASUREMENT, used.map((c: any) => c.id), rows),
   });
   const dir = join(mkdtempSync(join(tmpdir(), "consolidate-rescore-")), "2026-10-12-golden");
@@ -62,7 +62,7 @@ describe("rescoring a per-case run", () => {
     const now = summaryOf(out);
     expect(now).toMatchObject({ label: "golden-rescored", n_run: lines.length, metrics: was.metrics, served_models: was.served_models, n_errored: was.n_errored, n_paired: was.n_paired, timeouts: was.timeouts });
     expect(manifestProblems(now.manifest)).toEqual([]);
-    expect(now.manifest.treatment_hints).toEqual({ embedder: "deterministic" });
+    expect(now.manifest.eval_settings).toEqual({ embedder: "deterministic" });
     expect(now.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", dropped: [] });
   });
 

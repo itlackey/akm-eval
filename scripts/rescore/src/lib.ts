@@ -126,8 +126,10 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
   const changed = kept.filter(({ row }, i) => canonical(row) !== canonical(rows[i])).map(({ row }) => String(row.id));
   // Old collection metadata is descriptive; rescoring needs the saved output and current cases.
   const rescored_from = { results: basename(stored.dir), scorer: old?.scorer, at: now.toISOString(), dropped };
-  const manifest = old ? { ...old, cases: undefined, completion: completionOf(m, selected, rows),
-    scorer: { version: m.scoringVersion ?? m.version }, rescored_from } : undefined;
+  // A manifest from before 0.7.1 named eval_settings treatment_hints: the new folder is written with the current name.
+  const { treatment_hints, ...kept_manifest } = old ?? {};
+  const manifest = old ? { ...kept_manifest, ...(old.eval_settings ?? treatment_hints ? { eval_settings: old.eval_settings ?? treatment_hints } : {}),
+    cases: undefined, completion: completionOf(m, selected, rows), scorer: { version: m.scoringVersion ?? m.version }, rescored_from } : undefined;
   const out: Obj = { ...summary, ...m.summarize(rows), manifest,
     scoring_version: m.scoringVersion ?? m.version, rescored_from };
   if (options.cases !== undefined && !isSplit(summary)) out.corpus_folder = corpusFolderOf(options.cases, root); // where the cases were read from this time

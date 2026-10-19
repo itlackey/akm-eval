@@ -24,7 +24,7 @@ const onePerItem = (lines: { case: string; raw: any }[]) => lines.filter((l, i) 
 const LINES = onePerItem(jsonl(join(FIXTURES, "raw.jsonl")));
 
 /** A results folder of a night of the raw outputs in fixtures/ `lines`, scored against the public night, as run.ts writes it. */
-function stored(lines: { case: string; raw: any }[], edit: (rows: any[]) => any[] = (rows) => rows, extra: { corpus?: "public" | "custom"; corpus_folder?: string | null; scorer?: PartRef } = {}): { dir: string; rows: any[] } {
+function stored(lines: { case: string; raw: any }[], edit: (rows: any[]) => any[] = (rows) => rows, extra: { corpus?: "public" | "custom"; corpus_folder?: string | null; scorer?: PartRef; before071?: boolean } = {}): { dir: string; rows: any[] } {
   const corpus = MEASUREMENT.loadCases(ROOT, { corpus: "public" });
   const used = lines.map((l) => corpus.find((c) => c.id === l.case) as never);
   const rows = lines.map((l, i) => MEASUREMENT.score(used[i], (MEASUREMENT.rawOf({ id: l.case, ...l.raw }) as { raw: any }).raw));
@@ -34,10 +34,14 @@ function stored(lines: { case: string; raw: any }[], edit: (rows: any[]) => any[
     cases: caseDigests(MEASUREMENT, used),
     akm: { version: "0.9.99-test", bin: "akm" },
     settings: { strategy: "default" },
-    treatment_hints: { embedder: "deterministic" },
+    eval_settings: { embedder: "deterministic" },
     completion: completionOf(MEASUREMENT, used.map((c: any) => c.id), rows),
   });
   if (extra.scorer) manifest.scorer = extra.scorer; // a run from before the version was set by hand
+  if (extra.before071) { // a manifest of before 0.7.1, which named eval_settings treatment_hints
+    (manifest as any).treatment_hints = manifest.eval_settings;
+    delete (manifest as any).eval_settings;
+  }
   const dir = join(mkdtempSync(join(tmpdir(), "nightly-rescore-")), "2026-10-12-golden");
   dirs.push(join(dir, ".."));
   mkdirSync(dir, { recursive: true });
@@ -61,8 +65,19 @@ describe("rescoring a night", () => {
     const now = summaryOf(out);
     expect(now).toMatchObject({ label: "golden-rescored", n_planted: LINES.length, metrics: was.metrics, n_errored: was.n_errored, outside_changed: was.outside_changed });
     expect(manifestProblems(now.manifest)).toEqual([]);
-    expect(now.manifest.treatment_hints).toEqual({ embedder: "deterministic" });
+    expect(now.manifest.eval_settings).toEqual({ embedder: "deterministic" });
     expect(now.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", dropped: [] });
+  });
+
+  test("a night stored before 0.7.1, with treatment_hints, is rescored into a manifest that names them eval_settings", () => {
+    const { dir } = stored(LINES, undefined, { before071: true });
+    expect(summaryOf(dir).manifest.treatment_hints).toEqual({ embedder: "deterministic" });
+    const { out } = rescoreFolder(dir);
+    const now = summaryOf(out);
+    expect(manifestProblems(now.manifest)).toEqual([]);
+    expect(now.manifest.eval_settings).toEqual({ embedder: "deterministic" });
+    expect(now.manifest).not.toHaveProperty("treatment_hints");
+    expect(summaryOf(dir).manifest.treatment_hints).toEqual({ embedder: "deterministic" }); // the original is left as it was
   });
 
   test("an item whose file moved since the night was stored is an error that names the file, not a verdict on a note that is not there", () => {

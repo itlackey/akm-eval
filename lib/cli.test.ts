@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Fatal, exitMessage, fail, failureMessage, gitCommit, hideEndpoint, slug } from "./cli.ts";
+import { Fatal, exitMessage, fail, failureMessage, generateArgs, gitCommit, hideEndpoint, slug } from "./cli.ts";
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -165,5 +165,43 @@ describe("exitMessage", () => {
   test("stops at 300 characters", () => {
     expect(exitMessage(1, "y".repeat(1000), "")).toHaveLength(300);
     expect(exitMessage(1, JSON.stringify({ error: "y".repeat(1000) }), "")).toHaveLength(300);
+  });
+});
+
+describe("generateArgs", () => {
+  const usage = "Usage: evals/x/generate --seed N --out private/x";
+  const quiet = <T>(f: () => T): { value: T; out: string; err: string } => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const [log, error] = [console.log, console.error];
+    console.log = (line: string) => out.push(line);
+    console.error = (line: string) => err.push(line);
+    try {
+      return { value: f(), out: out.join("\n"), err: err.join("\n") };
+    } finally {
+      [console.log, console.error] = [log, error];
+    }
+  };
+
+  test("--seed and --out are what the script gets", () => {
+    expect(generateArgs(["--seed", "7", "--out", "private/x"], usage)).toEqual({ seed: "7", out: "private/x" });
+  });
+
+  test("--help and -h print the usage to stdout and end with 0, whatever else is given", () => {
+    for (const argv of [["--help"], ["-h"], ["--seed", "7", "--help"]]) {
+      const r = quiet(() => generateArgs(argv, usage));
+      expect([r.value, r.err]).toEqual([0, ""]);
+      expect(r.out).toStartWith(`${usage}\n\nMakes this eval's private corpus`);
+    }
+  });
+
+  test("an unknown flag, a missing value or a seed the script refuses prints the usage to stderr and ends with 2, with no stack trace", () => {
+    for (const argv of [["--bogus"], ["--seed", "7"], ["--out", "o"], []]) {
+      const r = quiet(() => generateArgs(argv, usage));
+      expect([r.value, r.out]).toEqual([2, ""]);
+      expect(r.err).toContain(usage);
+      expect(r.err).not.toContain("    at ");
+    }
+    expect(quiet(() => generateArgs(["--seed", "x", "--out", "o"], usage, (s) => /^\d+$/.test(s))).value).toBe(2);
   });
 });

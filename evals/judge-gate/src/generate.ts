@@ -12,9 +12,9 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import { CASES, GENERATED } from "./inputs.ts";
 import { type Case, parseCases } from "./lib.ts";
+import { generateArgs } from "../../../lib/cli.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -184,11 +184,9 @@ export function generate(opts: { seed: string; out: string; publicAssets?: strin
 }
 
 function main(): void {
-  const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
-  if (values.seed === undefined || values.out === undefined) {
-    console.error("Usage: evals/judge-gate/generate --seed N --out private/judge-gate");
-    process.exit(2);
-  }
+  const args = generateArgs(Bun.argv.slice(2), "Usage: evals/judge-gate/generate --seed N --out private/judge-gate");
+  if (typeof args === "number") process.exit(args);
+  const values = args;
   const made = generate({ seed: values.seed, out: resolve(values.out) });
   if (made.problems.length > 0) {
     const more = made.problems.length > 10 ? `\n  and ${made.problems.length - 10} more` : "";

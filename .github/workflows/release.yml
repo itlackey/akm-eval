@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "The release, such as 0.2. The tag is v<version>, and releases/v<version>.md holds the notes."
+        description: "The release, such as 0.7 or 0.7.1. The tag is v<version>, and releases/v<version>.md holds the notes."
         required: true
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then echo "release: the version is MAJOR.MINOR, such as 0.2, not \"$VERSION\"" >&2; exit 1; fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "release: the version is MAJOR.MINOR or MAJOR.MINOR.PATCH, such as 0.7 or 0.7.1, not \"$VERSION\"" >&2; exit 1; fi
           notes="releases/v$VERSION.md"
           if [ ! -f "$notes" ]; then echo "release: $notes is not in this commit; merge the notes first" >&2; exit 1; fi
           if gh release view "v$VERSION" >/dev/null 2>&1; then

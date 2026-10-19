@@ -204,6 +204,24 @@ describe("makeJudge", () => {
     expect(seen[0].body.response_format.json_schema.schema.required).toEqual(["grade", "reason"]);
   });
 
+  test("takes the judge's chat settings from models.json in place of its own: temperature, a token limit and reasoning_effort", async () => {
+    const seen: any[] = [];
+    server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        seen.push(await req.json());
+        return reply('{"grade": 2, "reason": "r"}');
+      },
+    });
+    const url = `http://127.0.0.1:${server.port}/v1`;
+    await makeJudge(url, "", "m", undefined, undefined, undefined, { temperature: 0.2, max_completion_tokens: 512, reasoning_effort: "low" })(messages);
+    await makeJudge(url, "", "m", undefined, undefined, undefined, { max_tokens: 800 })(messages);
+    expect(seen[0]).toMatchObject({ temperature: 0.2, max_completion_tokens: 512, reasoning_effort: "low", enable_thinking: false });
+    expect(seen[0].max_tokens).toBeUndefined(); // one token limit, never both
+    expect(seen[1]).toMatchObject({ temperature: 0, max_tokens: 800, reasoning_effort: "none" });
+    expect(seen[1].max_completion_tokens).toBeUndefined();
+  });
+
   test("puts /chat/completions on the path of an endpoint that has a query, before the query, and not twice", async () => {
     const seen: string[] = [];
     server = Bun.serve({

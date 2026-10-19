@@ -165,8 +165,8 @@ const SPEC: EvalSpec<Planted, Row, Extra> = {
       calls_by: callStats(done?.improve).by.map((r) => ({ ...r, model: hideEndpoint(r.model, ctx.baseUrl) })),
     };
   },
-  // How akm embedded the notes is a setting of the night that scripts/compare shows beside the strategy, so the manifest says it as a treatment hint.
-  manifestExtras: (ctx) => ({ treatment_hints: { embedder: ctx.embedder ?? "deterministic" } }),
+  // How akm embedded the notes is a setting of the night that scripts/compare shows beside the strategy, so the manifest records it in eval_settings.
+  manifestExtras: (ctx) => ({ eval_settings: { embedder: ctx.embedder ?? "deterministic" } }),
   printSummary,
   sideBySide,
   usage: {

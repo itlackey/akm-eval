@@ -175,8 +175,8 @@ export interface EvalSpec<Case = any, Row extends Obj = Obj, Extra extends Obj =
   abortReason?(rows: Row[], ctx: RunCtx & Extra): string | null;
   /** What the run adds to the input of a case in the manifest (see Measurement.input): reflect's recorded searches. */
   caseContext?(c: Case, ctx: RunCtx & Extra): unknown;
-  /** The manifest's `mode` (consolidate --pool) and `treatment_hints` (the embedder of consolidate and nightly), which scripts/compare shows. */
-  manifestExtras?(ctx: RunCtx & Extra, corpus: ResolvedCorpus): { mode?: string | null; treatment_hints?: RunManifest["treatment_hints"] };
+  /** The manifest's `mode` (consolidate --pool) and `eval_settings` (the embedder of consolidate and nightly), which scripts/compare shows. */
+  manifestExtras?(ctx: RunCtx & Extra, corpus: ResolvedCorpus): { mode?: string | null; eval_settings?: RunManifest["eval_settings"] };
   /** The label of a run without --label, from the model name. Default: the model name as a slug. */
   defaultLabel?(model: string): string;
   /** Setup that can fail before anything runs, with the parsed flags. Throws an Error that says what to do. Returns, for a corpus, what its cases' context has besides the common fields. */

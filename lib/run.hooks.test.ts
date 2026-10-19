@@ -1,4 +1,4 @@
-// The tests of what lib/run.ts lets a spec say that not every spec has to: the mode and the treatment hints of its manifest (`manifestExtras`), the results folder in
+// The tests of what lib/run.ts lets a spec say that not every spec has to: the mode and the eval settings of its manifest (`manifestExtras`), the results folder in
 // its context (`ctx.resultsDir`), the label of a run without --label (`defaultLabel`), and a spec that runs its own cases (`collectAll`), whose summary has no
 // `concurrency`. A fake eval (FIXTURE) runs through runEval in a process of its own, in a copy of lib/ in a temp folder so that its results are there and never in the
 // repository, against a fake akm that logs what it is asked. The model endpoint is not asked (AKM_EVAL_NO_PROBE=1): the request to it is lib/run.test.ts's, with the rest
@@ -98,9 +98,9 @@ if (process.env.FAKE_BATCH === "1") {
   };
 }
 const EXTRAS = {
-  both: (ctx, corpus) => ({ mode: "pool", treatment_hints: { embedder: ctx.note ?? "deterministic", attempts: 2, strict: true, seed: null, corpus: corpus.name } }),
+  both: (ctx, corpus) => ({ mode: "pool", eval_settings: { embedder: ctx.note ?? "deterministic", attempts: 2, strict: true, seed: null, corpus: corpus.name } }),
   mode: () => ({ mode: "pool" }),
-  hints: (ctx) => ({ treatment_hints: { embedder: ctx.note ?? "real" } }),
+  hints: (ctx) => ({ eval_settings: { embedder: ctx.note ?? "real" } }),
 };
 if (process.env.FAKE_MANIFEST) {
   spec.manifestExtras = EXTRAS[process.env.FAKE_MANIFEST];
@@ -175,13 +175,13 @@ describe("manifestExtras", () => {
       return resultsOf(label)[0]?.summary.manifest;
     };
     const both = manifestOf("extras-both", { FAKE_MANIFEST: "both" });
-    expect([both.mode, both.treatment_hints]).toEqual(["pool", { embedder: "deterministic", attempts: 2, strict: true, seed: null, corpus: "public" }]); // a string, a number, a boolean and a null arrive as they are
+    expect([both.mode, both.eval_settings]).toEqual(["pool", { embedder: "deterministic", attempts: 2, strict: true, seed: null, corpus: "public" }]); // a string, a number, a boolean and a null arrive as they are
     const mode = manifestOf("extras-mode", { FAKE_MANIFEST: "mode" });
-    expect([mode.mode, mode.treatment_hints]).toEqual(["pool", {}]);
+    expect([mode.mode, mode.eval_settings]).toEqual(["pool", {}]);
     const hints = manifestOf("extras-hints", { FAKE_MANIFEST: "hints" });
-    expect([hints.mode, hints.treatment_hints]).toEqual([null, { embedder: "real" }]);
+    expect([hints.mode, hints.eval_settings]).toEqual([null, { embedder: "real" }]);
     const none = manifestOf("extras-none", {});
-    expect([none.mode, none.treatment_hints]).toEqual([null, {}]);
+    expect([none.mode, none.eval_settings]).toEqual([null, {}]);
   });
 
   test("the hook is given the context, with what the eval's own setup put in it, and the corpus, for each run of each corpus; the manifest is sound and agrees with the summary on the mode", () => {
@@ -189,7 +189,7 @@ describe("manifestExtras", () => {
     const r = run(["--corpus", "all", "--cases", folderOf("extras-own", 2), "--repeat", "2", "--note", "the-note", "--label", "extras-runs"], { FAKE_MANIFEST: "both" });
     expect([r.code, r.err]).toEqual([0, ""]);
     const done = resultsOf("extras-runs");
-    expect(done.map((d) => [d.summary.corpus, d.summary.label, d.summary.manifest.treatment_hints])).toEqual([
+    expect(done.map((d) => [d.summary.corpus, d.summary.label, d.summary.manifest.eval_settings])).toEqual([
       ["public", "extras-runs-r1", { embedder: "the-note", attempts: 2, strict: true, seed: null, corpus: "public" }],
       ["public", "extras-runs-r2", { embedder: "the-note", attempts: 2, strict: true, seed: null, corpus: "public" }],
       ["custom", "extras-runs-r1", { embedder: "the-note", attempts: 2, strict: true, seed: null, corpus: "custom" }],
