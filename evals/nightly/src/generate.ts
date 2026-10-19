@@ -14,11 +14,11 @@
 // passed, with generated.json (the seed) beside them. A failed run leaves the previous private night, map and generated.json as they were.
 
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import { generateInto } from "../../consolidate/src/inputs.ts";
 import { lessonFile, memoryBody, mentions } from "../../distill/src/lib.ts";
 import type { DistillItem } from "./items.ts";
 import { type Night, loadNight, nightProblems } from "./night.ts";
+import { generateArgs } from "../../../lib/cli.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -60,11 +60,9 @@ function rewrite(args: string[]): string {
 }
 
 function main(): number {
-  const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
-  if (values.seed === undefined || values.out === undefined) {
-    console.error("Usage: evals/nightly/generate --seed N --out private/nightly");
-    return 2;
-  }
+  const args = generateArgs(Bun.argv.slice(2), "Usage: evals/nightly/generate --seed N --out private/nightly");
+  if (typeof args === "number") return args;
+  const values = args;
   const seed = values.seed;
   const out = resolve(values.out);
 

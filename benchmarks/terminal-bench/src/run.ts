@@ -211,7 +211,7 @@ export function summarize(o: {
     engines: { opencode: { model: o.model, endpoint, temperature: null, enableThinking: null, timeoutMs: null } },
     settings: { seed: o.corpus.seed },
     // attempts decide how much a task's pass rate says: a run of three is not compared with a run of one
-    treatment_hints: { attempts },
+    eval_settings: { attempts },
     completion: casesCompletion(MEASUREMENT, o.tasks, rows),
   });
   const summary: Summary = {

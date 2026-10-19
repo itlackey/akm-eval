@@ -13,7 +13,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, completionsUrl, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, resolveCorpora } from "../../../lib/corpus.ts";
-import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, useJudge } from "../../../lib/models.ts";
+import { type ChatSettings, JUDGE_OPTIONS, type ModelSettings, judgeUsage, useJudge } from "../../../lib/models.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
 import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_SHA256, PROMPT_VERSION, type Qrel, type Query, SYSTEMS, assetSha256, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool, qrelProvenance } from "./lib.ts";
@@ -75,11 +75,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * The judge as a chat endpoint, for a local server such as llama.cpp: temperature 0, every spelling of "no visible
  * thinking" that a server might honour, and a JSON schema for the reply. When the endpoint refuses the schema (a 4xx
  * that is not a 429) the request is sent again without it. max_tokens leaves room for a model that thinks anyway.
- * A cloud endpoint can answer 400 to the thinking switches: run it through a local gateway.
+ * A cloud endpoint can answer 400 to the thinking switches: run it through a local gateway. `chat` is the judge's `chat` in models.json, as
+ * LongMemEval reads it: its temperature, max_tokens or max_completion_tokens and reasoning_effort replace 0, max_tokens 2000 and "none".
  *
  * When the server says to wait (429 with Retry-After), every request of this judge waits, not only the one refused.
  */
-export function makeJudge(baseUrl: string, apiKey: string, model: string, timeoutMs = 120_000, backoffMs = 2000, onWait: (ms: number, why: string) => void = () => {}): Judge {
+export function makeJudge(baseUrl: string, apiKey: string, model: string, timeoutMs = 120_000, backoffMs = 2000, onWait: (ms: number, why: string) => void = () => {}, chat: ChatSettings = {}): Judge {
   const url = completionsUrl(baseUrl);
   const headers: Record<string, string> = { "Content-Type": "application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) };
   let pausedUntil = 0;
@@ -106,13 +107,13 @@ export function makeJudge(baseUrl: string, apiKey: string, model: string, timeou
     const payload = {
       model,
       messages,
-      temperature: 0,
-      max_tokens: 2000,
+      temperature: chat.temperature ?? 0,
+      ...(chat.max_completion_tokens !== undefined ? { max_completion_tokens: chat.max_completion_tokens } : { max_tokens: chat.max_tokens ?? 2000 }),
       stream: false,
       // every spelling of "no visible thinking" that a server might honour
       chat_template_kwargs: { enable_thinking: false },
       enable_thinking: false,
-      reasoning_effort: "none",
+      reasoning_effort: chat.reasoning_effort ?? "none",
     };
     let raw: string;
     try {
@@ -536,7 +537,7 @@ async function main(): Promise<number> {
     console.error(`retrieval label: ${e.message}`);
     return e.code;
   }
-  const judge = makeJudge(baseUrl, judgeSettings.apiKey, model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));
+  const judge = makeJudge(baseUrl, judgeSettings.apiKey, model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`), judgeSettings.chat);
   return labelCollection(corpus, { model, judge, limit, from: values.from === undefined ? undefined : resolve(values.from) }, folders);
 }
 

@@ -192,7 +192,7 @@ export async function runCorpus(
     engines: { opencode: { model: ctx.model, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL), temperature: null, enableThinking: null, timeoutMs: null } },
     settings: { seed: c.seed },
     // attempts decide how much a task's pass rate says: a run of three is not compared with a run of one
-    treatment_hints: { attempts },
+    eval_settings: { attempts },
     completion: casesCompletion(MEASUREMENT, tasks, rows),
   });
   const summary: Summary = {

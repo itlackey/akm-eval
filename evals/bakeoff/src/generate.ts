@@ -11,8 +11,8 @@
 
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import { CASES_FILE, GENERATED, loadCases, termProblems } from "./inputs.ts";
+import { generateArgs } from "../../../lib/cli.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -72,11 +72,9 @@ export function generate(seed: string, out: string, from: string = join(EVAL_DIR
 }
 
 function main(): void {
-  const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
-  if (values.seed === undefined || values.out === undefined) {
-    console.error("Usage: evals/bakeoff/generate --seed N --out private/bakeoff");
-    process.exit(2);
-  }
+  const args = generateArgs(Bun.argv.slice(2), "Usage: evals/bakeoff/generate --seed N --out private/bakeoff");
+  if (typeof args === "number") process.exit(args);
+  const values = args;
   if (!existsSync(join(EVAL_DIR, "assets", CASES_FILE)) || !readFileSync(join(EVAL_DIR, "assets", CASES_FILE), "utf8").trim()) {
     console.error("bakeoff: the public assets have no cases.json");
     process.exit(2);

@@ -10,8 +10,8 @@
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import { GENERATED, type LoadedCase, MAX_COPIED, checkLesson, checkUpdate, lessonFile, loadCases, memoryBody, mentions, stated } from "./lib.ts";
+import { generateArgs } from "../../../lib/cli.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -85,11 +85,9 @@ export function install(work: string, out: string): void {
 }
 
 function main(): void {
-  const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
-  if (values.seed === undefined || values.out === undefined) {
-    console.error("Usage: evals/distill/generate --seed N --out private/distill");
-    process.exit(2);
-  }
+  const args = generateArgs(Bun.argv.slice(2), "Usage: evals/distill/generate --seed N --out private/distill");
+  if (typeof args === "number") process.exit(args);
+  const values = args;
   const out = resolve(values.out);
   const work = join(out, ".work"); // in the same folder as the result, so the rename stays on one disk
   const assets = join(work, "assets");

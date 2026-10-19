@@ -32,6 +32,17 @@ describe("two stored runs", () => {
     expect(report.rows.find(r => r.key === "metrics.defects.rate")!.b).toBe(.999);
     expect(report.rows.find(r => r.key === "metrics.defects.rate")!.delta).not.toBeNull();
   });
+  test("a run saved before 0.7.1 (treatment_hints) and one saved after (eval_settings) compare their eval settings by value, not by name", () => {
+    const a = fixture("consolidate"), b = clone(a);
+    const hints = a.summary.manifest.treatment_hints;
+    expect(hints).toBeDefined(); // the fixture is a manifest of the old shape
+    expect(a.summary.manifest.eval_settings).toBeUndefined();
+    delete b.summary.manifest.treatment_hints;
+    b.summary.manifest.eval_settings = { ...hints };
+    expect(comparePair(a, b).changes.map(c => c.field)).not.toContain("benchmark_settings");
+    b.summary.manifest.eval_settings = { embedder: "real" };
+    expect(comparePair(a, b).changes.find(c => c.field === "benchmark_settings")).toEqual({ field: "benchmark_settings", a: hints, b: { embedder: "real" } });
+  });
   test("shows deltas alongside recorded coverage even when scored cases differ", () => {
     const a = fixture(), b = clone(a);
     a.summary.manifest.completion.errored = [a.rows[0]!.id];

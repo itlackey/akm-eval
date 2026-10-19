@@ -452,7 +452,7 @@ describe("runCorpus", () => {
       const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
       expect(summary).toMatchObject({ embedder: "real", n_planted: 6 });
       expect(resultsOf(folders).summary.embedder).toBe("real");
-      expect(resultsOf(folders).summary.manifest.treatment_hints).toEqual({ embedder: "real" }); // scripts/compare shows it beside the strategy
+      expect(resultsOf(folders).summary.manifest.eval_settings).toEqual({ embedder: "real" }); // scripts/compare shows it beside the strategy
       expect(JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey, "real"));
       expect(summary.config).toMatchObject({ embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
     } finally {
@@ -527,7 +527,7 @@ describe("runCorpus", () => {
     expect(readManifest(stored).kind).toBe("manifest");
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     const m = summary.manifest;
-    expect(m).toMatchObject({ eval: "nightly", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: { embedder: "deterministic" } });
+    expect(m).toMatchObject({ eval: "nightly", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, eval_settings: { embedder: "deterministic" } });
     expect(m.settings).toEqual({ strategy: "default", config_patch_sha256: null, timeout_ms: 2_700_000, seed: null }); // the budget akm is given: it used to be recorded as null
     expect(Object.keys(m.cases)).toEqual(IDS);
     expect(m.completion.selected).toEqual(IDS);
@@ -726,7 +726,7 @@ describe("the command with an akm that answers", () => {
     expect(Object.keys(summary).sort()).toEqual([...SUMMARY_KEYS, ...ADDED_KEYS, "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
     expect(summary).toMatchObject({ timeout_ms: 123_000, n_planted: 6, status: "complete", corpus: "custom", improve_ok: true });
     expect(summary.manifest.settings.timeout_ms).toBe(123_000);
-    expect(summary.manifest).toMatchObject({ mode: null, treatment_hints: { embedder: "deterministic" } });
+    expect(summary.manifest).toMatchObject({ mode: null, eval_settings: { embedder: "deterministic" } });
     expect(rows.map((r) => r.id).sort()).toEqual([...IDS].sort());
     expect(commands().find((l) => l.startsWith("improve "))).toContain("--timeout-ms 123000 ");
     expect(done.out).toMatch(/\[ ?1\/6\] duplicate-01 +ok/); // each item has its progress line, which says what the night did to it

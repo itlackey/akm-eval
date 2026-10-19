@@ -13,9 +13,9 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import { type Case, claimProblems, parseCases } from "./cases.ts";
 import { generateInto } from "./inputs.ts";
+import { generateArgs } from "../../../lib/cli.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -72,11 +72,9 @@ function rewrite(args: string[]): string {
 }
 
 function main(): number {
-  const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
-  if (values.seed === undefined || values.out === undefined) {
-    console.error("Usage: evals/consolidate/generate --seed N --out private/consolidate");
-    return 2;
-  }
+  const args = generateArgs(Bun.argv.slice(2), "Usage: evals/consolidate/generate --seed N --out private/consolidate");
+  if (typeof args === "number") return args;
+  const values = args;
   const seed = values.seed;
   const out = resolve(values.out);
 

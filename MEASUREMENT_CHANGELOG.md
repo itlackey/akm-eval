@@ -15,6 +15,12 @@ current scoring rules to unchanged inputs: it records the current scoring versio
 while retaining the original collector version. New inputs require collection.
 Add a release entry here when a version changes.
 
+## 0.7.1
+
+No eval changed version. The manifest field `treatment_hints` is now
+`eval_settings`; readers take either name, so saved runs keep their identity
+and compare as before. See [release notes](releases/v0.7.1.md).
+
 ## 0.7
 
 reflect (collection and scoring 0.4), longmemeval (0.3) and agent-ab and

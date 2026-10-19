@@ -23,9 +23,9 @@
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import { GENERATED, isFictional, libraryOf, taskNames } from "./inputs.ts";
 import { libraryProblems } from "./lib.ts";
+import { generateArgs } from "../../../lib/cli.ts";
 
 // These live in ./inputs.ts, which run.ts shares. They are exported from here too, for what imported them from here.
 export { isFictional, libraryOf };
@@ -314,11 +314,9 @@ export function generate(opts: Options): Result {
 }
 
 function main(): number {
-  const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
-  if (values.seed === undefined || values.out === undefined) {
-    console.error("Usage: evals/agent-ab/generate --seed N --out private/agent-ab");
-    return 2;
-  }
+  const args = generateArgs(Bun.argv.slice(2), "Usage: evals/agent-ab/generate --seed N --out private/agent-ab");
+  if (typeof args === "number") return args;
+  const values = args;
   const r = generate({ seed: values.seed, out: values.out });
   if (r.installed) console.log(`agent-ab: ${r.kept.length} private tasks written to ${join(values.out, "assets", "tasks")}, with their libraries`);
   console.log(r.summary);

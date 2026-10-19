@@ -17,9 +17,9 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import { DATA_FILE, type Question, ensureDataset, loadQuestions, readLock } from "./dataset.ts";
 import { GENERATED, OUTPUTS } from "./manifest.ts";
+import { generateArgs } from "../../../lib/cli.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -348,11 +348,9 @@ export async function generate(opts: Options): Promise<Result> {
 }
 
 async function main(): Promise<number> {
-  const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
-  if (values.seed === undefined || values.out === undefined || !/^\d{1,20}$/.test(values.seed)) {
-    console.error("Usage: benchmarks/longmemeval/generate --seed N --out private/longmemeval   (N is a non-negative integer)");
-    return 2;
-  }
+  const args = generateArgs(Bun.argv.slice(2), "Usage: benchmarks/longmemeval/generate --seed N --out private/longmemeval   (N is a non-negative integer)", (seed) => /^\d{1,20}$/.test(seed));
+  if (typeof args === "number") return args;
+  const values = args;
   try {
     await generate({ seed: values.seed, out: values.out });
     return 0;

@@ -521,7 +521,7 @@ describe("runCorpus", () => {
     expect(m).toMatchObject({ eval: "terminal-bench", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector });
     expect(m.akm).toEqual({ version: PINS.akm_cli, bin: `akm-cli@${PINS.akm_cli}`, build: null, build_fingerprint: stored.akm_build_fingerprint });
     expect(m.engines).toEqual({ opencode: { model: "openai/x", endpoint: "http://192.0.2.5:8080", temperature: null, enableThinking: null, timeoutMs: null } });
-    expect(m.treatment_hints).toEqual({ attempts: 2 }); // a run of one attempt is not compared with a run of two
+    expect(m.eval_settings).toEqual({ attempts: 2 }); // a run of one attempt is not compared with a run of two
     expect(m.settings).toEqual({ strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null });
     expect(m.config.redacted.datasets).toBeUndefined(); // the tasks are the cases
     // what each task presented to the agent: the task as the pinned dataset has it, and the library the akm arm seeded. The scorer reads nothing of the case.

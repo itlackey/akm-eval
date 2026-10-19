@@ -351,7 +351,7 @@ describe("runCorpus", () => {
     expect(readManifest(stored).kind).toBe("manifest");
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     const m = summary.manifest;
-    expect(m).toMatchObject({ eval: "consolidate", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: { embedder: "deterministic" } });
+    expect(m).toMatchObject({ eval: "consolidate", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, eval_settings: { embedder: "deterministic" } });
     expect(m.akm).toEqual({ version: "0.9.99-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
     expect(m.settings).toEqual({ strategy: "consolidate", config_patch_sha256: null, timeout_ms: 1_800_000, seed: null }); // the effective timeout of improve: it used to be recorded as null
     expect(Object.keys(m.cases)).toEqual(["d1", "e1", "o1"]);
@@ -375,7 +375,7 @@ describe("runCorpus", () => {
       const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
       expect(summary.embedder).toBe("real");
       expect(resultsOf(folders).summary.embedder).toBe("real");
-      expect(resultsOf(folders).summary.manifest.treatment_hints).toEqual({ embedder: "real" }); // scripts/compare shows it beside the strategy
+      expect(resultsOf(folders).summary.manifest.eval_settings).toEqual({ embedder: "real" }); // scripts/compare shows it beside the strategy
     } finally {
       delete process.env.FAKE_EMBEDDER;
     }
@@ -631,7 +631,7 @@ describe("the command with an akm that answers", () => {
     expect(Object.keys(summary).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms", "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
     expect(summary).toMatchObject({ concurrency: 3, timeout_ms: 20_000, n_run: 4, status: "complete", embedder: "deterministic", corpus: "custom" });
     expect(summary.manifest.settings.timeout_ms).toBe(20_000);
-    expect(summary.manifest).toMatchObject({ mode: null, treatment_hints: { embedder: "deterministic" } });
+    expect(summary.manifest).toMatchObject({ mode: null, eval_settings: { embedder: "deterministic" } });
     expect(rows.map((r) => r.id).sort()).toEqual(["d1", "d2", "o1", "s1"]);
     expect(done.calls.filter((c) => c.args[0] === "--version")).toHaveLength(1);
     expect(done.calls.filter((c) => c.args[0] === "improve")).toHaveLength(4);
@@ -646,7 +646,7 @@ describe("the command with an akm that answers", () => {
     const { folder, summary, rows } = stored(join("evals", "consolidate", "results"), "plain");
     expect(Object.keys(summary).sort()).toEqual([...POOL_KEYS, "wall_seconds"].sort());
     expect(summary).toMatchObject({ mode: "pool", corpus: "public", corpus_folder: null, n_cases: 1, n_run: 1, n_scored: 1, n_notes: 80, n_clusters: 47, strategy: "consolidate", embedder: "deterministic", limit: null, timeout_ms: 7_200_000, status: "complete" });
-    expect(summary.manifest).toMatchObject({ mode: "pool", treatment_hints: { embedder: "deterministic" } });
+    expect(summary.manifest).toMatchObject({ mode: "pool", eval_settings: { embedder: "deterministic" } });
     expect(rows).toHaveLength(47);
     expect(readdirSync(folder).filter((name) => name !== ".running").sort()).toEqual(["improve.json", "samples.jsonl", "summary.json"]); // akm's result of the improve run is kept beside the rows
     expect(JSON.parse(readFileSync(join(folder, "improve.json"), "utf8"))).toMatchObject({ ok: true, strategy: "consolidate" });

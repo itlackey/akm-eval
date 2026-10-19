@@ -865,7 +865,7 @@ describe("the manifest", () => {
       akm: { version: "0.9.99-test", build: null, build_fingerprint: null },
       settings: { strategy: null, config_patch_sha256: null, timeout_ms: akm.CALL_TIMEOUT_MS, seed: null },
       engines: {},
-      treatment_hints: {},
+      eval_settings: {},
     });
     expect(s.manifest.akm.bin).toBe(s.akm_bin);
     expect(s.manifest.config.redacted).toEqual(s.config);

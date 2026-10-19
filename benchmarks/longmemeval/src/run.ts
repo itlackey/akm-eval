@@ -13,7 +13,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, resolveCorpora } from "../../../lib/corpus.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, evalSettingsOf, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type EngineSetting, canonical, endpointHost, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -200,7 +200,7 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
   note("akm build fingerprint", prior.akm.build_fingerprint, now.akm.build_fingerprint); // two edits of one commit are two builds
   note("akm config", canonical(prior.config.redacted), canonical(now.config.redacted));
   note("settings", canonical(prior.settings), canonical(now.settings));
-  note("treatment hints", canonical(prior.treatment_hints), canonical(now.treatment_hints));
+  note("eval settings", canonical(evalSettingsOf(prior)), canonical(evalSettingsOf(now)));
   for (const role of ["model", "judge"]) {
     const was = prior.engines[role];
     const is = now.engines[role];
