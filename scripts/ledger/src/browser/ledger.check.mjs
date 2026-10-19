@@ -280,7 +280,7 @@ test('small touch screens show complete run cards with native scrolling, sorting
     await expect(page.locator('.tabulator-header')).not.toBeVisible();
     await expect(cards).toHaveCount(25);
     expect(await cardIds()).toEqual((await exportRows(page)).slice(0, 25).map(row => row.id));
-    await expect(cards.first()).toContainText('AKM 0.10.261005-beta');
+    await expect(cards.first()).toContainText(`AKM ${(await exportRows(page))[0].akm_version}`); // the newest run, whatever its akm
     await expect(cards.first()).toContainText('Quality metric');
     await expect(cards.first()).toContainText((await exportRows(page))[0].label);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
@@ -295,6 +295,7 @@ test('small touch screens show complete run cards with native scrolling, sorting
     await page.locator('#suite').selectOption('reflect');
     await page.locator('#version-summary').tap();
     await page.getByRole('checkbox', { name: '0.9.32', exact: true }).tap();
+    await page.locator('#version-summary').tap(); // close the menu: open, it can cover the export buttons, more so as versions are published
     expect((await exportRows(page)).every(row => row.suite === 'reflect' && row.akm_version === '0.9.32')).toBe(true);
     await page.locator('#view').selectOption('performance');
     const linkedIds = (await exportRows(page)).map(row => row.id);
