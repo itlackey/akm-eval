@@ -1,0 +1,670 @@
+{
+  "eval": "agent-ab",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "0.10.261006-beta-35b-semantic-full-20261017",
+  "date": "2026-10-17T20:00:02.286Z",
+  "git_commit": "56b295c",
+  "model": "openai/fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261006-beta",
+  "akm_bin": "akm-cli@0.10.261006-beta",
+  "akm_build": null,
+  "akm_build_fingerprint": "9212dcd5d34906aa05991b1b2930a046227612288e52b57c68f0bde8a98abbb6",
+  "akm_env": {
+    "AKM_EVAL_SEMANTIC_SEARCH": "1"
+  },
+  "akm_install": {
+    "from": "release",
+    "plugin_from": "release",
+    "plugin_version": "0.10.261002-beta",
+    "packages": [],
+    "dependency_tree_sha256": "8831fd1c63b8e2dcea47c7fcb45a6e07fa9d4372a80e16fa8ca0b66d9588acbe",
+    "locked": false,
+    "observed": {
+      "akm_version": [
+        "0.10.261006-beta"
+      ],
+      "plugin_akm_cli": [
+        "0.10.261003-beta"
+      ],
+      "assets_indexed": [
+        1,
+        3
+      ],
+      "env": {
+        "AKM_BUNDLE_DIR": "/opt/akm/bundle",
+        "AKM_CONFIG_DIR": "/opt/akm/config",
+        "AKM_DATA_DIR": "/opt/akm/data",
+        "AKM_CACHE_DIR": "/opt/akm/cache",
+        "AKM_STATE_DIR": "/opt/akm/state",
+        "AKM_OPENCODE_CLI": "/usr/local/bin/akm",
+        "AKM_AUTO_FEEDBACK": "0",
+        "AKM_AUTO_LEARNING": "0",
+        "AKM_AUTO_MEMORY": "0",
+        "AKM_INDEX_ON_SESSION_END": "0",
+        "AKM_CURATE_TIMEOUT": "15",
+        "AKM_PENDING_PROPOSAL_TIMEOUT": "5",
+        "AKM_EVAL_SEMANTIC_SEARCH": "1"
+      },
+      "dependency_trees": [
+        "8831fd1c63b8e2dcea47c7fcb45a6e07fa9d4372a80e16fa8ca0b66d9588acbe"
+      ],
+      "lockfiles": {
+        "akm_cli": null,
+        "plugin": "d31a9c30dd8111661a16796d4f06e1fcb0cd5fa44338fb1fa58baca7d28f9ab1"
+      },
+      "search_mode": [
+        "semantic"
+      ],
+      "embeddings_indexed": [
+        13,
+        15
+      ]
+    }
+  },
+  "pins": {
+    "akm_cli": "0.10.261006-beta",
+    "akm_plugin": "0.10.261002-beta",
+    "opencode": "1.18.34",
+    "harbor": "0.24.0"
+  },
+  "limit": null,
+  "seed": null,
+  "n_tasks": 6,
+  "attempts": 3,
+  "harbor_exit": 0,
+  "status": "complete",
+  "aborted_reason": null,
+  "completion": {
+    "expected": 36,
+    "completed": 34,
+    "failed": 2,
+    "missing": 0,
+    "unexpected": 0,
+    "control": {
+      "expected": 18,
+      "completed": 16,
+      "failed": 2,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "akm": {
+      "expected": 18,
+      "completed": 18,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    }
+  },
+  "libraries_sha256": "e1dec4e71c88b79918af1cb32e4b1a3301edb7556639b3e09198b213de720d89",
+  "tasks_sha256": {
+    "drillbit--backup-policy-train": "a87696582d02bd7d08d4d2325eafad42d3919a979544415f92df1fb58ef98343",
+    "drillbit--fix-runbook-train": "ca406e290a70848224e567fe3d8ef2b60e181834013c428e63cf4492a874f4b9",
+    "drillbit--scale-replicas-train": "f832b6e6a06e1b3a3555ed5aa9cb5202db92b3c8c5fb13832d292d61b27b8154",
+    "inkwell--add-healthcheck-train": "30904f6b34d78a5d09305d13a07615ed8aecfe9c65d3b2949cf49a6268d2d0fa",
+    "inkwell--new-service-scaled-train": "5a5dbba60f7751acd0e4781e22f634c478c3dc1933d285b85ae7f06b6194115e",
+    "inkwell--new-service-train": "fe7aa0d3c0d53de12536719b42599318a68c2233b3885ee38dc71d1289464959"
+  },
+  "assets_sha256": "8913789c61d0ce2f8304634e553ed904e78336f2d6967fa55372fa97b837bbfd",
+  "engine": {
+    "model": "openai/fast/qwen3.6-35b-a3b",
+    "endpoint": "https://ai.lab.fwdslsh.dev"
+  },
+  "config": {
+    "n_attempts": 3,
+    "n_concurrent_trials": 4,
+    "environment": {
+      "type": "docker",
+      "delete": true
+    },
+    "agents": [
+      {
+        "import_path": "eval_opencode:EvalOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup"
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261006-beta",
+          "akm_plugin_version": "0.10.261002-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          }
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "drillbit--backup-policy-train",
+          "drillbit--fix-runbook-train",
+          "drillbit--scale-replicas-train",
+          "inkwell--add-healthcheck-train",
+          "inkwell--new-service-scaled-train",
+          "inkwell--new-service-train"
+        ]
+      }
+    ]
+  },
+  "timeouts": {
+    "control": 2,
+    "akm": 0
+  },
+  "n_errored": 0,
+  "metrics": {
+    "control": {
+      "pass_rate": 0.056,
+      "passed": 1,
+      "scored": 18,
+      "errored": 0,
+      "timeouts": 2,
+      "minutes": 2,
+      "agent_minutes": 1.5,
+      "cost_usd": null
+    },
+    "akm": {
+      "pass_rate": 0.5,
+      "passed": 9,
+      "scored": 18,
+      "errored": 0,
+      "timeouts": 0,
+      "minutes": 2.5,
+      "agent_minutes": 1.3,
+      "cost_usd": null
+    },
+    "delta": {
+      "value": 0.444,
+      "lo": 0.111,
+      "hi": 0.778,
+      "n": 6
+    },
+    "better": {
+      "akm": 5,
+      "control": 0,
+      "same": 1
+    },
+    "engagement": {
+      "rate": 0.5,
+      "called": 9,
+      "trials": 18,
+      "curated_read": 0,
+      "control_calls": 0
+    }
+  },
+  "job": {
+    "n_attempts": 3,
+    "n_concurrent_trials": 4,
+    "environment": {
+      "type": "docker",
+      "delete": true
+    },
+    "agents": [
+      {
+        "import_path": "eval_opencode:EvalOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup"
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261006-beta",
+          "akm_plugin_version": "0.10.261002-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          }
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "drillbit--backup-policy-train",
+          "drillbit--fix-runbook-train",
+          "drillbit--scale-replicas-train",
+          "inkwell--add-healthcheck-train",
+          "inkwell--new-service-scaled-train",
+          "inkwell--new-service-train"
+        ]
+      }
+    ]
+  },
+  "report": {
+    "control": {
+      "trials": 18,
+      "scored": 18,
+      "errored": 0,
+      "passed": 1,
+      "tasks": 6,
+      "pass_rate": {
+        "value": 0.056,
+        "lo": 0,
+        "hi": 0.167,
+        "n": 6
+      },
+      "exceptions": {
+        "AgentTimeoutError": 2
+      },
+      "timeouts": 2,
+      "per_trial": {
+        "minutes": 2,
+        "agent_minutes": 1.5,
+        "cost_usd": null
+      },
+      "tokens": {
+        "input": 2340150,
+        "cache": 1788318,
+        "output": 15819,
+        "cost_usd": null
+      }
+    },
+    "akm": {
+      "trials": 18,
+      "scored": 18,
+      "errored": 0,
+      "passed": 9,
+      "tasks": 6,
+      "pass_rate": {
+        "value": 0.5,
+        "lo": 0.222,
+        "hi": 0.722,
+        "n": 6
+      },
+      "exceptions": {},
+      "timeouts": 0,
+      "per_trial": {
+        "minutes": 2.5,
+        "agent_minutes": 1.3,
+        "cost_usd": null
+      },
+      "tokens": {
+        "input": 989123,
+        "cache": 326983,
+        "output": 5287,
+        "cost_usd": null
+      }
+    },
+    "delta": {
+      "value": 0.444,
+      "lo": 0.111,
+      "hi": 0.778,
+      "n": 6,
+      "ci": [
+        0.111,
+        0.778
+      ],
+      "resampled": "tasks and attempts"
+    },
+    "better": {
+      "akm": 5,
+      "control": 0,
+      "same": 1
+    },
+    "sign_test": {
+      "akm": 5,
+      "control": 0,
+      "n": 5,
+      "p": 0.0625
+    },
+    "flips": {
+      "control": {
+        "tasks": 1,
+        "of": 6
+      },
+      "akm": {
+        "tasks": 4,
+        "of": 6
+      }
+    },
+    "engagement": {
+      "trials": 18,
+      "called": 9,
+      "rate": 0.5,
+      "calls": {
+        "akm_curate": 9,
+        "akm_show": 11
+      },
+      "curated_read": 0,
+      "called_split": {
+        "trials": 9,
+        "passed": 7,
+        "delta": {
+          "value": 0.767,
+          "lo": 0.367,
+          "hi": 1,
+          "n": 5,
+          "ci": [
+            0.367,
+            1
+          ],
+          "resampled": "tasks and attempts"
+        }
+      },
+      "not_called_split": {
+        "trials": 9,
+        "passed": 2,
+        "delta": {
+          "value": 0.333,
+          "lo": 0,
+          "hi": 0.733,
+          "n": 5,
+          "ci": [
+            0,
+            0.733
+          ],
+          "resampled": "tasks and attempts"
+        }
+      },
+      "control_calls": 0
+    },
+    "tasks": [
+      {
+        "task": "drillbit--backup-policy-train",
+        "control": "0/3",
+        "akm": "2/3",
+        "called": "3/3",
+        "disagree": true,
+        "flips": {
+          "control": 0,
+          "akm": 1
+        }
+      },
+      {
+        "task": "drillbit--fix-runbook-train",
+        "control": "0/3 T2",
+        "akm": "3/3",
+        "called": "2/3",
+        "disagree": true,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      },
+      {
+        "task": "drillbit--scale-replicas-train",
+        "control": "1/3",
+        "akm": "2/3",
+        "called": "2/3",
+        "disagree": true,
+        "flips": {
+          "control": 1,
+          "akm": 1
+        }
+      },
+      {
+        "task": "inkwell--add-healthcheck-train",
+        "control": "0/3",
+        "akm": "0/3",
+        "called": "0/3",
+        "disagree": false,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      },
+      {
+        "task": "inkwell--new-service-scaled-train",
+        "control": "0/3",
+        "akm": "1/3",
+        "called": "1/3",
+        "disagree": true,
+        "flips": {
+          "control": 0,
+          "akm": 1
+        }
+      },
+      {
+        "task": "inkwell--new-service-train",
+        "control": "0/3",
+        "akm": "1/3",
+        "called": "1/3",
+        "disagree": true,
+        "flips": {
+          "control": 0,
+          "akm": 1
+        }
+      }
+    ]
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "agent-ab",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.4"
+    },
+    "scorer": {
+      "version": "0.4"
+    },
+    "cases": {
+      "drillbit--backup-policy-train": {
+        "input_sha256": "e1eee8ec59ac2db0053efaace9034f14c616e482608607bf6bf780b40e84f97e",
+        "label_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "drillbit--fix-runbook-train": {
+        "input_sha256": "63dea6a0fafb4e323dc30acb4cf26aae3558da8b5ed287637b829827a0f1f6a0",
+        "label_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "drillbit--scale-replicas-train": {
+        "input_sha256": "cc5df124fab59e06985e14cea78491c5f54747f68936b7d091428e382d35b3d1",
+        "label_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "inkwell--add-healthcheck-train": {
+        "input_sha256": "10d913c836a84d5cc11df0eb7fb2dd6c5669dd003ac1626d9409c56d174029eb",
+        "label_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "inkwell--new-service-scaled-train": {
+        "input_sha256": "ed774df1d3cd0066db6b68bf9316ca895fdee4881e219257532770fcab810fb5",
+        "label_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "inkwell--new-service-train": {
+        "input_sha256": "f075da519cc0bab79a632a007db33763605c0b209f2ec9f90a3bdb8ebce0cd40",
+        "label_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      }
+    },
+    "akm": {
+      "version": "0.10.261006-beta",
+      "bin": "akm-cli@0.10.261006-beta",
+      "build": null,
+      "build_fingerprint": "9212dcd5d34906aa05991b1b2930a046227612288e52b57c68f0bde8a98abbb6"
+    },
+    "config": {
+      "redacted": {
+        "n_concurrent_trials": 4,
+        "environment": {
+          "type": "docker",
+          "delete": true
+        },
+        "agents": [
+          {
+            "import_path": "eval_opencode:EvalOpenCode",
+            "model_name": "openai/fast/qwen3.6-35b-a3b",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/fast/qwen3.6-35b-a3b",
+                "provider": {
+                  "openai": {
+                    "models": {
+                      "fast/qwen3.6-35b-a3b": {
+                        "limit": {
+                          "context": 32768,
+                          "output": 4096
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "setup_cache_dir": ".cache/harbor-setup"
+            }
+          },
+          {
+            "import_path": "akm_opencode:AkmOpenCode",
+            "model_name": "openai/fast/qwen3.6-35b-a3b",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/fast/qwen3.6-35b-a3b",
+                "provider": {
+                  "openai": {
+                    "models": {
+                      "fast/qwen3.6-35b-a3b": {
+                        "limit": {
+                          "context": 32768,
+                          "output": 4096
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "setup_cache_dir": ".cache/harbor-setup",
+              "akm_cli_version": "0.10.261006-beta",
+              "akm_plugin_version": "0.10.261002-beta",
+              "libraries_dir": "libraries",
+              "akm_env": {
+                "AKM_EVAL_SEMANTIC_SEARCH": "1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "opencode": {
+        "model": "openai/fast/qwen3.6-35b-a3b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": null,
+        "enableThinking": null,
+        "timeoutMs": null
+      }
+    },
+    "treatment_hints": {
+      "attempts": 3
+    },
+    "completion": {
+      "selected": [
+        "drillbit--backup-policy-train",
+        "drillbit--fix-runbook-train",
+        "drillbit--scale-replicas-train",
+        "inkwell--add-healthcheck-train",
+        "inkwell--new-service-scaled-train",
+        "inkwell--new-service-train"
+      ],
+      "scored": [
+        "drillbit--backup-policy-train",
+        "drillbit--fix-runbook-train",
+        "drillbit--scale-replicas-train",
+        "inkwell--add-healthcheck-train",
+        "inkwell--new-service-scaled-train",
+        "inkwell--new-service-train"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 1340.473
+}
