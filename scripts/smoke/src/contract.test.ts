@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { CONTRACTS, type Canned, type Contract, MALFORMED_ANSWER, answerFrom, describeCanned, malformed, matches, replyOf, runContract, verify } from "./contract.ts";
-import { AKM_0_9_26_REQUESTS, AKM_0_9_31_REQUESTS, type Fixture } from "./fixtures.ts";
+import { AKM_0_9_26_REQUESTS, AKM_0_9_31_REQUESTS, AKM_COMPLETE_CLAIM_REQUEST, type Fixture } from "./fixtures.ts";
 import { ENTRIES, EMPTY_ANSWER, type ChatRequest, type Stub, startStub, stubEnv } from "./lib.ts";
 import { type Schema, check, valueFor } from "./schema.ts";
 
@@ -119,6 +119,17 @@ describe("answerFrom", () => {
     for (const f of AKM_0_9_26_REQUESTS) expect(malformed(requestOf(f))).toBe(MALFORMED_ANSWER);
     expect(() => JSON.parse(MALFORMED_ANSWER)).toThrow();
   });
+});
+
+test("claim-only consolidation requests and historical requests share the duplicate contract", () => {
+  for (const dir of ["evals/consolidate", "evals/nightly"]) {
+    const answer = answerFrom((CONTRACTS[dir] as Contract).canned);
+    const reply = JSON.parse(answer(requestOf(AKM_COMPLETE_CLAIM_REQUEST)));
+    expect(reply).toEqual({ reason: "Both notes state the same claims.", onlyInA: [], onlyInB: [], confidence: 0.9 });
+    expect(check(AKM_COMPLETE_CLAIM_REQUEST.schema as Schema, reply)).toEqual([]);
+    expect(JSON.parse(answer(requestOf(fixture("pair second look"))))).toEqual({ missing: [] });
+    expect(answer.unused()).toEqual([]);
+  }
 });
 
 describe("the canned replies, against the requests akm 0.9.26 and 0.9.31 send", () => {

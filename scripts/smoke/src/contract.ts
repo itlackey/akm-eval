@@ -121,7 +121,16 @@ const pairPass = (summaries: Row[]): { pairs_judged?: number; failed_judgments?:
 // lists a claim that each note holds alone, and akm retires a note only when its judge lists none: so the judge answers a duplicate whose
 // notes hold nothing of their own, and akm's second look, before it stages the retirement, finds nothing missing.
 const PAIR_JUDGE: Canned[] = [
-  { keys: ["onlyInA", "onlyInB", "relation", "redundant", "stale", "confidence", "reason"], reply: { onlyInA: [], onlyInB: [], relation: "duplicate", redundant: "A", stale: null, confidence: 0.9, reason: "Both notes state the same claims." } },
+  {
+    has: ["onlyInA", "onlyInB", "confidence", "reason"],
+    reply: (schema: Schema | undefined) => ({
+      ...(schema ? (valueFor(schema) as object) : {}),
+      onlyInA: [], onlyInB: [], confidence: 0.9, reason: "Both notes state the same claims.",
+      ...(schema?.properties?.relation ? { relation: "duplicate" } : {}),
+      ...(schema?.properties?.redundant ? { redundant: "A" } : {}),
+      ...(schema?.properties?.stale ? { stale: null } : {}),
+    }),
+  },
   { keys: ["missing"], reply: { missing: [] } },
 ];
 
