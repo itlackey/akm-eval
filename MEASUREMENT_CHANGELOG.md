@@ -19,8 +19,10 @@ Add a release entry here when a version changes.
 
 - No eval changed version. A summary writes every endpoint field (`engine`, the manifest's `engines` and
   `config.redacted`, longmemeval's `model_endpoint` and `judge_endpoint`) as `<MODEL_BASE_URL>`, not as a host, as
-  its `config` already did. The reports already published were rewritten the same way. A longmemeval `--resume` no
-  longer tells one host from another.
+  its `config` already did. The reports already published were rewritten the same way. The engines of longmemeval
+  and terminal-bench also record `endpoint_sha256`, a SHA-256 of the endpoint's scheme, host and port, so `--resume`
+  still refuses a run at another host. A run stored before it is compared by the host it holds, and one stored with
+  `<MODEL_BASE_URL>` and no digest cannot be resumed.
 
 - Retrieval collection version 0.3 supports optional per-query `searchArgs` in
   `queries.jsonl`. Collection and label pooling pass those existing CLI flags

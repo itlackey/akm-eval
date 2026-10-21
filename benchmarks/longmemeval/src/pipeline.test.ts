@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { commandLine, semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { sha256Files } from "../../../lib/provenance.ts";
+import { endpointDigest, sha256Files } from "../../../lib/provenance.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, type Question } from "./dataset.ts";
 import { assembleQuestion, commonWords, evidenceChecked, evidenceCoverage, evidenceKept, explodeQuestion, generate, shiftTextDates, shiftYears } from "./generate.ts";
@@ -295,8 +295,8 @@ describe("runCorpus", () => {
     // the model and the judge are the engines of the run, each with its endpoint hidden
     const host = "<MODEL_BASE_URL>";
     expect(stored.manifest.engines).toEqual({
-      model: { model: "fake-model", endpoint: host, temperature: 0, enableThinking: null, timeoutMs: 900_000 },
-      judge: { model: "fake-judge", endpoint: host, temperature: 0, enableThinking: null, timeoutMs: 900_000 },
+      model: { model: "fake-model", endpoint: host, endpoint_sha256: endpointDigest(`http://127.0.0.1:${server.port}`), temperature: 0, enableThinking: null, timeoutMs: 900_000 },
+      judge: { model: "fake-judge", endpoint: host, endpoint_sha256: endpointDigest(`http://127.0.0.1:${server.port}`), temperature: 0, enableThinking: null, timeoutMs: 900_000 },
     });
     // the corpus is recorded by its name, and the folder is not in the summary: the one of this test is in a temporary folder
     expect(stored).toMatchObject({ corpus: "public", corpus_folder: null, mode: null });
@@ -618,6 +618,61 @@ describe("runCorpus", () => {
       for (const leak of ["DUMMYSECRET", "deployment-B", "synthetic-pass-3f9a", "sk-synthetic-new", "127.0.0.1"]) expect(text).not.toContain(leak);
     }
     expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).manifest.engines.model).toMatchObject({ endpoint: hidden });
+  });
+
+  test("resume tells the endpoints by the digest of their host: the same one resumes, another is refused, and a manifest from before the digest is read as it was", async () => {
+    const { akm, folders } = setup();
+    const counter = { requests: 0 };
+    server = fakeEndpoint(counter);
+    const host = `http://127.0.0.1:${server.port}`;
+    const endpoint = { baseUrl: `${host}/v1`, apiKey: "", model: "fake-model" };
+    const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v" };
+    await quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1 }, context, folders));
+    const dir = join(folders.results, readdirSync(folders.results)[0]);
+    const summaryFile = join(dir, "summary.json");
+    const stored = readFileSync(summaryFile, "utf8");
+    const digest = endpointDigest(host);
+    expect(JSON.parse(stored).manifest.engines).toMatchObject({ model: { endpoint: "<MODEL_BASE_URL>", endpoint_sha256: digest }, judge: { endpoint: "<MODEL_BASE_URL>", endpoint_sha256: digest } });
+    expect(stored).not.toContain("127.0.0.1");
+    const resume = (c: typeof context) => quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1, resume: dir }, c, folders));
+    const restore = () => writeFileSync(summaryFile, stored);
+    const edit = (change: (engines: any) => void) => {
+      const summary = JSON.parse(stored);
+      change(summary.manifest.engines);
+      writeFileSync(summaryFile, JSON.stringify(summary));
+    };
+
+    // the same endpoint resumes, whatever path, login or slash it is written with
+    counter.requests = 0;
+    await resume({ ...context, model: { ...endpoint, baseUrl: `http://user:pw@127.0.0.1:${server.port}/other/v1/` } });
+    expect(counter.requests).toBe(0);
+    restore();
+
+    // another host is refused, for the model and for the judge
+    const other = fakeEndpoint();
+    try {
+      const elsewhere = `http://127.0.0.1:${other.port}/v1`;
+      await expect(resume({ ...context, model: { ...endpoint, baseUrl: elsewhere } })).rejects.toThrow("a different model endpoint");
+      await expect(resume({ ...context, judge: { ...endpoint, model: "fake-judge", baseUrl: elsewhere } })).rejects.toThrow("a different judge endpoint");
+      // and a manifest from before the digest, which holds the host, is compared by the host as before
+      edit((engines) => {
+        for (const role of ["model", "judge"]) engines[role] = { ...engines[role], endpoint: host, endpoint_sha256: undefined };
+      });
+      counter.requests = 0;
+      await resume(context);
+      expect(counter.requests).toBe(0);
+      restore();
+      edit((engines) => (engines.model = { ...engines.model, endpoint: host, endpoint_sha256: undefined }));
+      await expect(resume({ ...context, model: { ...endpoint, baseUrl: elsewhere } })).rejects.toThrow("a different model endpoint");
+    } finally {
+      other.stop(true);
+    }
+    restore();
+
+    // a manifest with <MODEL_BASE_URL> and no digest cannot say which host it was run at: refused, not skipped
+    edit((engines) => (engines.judge = { ...engines.judge, endpoint_sha256: undefined }));
+    await expect(resume(context)).rejects.toThrow("an unknown judge endpoint");
+    restore();
   });
 
   test("with no model it only measures what akm retrieves", async () => {

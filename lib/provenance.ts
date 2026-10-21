@@ -142,6 +142,26 @@ export function endpointHost(url: unknown): string | null {
   return endpointOrigin(url) === null && !(typeof url === "string" && url.startsWith(HIDDEN_HOST)) ? null : HIDDEN_HOST;
 }
 
+/**
+ * A digest of the endpoint's origin (scheme, host and port, in lower case; endpointOrigin), recorded beside <MODEL_BASE_URL> so that a
+ * resume can tell one host from another without a result naming it. Null for what is no URL. Anyone who can guess the host can check
+ * the digest, so it hides the host from a reader, not from one who knows where to look.
+ */
+export function endpointDigest(url: unknown): string | null {
+  const origin = endpointOrigin(url);
+  return origin === null ? null : sha256Text(origin);
+}
+
+/**
+ * Is the endpoint a stored run recorded the one `now` names (its endpointDigest)? "unknown" for a run stored with <MODEL_BASE_URL> and no
+ * digest, which cannot say. One stored before the host was hidden holds the host, and is compared by it.
+ */
+export function sameEndpoint(stored: { endpoint?: string | null; endpoint_sha256?: string | null } | undefined, now: string | null): "same" | "different" | "unknown" {
+  const digest = stored?.endpoint_sha256 ?? endpointDigest(stored?.endpoint);
+  if (digest != null) return digest === now ? "same" : "different";
+  return stored?.endpoint == null ? (now === null ? "same" : "different") : "unknown";
+}
+
 /** The settings of an engine that are the model's, not the akm config's: a summary's `engine` records them, and the manifest's `config.redacted` leaves them out. */
 export const ENGINE_KEYS = ["model", "endpoint", "temperature", "enableThinking", "timeoutMs"] as const;
 
@@ -165,6 +185,8 @@ export interface EngineSetting {
   model: string | null;
   /** <MODEL_BASE_URL> (endpointHost), or null when the engine names no endpoint. */
   endpoint: string | null;
+  /** endpointDigest of the endpoint, for the runs that resume (longmemeval, terminal-bench). Absent from a manifest written before it. */
+  endpoint_sha256?: string | null;
   temperature: number | null;
   enableThinking: boolean | null;
   timeoutMs: number | null;

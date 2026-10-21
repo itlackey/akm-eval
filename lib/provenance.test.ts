@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { engineConfig } from "./akm/akm.ts";
-import { canonical, credentialField, endpointHost, endpointIdentity, endpointOrigin, engineSettings, redactConfig, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
+import { canonical, credentialField, endpointHost, endpointDigest, endpointIdentity, endpointOrigin, engineSettings, redactConfig, sameEndpoint, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
 const files = (contents: Record<string, string>) => {
@@ -199,6 +199,30 @@ describe("endpointHost (#65)", () => {
     expect(endpointOrigin("https://user:pw@Gateway.Example:8443/k-DUMMYSECRET0123/v1?api_key=abc#f")).toBe("https://gateway.example:8443");
     expect(endpointOrigin("http://localhost:8080/v1/")).toBe("http://localhost:8080");
     for (const v of [undefined, null, "", "not a url", 7]) expect(endpointOrigin(v)).toBeNull();
+  });
+});
+
+describe("endpointDigest and sameEndpoint", () => {
+  const digest = endpointDigest("https://Gateway.Example:8443/v1");
+
+  test("the digest is of the origin only, so a path, a login, a query, a slash or the case of the host do not change it", () => {
+    expect(digest).toMatch(/^[0-9a-f]{64}$/);
+    for (const same of ["https://gateway.example:8443", "https://user:pw@gateway.example:8443/k-DUMMYSECRET/v1/?api_key=abc#f"]) expect(endpointDigest(same)).toBe(digest);
+    for (const other of ["https://gateway.example:8444", "http://gateway.example:8443", "https://gateway2.example:8443"]) expect(endpointDigest(other)).not.toBe(digest);
+    for (const v of [undefined, null, "", "not a url", "<MODEL_BASE_URL>", 7]) expect(endpointDigest(v)).toBeNull();
+  });
+
+  test("a stored digest is compared to the digest now, a stored host by its digest, and <MODEL_BASE_URL> alone is unknown", () => {
+    expect(sameEndpoint({ endpoint: "<MODEL_BASE_URL>", endpoint_sha256: digest }, digest)).toBe("same");
+    expect(sameEndpoint({ endpoint: "<MODEL_BASE_URL>", endpoint_sha256: digest }, endpointDigest("https://other.example"))).toBe("different");
+    expect(sameEndpoint({ endpoint: "https://gateway.example:8443" }, digest)).toBe("same"); // written before the host was hidden
+    expect(sameEndpoint({ endpoint: "https://gateway.example:8443" }, endpointDigest("https://other.example"))).toBe("different");
+    expect(sameEndpoint({ endpoint: "<MODEL_BASE_URL>" }, digest)).toBe("unknown");
+    expect(sameEndpoint({ endpoint: "<MODEL_BASE_URL>", endpoint_sha256: null }, digest)).toBe("unknown");
+    expect(sameEndpoint({ endpoint: null }, null)).toBe("same");
+    expect(sameEndpoint({ endpoint: null }, digest)).toBe("different");
+    expect(sameEndpoint(undefined, digest)).toBe("different");
+    expect(sameEndpoint(undefined, null)).toBe("same");
   });
 });
 

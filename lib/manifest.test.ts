@@ -168,6 +168,8 @@ describe("the manifest", () => {
 
     expect(mutate((x) => (x.engines.m.endpoint = "https://gateway.example/k-DUMMYSECRET0123/v1"))).toEqual(["the engine m needs a model and an endpoint that is <MODEL_BASE_URL> (or, in an older manifest, a host with no path)"]);
     expect(mutate((x) => (x.engines.m.endpoint = "https://user:pw@gateway.example"))).toHaveLength(1);
+    expect(mutate((x) => (x.engines.m.endpoint_sha256 = "a".repeat(64)))).toEqual([]);
+    expect(mutate((x) => (x.engines.m.endpoint_sha256 = "short"))).toEqual(["the engine m has an endpoint_sha256 that is not a digest"]);
     expect(mutate((x) => (x.completion.scored = ["a", "zzz"]))).toEqual(["completion.scored and completion.errored name a case that was not selected"]);
     expect(mutate((x) => (x.completion.errored = ["a"]))).toEqual(["a case is both scored and errored"]);
 

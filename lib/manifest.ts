@@ -215,6 +215,7 @@ export function manifestProblems(x: unknown): string[] {
   if (!isObject(x.engines)) out.push("engines is an object of engine settings");
   else {
     for (const [name, e] of Object.entries<any>(x.engines)) {
+      if (isObject(e) && e.endpoint_sha256 !== undefined && !nullable(isHex)(e.endpoint_sha256)) out.push(`the engine ${name} has an endpoint_sha256 that is not a digest`);
       if (!isObject(e) || !nullable(isString)(e.model) || !nullable(isHost)(e.endpoint)) out.push(`the engine ${name} needs a model and an endpoint that is <MODEL_BASE_URL> (or, in an older manifest, a host with no path)`);
     }
   }

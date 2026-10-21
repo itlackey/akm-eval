@@ -15,7 +15,7 @@ import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, resolveCorpora } from "../../../lib/corpus.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, evalSettingsOf, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
-import { type EngineSetting, canonical, endpointHost, sha256File } from "../../../lib/provenance.ts";
+import { type EngineSetting, canonical, endpointDigest, endpointHost, sameEndpoint, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { RUNNING, clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode } from "./akm.ts";
@@ -176,12 +176,12 @@ function printSideBySide(a: Summary, b: Summary): void {
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
 }
 
-/** The settings of the model or the judge as the manifest keeps them: the host of the endpoint, never the path. */
-const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, endpoint: endpointHost(e.baseUrl), temperature: temperatureOf(e), enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS, ...(e.chat ? { chat: e.chat } : {}) });
+/** The settings of the model or the judge as the manifest keeps them: the endpoint as <MODEL_BASE_URL> and a digest of its host, never the host or the path. */
+const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, endpoint: endpointHost(e.baseUrl), endpoint_sha256: endpointDigest(e.baseUrl), temperature: temperatureOf(e), enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS, ...(e.chat ? { chat: e.chat } : {}) });
 
 /**
  * What differs between the manifest of a stored run and the manifest of this run, each as a clause for a message: "a different akm build
- * (v1, now v2)". A resume is the same run only when none differs. An endpoint is told by its host.
+ * (v1, now v2)". A resume is the same run only when none differs. An endpoint is told by the digest of its host.
  */
 export function manifestDifferences(prior: RunManifest, now: RunManifest): string[] {
   const out: string[] = [];
@@ -204,9 +204,11 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
   for (const role of ["model", "judge"]) {
     const was = prior.engines[role];
     const is = now.engines[role];
-    const rest = (e: EngineSetting | undefined) => (e === undefined ? null : canonical({ ...e, model: null, endpoint: null }));
+    const rest = (e: EngineSetting | undefined) => (e === undefined ? null : canonical({ ...e, model: null, endpoint: null, endpoint_sha256: null }));
     note(role, was?.model, is?.model);
-    note(`${role} endpoint`, was?.endpoint, is?.endpoint);
+    const endpoint = sameEndpoint(was, is?.endpoint_sha256 ?? null);
+    if (endpoint === "different") out.push(`a different ${role} endpoint (not the host of the stored run)`);
+    else if (endpoint === "unknown") out.push(`an unknown ${role} endpoint (the stored run wrote <MODEL_BASE_URL> and no digest of its host, so it cannot be told from this one)`);
     note(`${role} settings`, rest(was), rest(is));
   }
   const ids = [...new Set([...Object.keys(prior.cases ?? {}), ...Object.keys(now.cases ?? {})])];
