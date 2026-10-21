@@ -70,8 +70,10 @@ describe("modelName", () => {
 describe("modelSettings", () => {
   const none = {}; // no models.json
 
-  /** What `f` returned, and the lines it printed with console.warn (stderr). */
-  const warned = <T>(f: () => T): { result: T; lines: string[] } => {
+  const NO_LIMITS = "WARNING: no context and output limits for ";
+
+  /** What `f` returned, and every line it printed with console.warn (stderr). */
+  const warnedAll = <T>(f: () => T): { result: T; lines: string[] } => {
     const lines: string[] = [];
     const warn = console.warn;
     console.warn = (...a: unknown[]) => void lines.push(a.join(" "));
@@ -81,6 +83,11 @@ describe("modelSettings", () => {
       console.warn = warn;
     }
   };
+  /** As warnedAll, without the missing-limits warning, which the tests of the key warning do not look at (see the limits test below). */
+  const warned = <T>(f: () => T): { result: T; lines: string[] } => {
+    const r = warnedAll(f);
+    return { ...r, lines: r.lines.filter((l) => !l.startsWith(NO_LIMITS)) };
+  };
   /** The line a run prints when the gateway at `host` has no key. */
   const said = (host: string): string => `model key is empty: sending "unused" to ${host} (a server that needs a key will fail every trial after its setup)`;
 
@@ -88,6 +95,22 @@ describe("modelSettings", () => {
     const r = modelSettings(undefined, { MODEL_NAME: "gpt-6-luna", MODEL_API_KEY: "k1", MODEL_BASE_URL: "http://192.0.2.5:8080/v1", PATH: "/bin" }, none);
     expect(r.model).toBe("openai/gpt-6-luna");
     expect(r.env).toEqual({ OPENAI_API_KEY: "k1", OPENAI_BASE_URL: "http://192.0.2.5:8080/v1", PATH: "/bin" });
+  });
+
+  test("warns loudly, and still runs, when the model has no limits in models.json; a model with limits runs in silence", () => {
+    const host = { MODEL_NAME: "qwen-35b", MODEL_API_KEY: "k", MODEL_BASE_URL: "http://192.0.2.5/v1" };
+    const bare = warnedAll(() => modelSettings(undefined, host, none)); // a worktree without models.json
+    expect(bare.result.modelLimits).toBeUndefined();
+    expect(bare.lines).toHaveLength(1);
+    expect(bare.lines[0]).toStartWith(`${NO_LIMITS}openai/qwen-35b`);
+    expect(bare.lines[0]).toContain("models.json");
+    expect(bare.lines[0]).toContain("not comparable");
+    const lineWithout = warnedAll(() => modelSettings("qwen-35b", host, { "qwen-35b": { base_url: "http://192.0.2.5/v1" } }));
+    expect(lineWithout.lines.filter((l) => l.startsWith(NO_LIMITS))).toHaveLength(1);
+    const limits = { context: 32768, output: 4096 };
+    const set = warnedAll(() => modelSettings("qwen-35b", { ...host, MODEL_API_KEY: "k" }, { "qwen-35b": { base_url: "http://192.0.2.5/v1", limits } }));
+    expect(set.lines.filter((l) => l.startsWith(NO_LIMITS))).toEqual([]);
+    expect(set.result.modelLimits).toEqual(limits);
   });
 
   test("takes the model from --model over MODEL_NAME, as the id the gateway knows", () => {
