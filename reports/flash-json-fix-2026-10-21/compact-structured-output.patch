@@ -1,0 +1,26 @@
+--- a/serve/structured.py
++++ b/serve/structured.py
+@@ -8,6 +8,7 @@
+ JSON object, and the server says so once.
+ """
+ import json
++import os
+ import threading
+ 
+ 
+@@ -136,6 +137,15 @@
+                  "Use every required field, correct types, and only allowed fields. "
+                  "Put all requested writing inside the appropriate JSON string fields.\nJSON Schema:\n" +
+                  json.dumps(schema, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
++    # Local opt-in: IQ2_XS can end JSON early or omit a required field.
++    # Guide generation; keep strict validation and never repair an answer.
++    if os.environ.get("STRATA_COMPACT_JSON") == "1":
++        directive += ("\nUse compact JSON without whitespace outside string values. "
++                      "Escape quotes, backslashes and control characters inside strings. "
++                      "Close all arrays and objects, including the final closing brace, before ending your response.")
++        if schema.get("required"):
++            directive += ("\nRequired top-level fields: " + ", ".join(json.dumps(k) for k in schema["required"]) +
++                          ". Include every one of these fields in the final JSON object; do not omit the last field.")
+     if with_tools:
+         # /v1/responses (#782): the schema is for the final answer; a turn that calls a tool is not an answer
+         directive += ("\nThis applies only to your final answer. To use a tool, call it as usual; the JSON object is "

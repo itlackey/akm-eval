@@ -31,6 +31,8 @@ export interface Case {
   grades: Record<string, number>;
   banned: string[];
   aliases?: Record<string, string>;
+  /** Extra CLI argv for search columns only, before the query separator. */
+  searchArgs?: string[];
 }
 
 // --- Scoring one query ------------------------------------------------------------------------------------------
@@ -163,6 +165,8 @@ export type Row = {
   id: string;
   kind: string;
   query: string;
+  /** The search-only argv actually requested for this case, when supplied. */
+  searchArgs?: string[];
   /** How many assets have grade 2 or 3 for this query. Zero for a non-task input. */
   n_relevant: number;
 } & Columns<SystemRow>;
@@ -170,7 +174,7 @@ export type Row = {
 /** The row of a query: each column's results with the grade of each, and, for a task query with a relevant asset, the scores of a call that did not fail. */
 export function makeRow(c: Case, raw: Raw): Row {
   const nRelevant = Object.values(c.grades).filter((g) => g >= RELEVANT).length;
-  const row: Record<string, unknown> = { id: c.id, kind: c.kind, query: c.query, n_relevant: nRelevant };
+  const row: Record<string, unknown> = { id: c.id, kind: c.kind, query: c.query, n_relevant: nRelevant, ...(c.searchArgs ? { searchArgs: c.searchArgs } : {}) };
   for (const sys of SYSTEMS) {
     const a = raw[sys];
     if (a === undefined) continue;

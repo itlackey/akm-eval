@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { MEASUREMENT } from "./measurement.ts";
 import { sha256Text } from "../../../lib/provenance.ts";
 import {
   JUDGE_SYSTEM_PROMPT,
@@ -44,6 +45,21 @@ describe("parseQueries", () => {
     expect(() => parseQueries(lines([{ id: "q1", query: "a", kind: "direct", expected: "a/x" }]))).toThrow('"expected" that is not a list of refs');
     expect(() => parseQueries(lines([{ id: "q1", query: "a", kind: "direct", expected: ["a/x", ""] }]))).toThrow('"expected" that is not a list of refs');
     expect(parseQueries(lines([{ id: "q1", query: "a", kind: "direct", expected: ["a/x"] }, { id: "q2", query: "b", kind: "no-answer", expected: [] }]))[0].expected).toEqual(["a/x"]);
+  });
+
+  test("preserves search argv when queries become scored cases", () => {
+    const searchArgs = ["--filter", "user=alice", "--belief", "current"];
+    const queries = parseQueries(lines([{ id: "scoped", query: "quartz", kind: "direct", searchArgs }]));
+    const c = casesOf(queries, [])[0]!;
+    expect(c.searchArgs).toEqual(searchArgs);
+    expect(MEASUREMENT.input(c)).toEqual({ query: "quartz", library: null, searchArgs });
+    const { searchArgs: _args, ...plain } = c;
+    expect(MEASUREMENT.input(plain)).toEqual({ query: "quartz", library: null });
+    const empty = { refs: [], seconds: 0 };
+    expect(makeRow(c, { search: empty, curate: empty }).searchArgs).toEqual(searchArgs);
+    for (const invalid of ["--filter user=alice", [3], null]) {
+      expect(() => parseQueries(lines([{ id: "bad", query: "quartz", kind: "direct", searchArgs: invalid }]))).toThrow('"searchArgs" that is not a list of strings');
+    }
   });
 
   test("a task is anything that is not chit-chat, a notification, a log line, a status update or marked nontask", () => {

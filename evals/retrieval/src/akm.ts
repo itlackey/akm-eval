@@ -133,8 +133,8 @@ export const CALL_TIMEOUT_MS = 120_000;
  * results and no searchMode searched nothing (curate's abstention), and is taken as empty. A keyword call that does not
  * say is taken as it comes.
  */
-export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = LIMIT, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS): Promise<Answer> {
-  const { stdout, stderr, code, ms, timedOut } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", "--", query], { timeoutMs }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0, timedOut: false }));
+export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = LIMIT, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS, searchArgs: readonly string[] = []): Promise<Answer> {
+  const { stdout, stderr, code, ms, timedOut } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", ...(system === "search" ? searchArgs : []), "--", query], { timeoutMs }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0, timedOut: false }));
   const seconds = () => Number((ms / 1000).toFixed(2));
   const failed = (error: string, extra: { timedOut?: true } = {}): Answer => ({ refs: [], assets: [], mode: null, seconds: seconds(), error, ...extra });
   if (timedOut) return failed(`akm ${system} timed out after ${+(timeoutMs / 1000).toFixed(1)}s`, { timedOut: true });
