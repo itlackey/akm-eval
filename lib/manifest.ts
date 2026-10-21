@@ -119,7 +119,7 @@ export interface RunManifest {
   config: { sha256?: string | null; redacted: unknown };
   /** What a run was set to do that is not in the akm config. */
   settings: { strategy: string | null; config_patch_sha256: string | null; timeout_ms: number | null; seed: string | null };
-  /** The settings of every engine the config uses. `endpoint` is the host only: never a path. */
+  /** The settings of every engine the config uses. `endpoint` is <MODEL_BASE_URL>, or null when the engine has none. */
   engines: Record<string, EngineSetting>;
   /** The eval's own settings that change what a run measures, such as consolidate's `embedder` or agent-ab's `attempts`. */
   eval_settings: Record<string, string | number | boolean | null>;
@@ -192,8 +192,8 @@ const isString = (x: unknown): x is string => typeof x === "string";
 const nullable = (check: (x: unknown) => boolean) => (x: unknown): boolean => x === null || check(x);
 const isHex = (x: unknown): boolean => isString(x) && HEX.test(x);
 const isIdList = (x: unknown): x is string[] => Array.isArray(x) && x.every(isString) && new Set(x).size === x.length;
-/** A host as endpointHost writes it: scheme, host and port, with nothing after them. A path in a summary is what #65 closes. */
-const isHost = (x: unknown): boolean => isString(x) && /^[a-z][a-z0-9+.-]*:\/\/[^/?#@\s]+$/i.test(x);
+/** An endpoint as endpointHost writes it: <MODEL_BASE_URL>. Manifests written before it hid the host hold the host: scheme, host and port, with nothing after them. A path in a summary is what #65 closes. */
+const isHost = (x: unknown): boolean => isString(x) && (x === "<MODEL_BASE_URL>" || /^[a-z][a-z0-9+.-]*:\/\/[^/?#@\s]+$/i.test(x));
 
 const isPart = (p: unknown): boolean => isObject(p) && isString(p.version) && p.version !== "" && (p.sha256 === undefined || isHex(p.sha256));
 
@@ -215,7 +215,7 @@ export function manifestProblems(x: unknown): string[] {
   if (!isObject(x.engines)) out.push("engines is an object of engine settings");
   else {
     for (const [name, e] of Object.entries<any>(x.engines)) {
-      if (!isObject(e) || !nullable(isString)(e.model) || !nullable(isHost)(e.endpoint)) out.push(`the engine ${name} needs a model and an endpoint that is a host with no path`);
+      if (!isObject(e) || !nullable(isString)(e.model) || !nullable(isHost)(e.endpoint)) out.push(`the engine ${name} needs a model and an endpoint that is <MODEL_BASE_URL> (or, in an older manifest, a host with no path)`);
     }
   }
   const evalSettings = x.eval_settings ?? x.treatment_hints; // treatment_hints: its name before 0.7.1

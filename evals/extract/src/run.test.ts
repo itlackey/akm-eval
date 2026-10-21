@@ -323,7 +323,7 @@ describe("what summary.json says about the run", () => {
     const summary = await quiet(() => runPublic(hidden, assetsFor(scenarios.slice(0, 1))));
     const stored = storedIn(summary.results_dir);
     expect(stored.config.engines.model.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
-    expect(stored.engine.endpoint).toBe("https://gateway.example.com:8443");
+    expect(stored.engine.endpoint).toBe("<MODEL_BASE_URL>");
     for (const secret of ["alice", "hunter2", "abc123"]) expect(JSON.stringify(stored)).not.toContain(secret);
     expect(JSON.stringify(stored.config)).not.toContain("https://");
     expect(JSON.stringify(samplesIn(summary.results_dir))).not.toContain("hunter2");

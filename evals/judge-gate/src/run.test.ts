@@ -421,7 +421,7 @@ describe("runCorpus", () => {
       }
       const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
       expect(stored.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
-      expect(stored.engine.endpoint).toBe("https://secret-host.example:8443"); // the host and port: never the path
+      expect(stored.engine.endpoint).toBe("<MODEL_BASE_URL>"); // not the host, port or path
     });
 
     test("the digest changes with the cases, and a rewrite records its seed", async () => {

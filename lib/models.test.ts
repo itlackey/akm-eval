@@ -31,7 +31,7 @@ describe("resolveModel", () => {
   test("a line of models.json goes to its own URL with the key its api_key_env names, and has no gateway id", () => {
     const m = resolveModel("model", "gpt-5.6-terra", { ...ENV, OPENAI_API_KEY: "oa-key" }, TERRA);
     expect(m).toEqual({ name: "gpt-5.6-terra", baseUrl: "https://api.openai.com/v1", apiKey: "oa-key", provider: "openai" });
-    expect(resolveModel("model", "local", {}, { local: { model: "Org/Model-1", base_url: "http://192.168.0.203:8102/v1" } })).toEqual({ name: "Org/Model-1", baseUrl: "http://192.168.0.203:8102/v1", apiKey: "", provider: "openai" });
+    expect(resolveModel("model", "local", {}, { local: { model: "Org/Model-1", base_url: "http://192.0.2.10:8102/v1" } })).toEqual({ name: "Org/Model-1", baseUrl: "http://192.0.2.10:8102/v1", apiKey: "", provider: "openai" });
   });
 
   test("says what to set when the id, the endpoint or an entry's key is missing, and never prints a key", () => {

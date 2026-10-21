@@ -30,7 +30,7 @@ import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, corpusUsage, resolv
 import { type Measurement, type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf } from "./manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "./models.ts";
 import { type Probe, probeModel } from "./probe.ts";
-import { type EngineSettings, endpointHost, engineSettings, redactConfig } from "./provenance.ts";
+import { type EngineSettings, endpointOrigin, engineSettings, redactConfig } from "./provenance.ts";
 import { repeatRuns } from "./repeat.ts";
 import { makeResultsDir } from "./results.ts";
 
@@ -302,7 +302,8 @@ export async function runCorpus<Case, Row extends Obj, Extra extends Obj>(
     ...spec.manifestExtras?.(ctx, corpus),
     cases: done.digests,
     akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
-    config,
+    config: hideEndpoint(config, ctx.baseUrl), // the manifest redacts it like the summary's config, so it names no endpoint either
+    engines: engineSettings(config).engines,
     settings: { strategy: spec.strategy === undefined ? null : ctx.overrides.strategy, config_patch_sha256: ctx.overrides.configPatch?.sha256 ?? null, timeout_ms: ctx.timeoutMs, seed: corpus.seed },
     completion: completionOf(spec.measurement, cases.map((c) => spec.measurement.caseId(c)), rows),
   });
@@ -319,7 +320,7 @@ export async function runCorpus<Case, Row extends Obj, Extra extends Obj>(
     ...build,
     limit: ctx.limit ?? null,
     ...(spec.strategy === undefined ? { config_patch: patch.config_patch } : patch),
-    config: redactConfig(hideEndpoint(config, ctx.baseUrl)), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host
+    config: redactConfig(hideEndpoint(config, ctx.baseUrl)), // the endpoint is written as <MODEL_BASE_URL>, and so is it in engine and manifest
     engine: engineSettings(config),
     assets_sha256: assetsDigest,
     seed: corpus.seed,
@@ -387,7 +388,7 @@ function banner<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Case, R
   const served = probe?.ok && probe.served !== null && probe.served !== ctx.model ? `, served as ${probe.served}` : "";
   const thinking = engine.enableThinking === true ? "on" : engine.enableThinking === false ? "off" : "unset";
   return [
-    `${spec.measurement.eval}: model ${ctx.model} at ${endpointHost(ctx.baseUrl) ?? "an endpoint that is not a URL"} (provider ${ctx.provider}${probe ? served : ", not probed"})`,
+    `${spec.measurement.eval}: model ${ctx.model} at ${endpointOrigin(ctx.baseUrl) ?? "an endpoint that is not a URL"} (provider ${ctx.provider}${probe ? served : ", not probed"})`,
     `  search ${(config.semanticSearchMode ?? "off") === "off" ? "keyword" : `semantic${typeof config.embedding?.localModel === "string" ? ` (${config.embedding.localModel})` : ""}`}`,
     `  temperature ${engine.temperature ?? "unset"}, thinking ${thinking}`,
     ...(spec.strategy === undefined ? [] : [`  strategy ${ctx.overrides.strategy}`]),

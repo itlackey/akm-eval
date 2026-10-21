@@ -669,7 +669,7 @@ describe("the cases of a run", () => {
     expect(s.git_commit).toBe("unknown"); // the temp folder is no checkout
     expect(s.wall_seconds).toBeNumber();
     expect(s.config.engines.fake).toMatchObject({ provider: "openai", model: "model-x", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY" }); // the endpoint is hidden, and the key is named, never held
-    expect(s.engine).toMatchObject({ engine: "fake", model: "model-x", endpoint: stub });
+    expect(s.engine).toMatchObject({ engine: "fake", model: "model-x", endpoint: "<MODEL_BASE_URL>" });
     expect(JSON.stringify(s)).not.toContain("model-secret");
     expect(s.manifest).toMatchObject({ eval: "fake", corpus: "public", collector: { version: "0.1" }, settings: { strategy: "other", config_patch_sha256: null, timeout_ms: 900_000, seed: null }, completion: { selected: ["ok0", "ok1"], scored: ["ok0", "ok1"], errored: [] } });
     expect(Object.keys(s.manifest.cases)).toEqual(["ok0", "ok1"]);

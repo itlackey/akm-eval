@@ -4,7 +4,7 @@
 
 import { completionsUrl } from "./akm/akm.ts";
 import { hideEndpoint } from "./cli.ts";
-import { endpointHost } from "./provenance.ts";
+import { endpointOrigin } from "./provenance.ts";
 
 /** What the endpoint did. `served` is the model name its reply carries, which a gateway may give other than the one asked for. */
 export type Probe = { ok: true; served: string | null } | { ok: false; reason: string };
@@ -27,7 +27,7 @@ const EXCERPT = 200;
  * and is asked again with that.
  */
 export async function probeModel({ baseUrl, apiKey, model }: ProbeTarget, { timeoutMs = 60_000 }: { timeoutMs?: number } = {}): Promise<Probe> {
-  const host = endpointHost(baseUrl);
+  const host = endpointOrigin(baseUrl);
   if (host === null) return { ok: false, reason: "the base URL is not a URL: it needs http:// or https:// and a host" };
   const safe = (text: string): string => {
     const hidden = hideEndpoint(text, baseUrl); // what a server says back can name the URL it was sent, and the URL can carry a key

@@ -17,6 +17,11 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- No eval changed version. A summary writes every endpoint field (`engine`, the manifest's `engines` and
+  `config.redacted`, longmemeval's `model_endpoint` and `judge_endpoint`) as `<MODEL_BASE_URL>`, not as a host, as
+  its `config` already did. The reports already published were rewritten the same way. A longmemeval `--resume` no
+  longer tells one host from another.
+
 - Retrieval collection version 0.3 supports optional per-query `searchArgs` in
   `queries.jsonl`. Collection and label pooling pass those existing CLI flags
   to keyword and semantic search only; curate and queries without this field

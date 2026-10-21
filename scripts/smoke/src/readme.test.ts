@@ -234,6 +234,12 @@ describe("the documents that point at each other", () => {
     for (const name of readdirSync(join(ROOT, "scripts"))) expect(README).toContain(`scripts/${name}`);
   });
 
+  test("reports/README.md links the README of every folder of reports/ that has one", () => {
+    const index = read("reports/README.md");
+    const unindexed = readdirSync(join(ROOT, "reports")).filter((name) => existsSync(join(ROOT, "reports", name, "README.md")) && !index.includes(`](${name}/README.md)`));
+    expect(unindexed).toEqual([]);
+  });
+
   test("COMPATIBILITY.md has a row for every eval and benchmark in the table, and no other", () => {
     const folders = read("COMPATIBILITY.md")
       .split("\n")

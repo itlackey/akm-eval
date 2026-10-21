@@ -476,7 +476,7 @@ describe("the manifest of a run", () => {
     const { summary } = stored((await quiet(() => runPublic(ctx, folders))).results_dir);
     expect(JSON.stringify(summary.manifest.config.redacted)).not.toContain("localhost");
     expect(summary.manifest.engines).toEqual(summary.engine.engines);
-    expect(summary.manifest.engines.judge).toEqual({ model: "the-model", endpoint: "http://localhost:1", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(summary.manifest.engines.judge).toEqual({ model: "the-model", endpoint: "<MODEL_BASE_URL>", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
     expect(JSON.stringify(summary)).not.toContain("localhost:1/v1"); // the summary's config names the endpoint as <MODEL_BASE_URL>
     expect(summary.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
   });

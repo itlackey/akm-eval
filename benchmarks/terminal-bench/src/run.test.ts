@@ -302,7 +302,7 @@ describe("summarize", () => {
     const job = { n_attempts: 1, agents: [{ name: "opencode", kwargs: { version: "1", api_key: "sk-job-key", opencode_config: { provider: { openai: { options: { apiKey: "sk-nested", baseURL: "$MODEL_BASE_URL", token: "$MODEL_TOKEN" } } } } } }] };
     summarize({ corpus: PUBLIC, label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0, endpoint: endpointHost("http://gateway.example.com:8080/v1"), job });
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://gateway.example.com:8080" });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "<MODEL_BASE_URL>" });
     expect(stored.config.agents[0].kwargs.api_key).toBe("<redacted>");
     expect(stored.config.agents[0].kwargs.opencode_config.provider.openai.options).toEqual({ apiKey: "<redacted>", baseURL: "$MODEL_BASE_URL", token: "$MODEL_TOKEN" }); // a $NAME reference holds no secret
     expect(JSON.stringify(stored.config)).not.toMatch(/sk-job-key|sk-nested/);
@@ -494,7 +494,7 @@ describe("runCorpus", () => {
     const stored = readJson(join(s.results_dir, "summary.json"));
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
     expect(stored.completion).toMatchObject({ expected: 4, completed: 4, failed: 0, missing: 0, control: { expected: 2 }, akm: { expected: 2 } });
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080" });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "<MODEL_BASE_URL>" });
     expect(stored.corpus_folder).toBeNull(); // a public run has no folder to record
     expect(stored.config).toEqual(stored.job);
     expect(JSON.stringify(stored)).not.toMatch(/sk-model-key|hunter2/);
@@ -520,7 +520,7 @@ describe("runCorpus", () => {
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(m).toMatchObject({ eval: "terminal-bench", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector });
     expect(m.akm).toEqual({ version: PINS.akm_cli, bin: `akm-cli@${PINS.akm_cli}`, build: null, build_fingerprint: stored.akm_build_fingerprint });
-    expect(m.engines).toEqual({ opencode: { model: "openai/x", endpoint: "http://192.0.2.5:8080", temperature: null, enableThinking: null, timeoutMs: null } });
+    expect(m.engines).toEqual({ opencode: { model: "openai/x", endpoint: "<MODEL_BASE_URL>", temperature: null, enableThinking: null, timeoutMs: null } });
     expect(m.eval_settings).toEqual({ attempts: 2 }); // a run of one attempt is not compared with a run of two
     expect(m.settings).toEqual({ strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null });
     expect(m.config.redacted.datasets).toBeUndefined(); // the tasks are the cases
@@ -594,7 +594,7 @@ describe("runCorpus", () => {
       summaries.push(readJson(join(s.results_dir, "summary.json")));
       for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(s.results_dir, file), "utf8"), file).not.toMatch(/DUMMYSECRET0123|OTHERDEPLOYMENT456/);
     }
-    expect(summaries.map((s) => s.engine.endpoint)).toEqual(["https://gateway.example", "https://gateway.example"]);
+    expect(summaries.map((s) => s.engine.endpoint)).toEqual(["<MODEL_BASE_URL>", "<MODEL_BASE_URL>"]);
     expect((summaries[0] as any).manifest.engines).toEqual((summaries[1] as any).manifest.engines);
   });
 
@@ -755,7 +755,7 @@ describe("runCorpus", () => {
     for (const leaked of ["JUDGE_API_KEY", "MODEL_API_KEY", "AKM_BIN", "ANTHROPIC_API_KEY"]) expect(seen[leaked]).toBeUndefined();
     expect(JSON.stringify(seen)).not.toContain("judge-secret");
     const stored = readFileSync(join(s.results_dir, "summary.json"), "utf8");
-    expect(JSON.parse(stored).engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5" });
+    expect(JSON.parse(stored).engine).toEqual({ model: "openai/x", endpoint: "<MODEL_BASE_URL>" });
     expect(stored).not.toMatch(/model-key|judge-secret/);
   });
 

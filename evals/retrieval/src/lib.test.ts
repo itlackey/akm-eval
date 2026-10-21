@@ -62,6 +62,13 @@ describe("parseQueries", () => {
     }
   });
 
+  test("rejects searchArgs that carry -- or a flag the runner sets itself, which would break the call or change what runs compare", () => {
+    for (const owned of ["--", "--limit", "--limit=5", "--format", "--format=text", "--detail", "--detail=full"]) {
+      expect(() => parseQueries(lines([{ id: "bad", query: "quartz", kind: "direct", searchArgs: ["--filter", "user=alice", owned, "3"] }]))).toThrow(`queries:1 has a "searchArgs" with ${JSON.stringify(owned)}, which the runner sets itself`);
+    }
+    expect(parseQueries(lines([{ id: "ok", query: "quartz", kind: "direct", searchArgs: ["--filter", "limit=5", "--limited"] }]))[0]!.searchArgs).toEqual(["--filter", "limit=5", "--limited"]);
+  });
+
   test("a task is anything that is not chit-chat, a notification, a log line, a status update or marked nontask", () => {
     const kinds = ["name", "direct", "paraphrase", "multi", "no-answer", "lesson", "multihop-declared"].map((kind) => isTask({ id: "x", query: "q", kind }));
     expect(kinds).toEqual([true, true, true, true, true, true, true]);

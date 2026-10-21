@@ -515,8 +515,8 @@ describe("the manifest of a run", () => {
     }
     const { manifest, engine, config: shown } = stored(summary);
     expect(shown.engines.model.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
-    expect(manifest.engines.model).toMatchObject({ model: "the-model", endpoint: "https://gateway.example" });
-    expect(engine.endpoint).toBe("https://gateway.example");
+    expect(manifest.engines.model).toMatchObject({ model: "the-model", endpoint: "<MODEL_BASE_URL>" });
+    expect(engine.endpoint).toBe("<MODEL_BASE_URL>");
     expect(manifestProblems(manifest)).toEqual([]);
   });
 

@@ -76,12 +76,12 @@ test("columns have unique IDs and projected settings cannot leak config credenti
   const run = presentRun({ path: "v/suite/run", sourceRevision: "revision", samples: [], summary: {
     eval: "reflect", corpus: "public", status: "complete", model: "model", strategy: "reflect-only",
     engine: { temperature: 0, apiKey: "SECRET" },
-    manifest: { engines: { model: { temperature: 0, enableThinking: false, endpoint: "https://ai.lab.fwdslsh.dev", apiKey: "SECRET" } } },
+    manifest: { engines: { model: { temperature: 0, enableThinking: false, endpoint: "https://gateway.example.com", apiKey: "SECRET" } } },
   } })!;
   expect(run.comparison.temperature).toBe(0);
   expect(run.comparison.thinking).toBe("Off");
   expect(JSON.stringify(run.comparison)).not.toContain("SECRET");
-  expect(JSON.stringify(run.comparison)).not.toContain("ai.lab");
+  expect(JSON.stringify(run.comparison)).not.toContain("gateway.example");
   const columns = [...coreColumns, ...scoreColumns([run])];
   expect(new Set(columns.map(column => column.key)).size).toBe(columns.length);
   expect(columns.every(column => column.label && column.description)).toBe(true);

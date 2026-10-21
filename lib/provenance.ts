@@ -1,5 +1,5 @@
 // What ties a run to its inputs, for the summary.json every eval writes: digests of the files it read, the config it ran
-// with (secrets redacted), the model it called and the host of its endpoint.
+// with (secrets redacted), the model it called and whether it named an endpoint (never the endpoint itself).
 
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -36,6 +36,9 @@ export const sha256Json = (x: unknown): string => sha256(canonical(x));
 
 const REDACTED = "<redacted>";
 
+/** What a result writes in place of a model endpoint's scheme, host and port: results get shared, and the host of a lab is not for sharing. */
+export const HIDDEN_HOST = "<MODEL_BASE_URL>";
+
 /** A `$NAME` or `${NAME}` reference to an environment variable, such as the "$MODEL_API_KEY" of an akm config. It holds no secret. */
 const VARIABLE = /^\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})$/;
 
@@ -54,7 +57,26 @@ export function redactConfig(config: any): any {
   if (Array.isArray(config)) return config.map(redactConfig);
   if (typeof config === "string") return redactUrl(config);
   if (typeof config !== "object" || config === null) return config;
-  return Object.fromEntries(Object.entries(config).map(([key, value]) => [key, credentialField(key) && !(typeof value === "string" && VARIABLE.test(value)) ? REDACTED : redactConfig(value)]));
+  return Object.fromEntries(
+    Object.entries(config).map(([key, value]) => {
+      if (credentialField(key) && !(typeof value === "string" && VARIABLE.test(value))) return [key, REDACTED];
+      const clean = redactConfig(value);
+      return [key, urlField(key) && typeof clean === "string" ? hideHost(clean) : clean];
+    }),
+  );
+}
+
+/** Does a name hold the URL of a model or embedding server: it ends in endpoint or base url, in any case (endpoint, model_endpoint, baseUrl, OPENAI_BASE_URL)? */
+const urlField = (name: string): boolean => /(?:endpoint|base_?url)$/i.test(name);
+
+/** A URL with its scheme, host and port written as <MODEL_BASE_URL>, so the path stays: `https://gw.example/v1/embeddings` is `<MODEL_BASE_URL>/v1/embeddings`. What is no URL stays. */
+function hideHost(value: string): string {
+  try {
+    if (!new URL(value).host) return value;
+  } catch {
+    return value;
+  }
+  return value.replace(/^\s*[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, HIDDEN_HOST);
 }
 
 const decoded = (text: string): string => {
@@ -109,10 +131,15 @@ export function endpointIdentity(url: unknown): string | null {
   return `${u.protocol}//${u.host}${path}${query}`;
 }
 
-/** What a summary records of an endpoint: the scheme, host and port, in lower case, and nothing after them. Null for what is no URL. */
-export function endpointHost(url: unknown): string | null {
+/** The scheme, host and port of an endpoint, in lower case, and nothing after them. For what is printed to the person who runs the eval, never for a result. Null for what is no URL. */
+export function endpointOrigin(url: unknown): string | null {
   const id = endpointIdentity(url);
   return id === null ? null : new URL(id).origin;
+}
+
+/** What a result records of an endpoint: <MODEL_BASE_URL>, as everywhere else a result names the endpoint. That includes an endpoint already written that way, in a config that was redacted. Null for what is no URL, and for no endpoint. */
+export function endpointHost(url: unknown): string | null {
+  return endpointOrigin(url) === null && !(typeof url === "string" && url.startsWith(HIDDEN_HOST)) ? null : HIDDEN_HOST;
 }
 
 /** The settings of an engine that are the model's, not the akm config's: a summary's `engine` records them, and the manifest's `config.redacted` leaves them out. */
@@ -136,7 +163,7 @@ export function withoutEngineSettings(x: unknown): unknown {
 export interface EngineSetting {
   chat?: import("./models.ts").ChatSettings;
   model: string | null;
-  /** The endpoint's host: scheme, host and port, with no path, no query and no credentials. */
+  /** <MODEL_BASE_URL> (endpointHost), or null when the engine names no endpoint. */
   endpoint: string | null;
   temperature: number | null;
   enableThinking: boolean | null;
