@@ -18,7 +18,13 @@ const isStrings = (x: unknown): x is string[] => Array.isArray(x) && x.every((s)
 
 /** What a case of each process must expect: the keys it needs, as the scorer reads them. */
 const EXPECTS: Record<Process, (e: Record<string, unknown>) => string[]> = {
-  "memory-inference": (e) => [...(isStrings(e.required) && e.required.length > 0 ? [] : ["required needs a list of terms"]), ...(e.forbidden === undefined || isStrings(e.forbidden) ? [] : ["forbidden needs a list of terms"]), ...(e.date === undefined || typeof e.date === "string" ? [] : ["date needs a string"])],
+  "memory-inference": (e) => [
+    ...(e.noChange === undefined || typeof e.noChange === "boolean" ? [] : ["noChange needs true or false"]),
+    // A note that needs no derived memory has nothing a child must keep; any other must keep something.
+    ...(e.noChange === true ? (e.required === undefined || isStrings(e.required) ? [] : ["required needs a list of terms"]) : isStrings(e.required) && e.required.length > 0 ? [] : ["required needs a list of terms"]),
+    ...(e.forbidden === undefined || isStrings(e.forbidden) ? [] : ["forbidden needs a list of terms"]),
+    ...(e.date === undefined || typeof e.date === "string" ? [] : ["date needs a string"]),
+  ],
   "remember-enrich": (e) => [...(e.observed_at === null || (typeof e.observed_at === "string" && e.observed_at !== "") ? [] : ["observed_at needs a date, or null for a memory that writes none"]), ...(isStrings(e.keywords) && e.keywords.length > 0 ? [] : ["keywords needs a list of terms"])],
   "schema-repair": (e) => [...(isStrings(e.keywords) && e.keywords.length > 0 ? [] : ["keywords needs a list of terms"]), ...(isStrings(e.trigger) && e.trigger.length > 0 ? [] : ["trigger needs a list of terms"])],
   "session-summary": (e) => [...(isStrings(e.required) && e.required.length > 0 ? [] : ["required needs a list of terms"]), ...(isStrings(e.topics) && e.topics.length > 0 ? [] : ["topics needs a list of terms"]), ...(e.forbidden === undefined || isStrings(e.forbidden) ? [] : ["forbidden needs a list of terms"])],

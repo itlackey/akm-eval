@@ -15,7 +15,7 @@ import { type Raw, type Row, errored, makeRow, rawOf, refOf, summarize } from ".
 export const MEASUREMENT: Measurement<LoadedCase, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.2",
+  version: "0.3",
   loadCases: (root, summary) => {
     // The public cases are in the repository. A custom corpus is in the folder the run recorded (`corpus_folder`), or that scripts/rescore was given with --cases.
     if (summary.corpus === "public") return loadCases(join(root, "evals", NAME, "assets"));

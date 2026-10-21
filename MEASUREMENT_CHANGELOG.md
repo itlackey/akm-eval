@@ -17,6 +17,27 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- bakeoff collection and scoring 0.3 (was 0.2). Memory inference can end in an explicit decision that a note needs no derived
+  memory (akm#1208, `memoryInference.noChange`), so a missing derived memory no longer ends every case as `unusable`:
+  - Collection: the collector reads `memoryInference.noChange` and `skippedNoFacts` from the improve result and keeps them in the
+    row as `inference`. A missing file alone is never a decision. A decision is `no-change` (outcome); a reply akm could not use is
+    `unusable`; a pass that did not run, a failed call, a timeout, and a missing derived memory that no counter explains are
+    `error`. An akm that does not report `noChange` (before akm#1208) gives `unusable` for a missing file, as before. The public
+    corpus gains 11 memory-inference cases (19 in all; 51 cases): 5 notes that need no child (tool tallies, checkpoint and
+    resume markers, short specific notes; `"noChange": true`) and 6 that need one (regex- and resvg-style substantive notes, a
+    request not yet done, a lookup that was not run, a historical limit, a negated qualification). The other four processes and
+    the first eight memory-inference cases are unchanged.
+  - Scoring: a `no-change` passes a case with `"noChange": true` and is a false abstention (`does not abstain` fails) on every
+    other case; a child for a `noChange` case fails (`decides no-change`). A no-change is a decision and no document: `valid_output`
+    keeps its denominator (every case that ran) and does not count it; `by_process.*.outcomes` gains `no-change`. The forbidden
+    terms of memory inference (`does not invent`) no longer fail on a mention that a negation within four words ("was not
+    rotated") rules out. Summaries of rescored 0.2 rows can change only through this last rule.
+  - Old runs: a 0.2 row that holds a derived memory or an error can be rescored. An unusable memory-inference row has no record of
+    whether akm decided no-change (a new akm under the 0.2 collector reported it as unusable), so `scripts/rescore` refuses the
+    run and names the field: collect those cases again. Saved 0.2 scores and 0.3 scores are not comparable totals: the 0.3 corpus has 11
+    more cases and a different kind of check.
+  - Not yet measured: scope and historical-date cases (akm#1209, akm#1210) wait for those fixes.
+
 - No eval changed version. A summary writes every endpoint field (`engine`, the manifest's `engines` and
   `config.redacted`, longmemeval's `model_endpoint` and `judge_endpoint`) as `<MODEL_BASE_URL>`, not as a host, as
   its `config` already did. The reports already published were rewritten the same way. The engines of longmemeval

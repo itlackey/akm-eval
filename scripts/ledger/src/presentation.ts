@@ -85,7 +85,7 @@ export function scores(summary: Record<string, unknown>): Score[] {
       break;
     case "bakeoff":
       ratio("Cases passed", "case_pass.rate", "case_pass.passed", "case_pass.n", "Cases with usable output that passed every required check.");
-      ratio("Usable outputs", "valid_output.rate", "valid_output.passed", "valid_output.n", "Cases producing output AKM could parse and use.");
+      ratio("Usable outputs", "valid_output.rate", "valid_output.passed", "valid_output.n", "Cases producing a document AKM could parse and use (a no-change decision is not a document).");
       metric("Checks passed", "checks.rate", "Mean share of checks passed per scored case.");
       break;
     case "judge-gate":

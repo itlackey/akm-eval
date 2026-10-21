@@ -38,12 +38,12 @@ const loadError = (dir: string): string => {
 };
 
 describe("the cases of a corpus folder", () => {
-  test("the public corpus is sound: 40 cases, in 5 processes, with the files they name", () => {
+  test("the public corpus is sound: 51 cases, in 5 processes, with the files they name", () => {
     const cases = loadCases(PUBLIC);
-    expect(cases).toHaveLength(40);
+    expect(cases).toHaveLength(51);
     expect(cases.every((c) => c.files.every((f) => (c.texts[f] ?? "").trim() !== ""))).toBe(true);
     const ids = cases.map((c) => c.id);
-    expect(new Set(ids).size).toBe(40);
+    expect(new Set(ids).size).toBe(51);
   });
 
   test("a folder with no cases.json, or one that is not a list of cases, is refused with the file named", () => {
@@ -71,6 +71,15 @@ describe("the cases of a corpus folder", () => {
     expect(loadError(corpus([{ id: "d", process: "consolidate-promote", files: ["memories/a.md", "memories/b.md"], expected: { promote: ["memories/c"], protected: ["memories/a"] } }], { "memories/a.md": "x", "memories/b.md": "y" }))).toBe(
       `<dir>/cases.json has 1 problem:\n  d: the promote ref "memories/c" is not the ref of one of its files`,
     );
+  });
+
+  test("a note that needs no derived memory expects no-change and needs no required term, and noChange must be a boolean", () => {
+    const files = { "memories/m.md": "text" };
+    expect(loadError(corpus([{ ...base, expected: { noChange: true } }], files))).toBe("");
+    expect(loadError(corpus([{ ...base, expected: { noChange: true, required: ["x"] } }], files))).toBe("");
+    expect(loadError(corpus([{ ...base, expected: { noChange: false } }], files))).toContain("a: required needs a list of terms");
+    expect(loadError(corpus([{ ...base, expected: { noChange: "yes" } }], files))).toContain("a: noChange needs true or false");
+    expect(loadError(corpus([{ ...base, expected: { noChange: true, required: "x" } }], files))).toContain("a: required needs a list of terms");
   });
 
   test("the problems of a corpus are counted and listed, one to a line", () => {

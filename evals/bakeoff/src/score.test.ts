@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { type Case, type Raw, containsTerm, makeRow, metrics, normalize, parseDocument, rawOf, refOf, summarize } from "./score.ts";
+import { join } from "node:path";
+import { loadCases } from "./inputs.ts";
+import { type Case, type Raw, assertsTerm, containsTerm, makeRow, metrics, normalize, parseDocument, rawOf, refOf, summarize } from "./score.ts";
 
 const c = (process: Case["process"], expected: Case["expected"], files: string[] = ["memories/m.md"]): Case => ({ id: "t", process, files, expected });
 const ok = (over: Partial<Raw> = {}): Raw => ({ outcome: "output", reason: "", seconds: 1, ...over });
@@ -61,6 +63,28 @@ describe("memory-inference", () => {
     expect(makeRow(inference, ok({ derived: derived({ content: "It dates from 2026-02-12." }) })).checks).toMatchObject({ "does not invent 2026-02-12": false });
   });
 
+  test("a forbidden term does not count when a negation right before it rules it out, and counts when anything else precedes it", () => {
+    const rotated = c("memory-inference", { required: ["deploy key"], forbidden: ["was rotated", "has been rotated"] });
+    const row = (content: string) => makeRow(rotated, ok({ derived: derived({ content: `The deploy key. ${content}` }) })).checks?.["does not invent was rotated"];
+    expect(row("The key was rotated yesterday.")).toBe(false);
+    expect(row("The key was not rotated.")).toBe(true);
+    expect(row("The key wasn't rotated.")).toBe(true);
+    expect(row("It was never rotated before the audit.")).toBe(true);
+    expect(row("Asked for, but it was not rotated.")).toBe(true);
+    expect(row("The key was not rotated. Later the key was rotated.")).toBe(false); // one asserted mention is enough
+    expect(row("Not rotated yet. The key was rotated in May.")).toBe(false); // a negation in the sentence before does not carry over
+    expect(row("The audit, which was not planned for May, found that the key was rotated.")).toBe(false); // too far back
+  });
+
+  test("assertsTerm reads one clause: a negation holds four words back, and not across a sentence or a field", () => {
+    expect(assertsTerm("the cap is 40", "cap is 40")).toBe(true);
+    expect(assertsTerm("the cap is not 40", "is 40")).toBe(false);
+    expect(assertsTerm("title ; the cap is 40", "cap is 40")).toBe(true);
+    expect(assertsTerm("no cap ; the cap is 40", "cap is 40")).toBe(true);
+    expect(assertsTerm("", "x")).toBe(false);
+    expect(assertsTerm("x", "")).toBe(false);
+  });
+
   test("an unusable reply is never correct, an error has no verdict, and neither keeps an output", () => {
     expect(makeRow(inference, { outcome: "unusable", reason: "no derived memory", seconds: 2 })).toMatchObject({ structure: false, correct: false, outcome: "unusable" });
     const err = makeRow(inference, { outcome: "error", reason: "boom", seconds: 2, timedOut: true });
@@ -68,6 +92,86 @@ describe("memory-inference", () => {
     expect("derived" in err).toBe(false);
     // output an error row carried is not kept or scored
     expect(makeRow(inference, { outcome: "unusable", reason: "", seconds: 1, derived: derived() }).correct).toBe(false);
+  });
+});
+
+const PUBLIC = loadCases(join(import.meta.dir, "..", "assets"));
+const publicCase = (id: string) => PUBLIC.find((x) => x.id === id) as Case;
+const noChange = (over: Partial<Raw> = {}): Raw => ({ outcome: "no-change", reason: "", seconds: 1, inference: { noChange: 1, skippedNoFacts: 0 }, ...over });
+
+describe("memory-inference: an explicit no-change decision", () => {
+  const restraint = publicCase("infer-tool-tally-noise");
+  const positive = publicCase("infer-regex-size-limit");
+  const good = (cs: Case) => derived({ title: "Notes", content: [...(cs.expected.required ?? []), cs.expected.date ?? ""].join(". ") });
+
+  test("a no-change on a note that needs no child is correct: a decision with no document, and every check held", () => {
+    expect(makeRow(restraint, noChange())).toMatchObject({ outcome: "no-change", structure: null, correct: true, checks: { "decides no-change": true } });
+    expect(metrics([makeRow(restraint, noChange())])).toMatchObject({ valid_output: { n: 1, passed: 0, rate: 0 }, case_pass: { n: 1, passed: 1, rate: 1 }, checks: { n: 1, rate: 1 }, by_process: { "memory-inference": { outcomes: { "no-change": 1 } } } });
+  });
+
+  test("a child for a note that needs none is unjustified and fails, however well formed", () => {
+    const row = makeRow(restraint, ok({ derived: derived(), inference: { noChange: 0, skippedNoFacts: 0, writtenFacts: 1 } }));
+    expect(row).toMatchObject({ outcome: "output", structure: true, correct: false, checks: { "decides no-change": false } });
+  });
+
+  test("an unusable reply or an error on a note that needs no child is not a no-change", () => {
+    expect(makeRow(restraint, { outcome: "unusable", reason: "r", seconds: 1, inference: { noChange: 0, skippedNoFacts: 1 } })).toMatchObject({ correct: false, checks: { "decides no-change": false } });
+    expect(makeRow(restraint, { outcome: "error", reason: "r", seconds: 1 })).toMatchObject({ correct: null, checks: null });
+  });
+
+  test("a no-change on a note that needs a child is a false abstention: it fails, and holds none of what the case expects", () => {
+    const row = makeRow(positive, noChange());
+    expect(row).toMatchObject({ outcome: "no-change", structure: null, correct: false });
+    expect(row.checks).toEqual({ "does not abstain": false, "retains size_limit": false, "retains compiledtoobig": false, "retains fancy-regex": false, "retains rules/legacy": false, "does not invent 2026-05-12": true });
+    expect(metrics([row]).by_process["memory-inference"]).toMatchObject({ passed: 0, failed: { "does not abstain": 1, "retains size_limit": 1 } });
+  });
+
+  test("an always-abstain treatment passes only the cases that expect no-change, and a child on every case passes only the ones that expect a child", () => {
+    const memory = PUBLIC.filter((x) => x.process === "memory-inference");
+    const restraintCases = memory.filter((x) => x.expected.noChange);
+    expect(restraintCases.length).toBeGreaterThanOrEqual(5);
+    expect(memory.length - restraintCases.length).toBeGreaterThanOrEqual(8); // the positive controls, which an always-abstain run fails
+    const abstain = metrics(memory.map((x) => makeRow(x, noChange()))).by_process["memory-inference"];
+    expect(abstain).toMatchObject({ n: memory.length, passed: restraintCases.length, valid_output: 0 });
+    expect(abstain?.failed["does not abstain"]).toBe(memory.length - restraintCases.length);
+    const alwaysChild = metrics(memory.map((x) => makeRow(x, ok({ derived: good(x), inference: { noChange: 0 } })))).by_process["memory-inference"];
+    expect(alwaysChild?.failed["decides no-change"]).toBe(restraintCases.length);
+    expect(alwaysChild?.passed).toBeLessThanOrEqual(memory.length - restraintCases.length); // restraint cases never pass with a child
+    // the right treatment passes both kinds
+    const right = metrics(memory.map((x) => makeRow(x, x.expected.noChange ? noChange() : ok({ derived: good(x), inference: { noChange: 0 } })))).by_process["memory-inference"];
+    expect(right).toMatchObject({ n: memory.length, passed: memory.length });
+  });
+
+  test("a request does not become completed work, a lookup does not become a run, and a historical value does not become the current one", () => {
+    const request = publicCase("infer-request-not-completed");
+    const lookup = publicCase("infer-reference-not-executed");
+    const history = publicCase("infer-historical-limit");
+    const rowOf = (cs: Case, content: string) => makeRow(cs, ok({ derived: derived({ title: "Note", description: "A note.", content: `${(cs.expected.required ?? []).join(", ")}. ${cs.expected.date ?? ""} ${content}` }) }));
+    // the safe summaries pass, with their negations
+    expect(rowOf(request, "Priya asked for the rotation, but the deploy key has not been rotated.").correct).toBe(true);
+    expect(rowOf(lookup, "The runbook was read; nothing was run.").correct).toBe(true);
+    expect(rowOf(history, "The limit was 25 MB until 2026-03-01 and is now 100 MB.").correct).toBe(true);
+    // the unsafe ones fail, though they keep every required term and the date
+    expect(rowOf(request, "The staging deploy key was rotated before the audit.")).toMatchObject({ correct: false, checks: { "does not invent was rotated": false } });
+    expect(rowOf(lookup, "The release-rollback runbook was executed and the image rolled back.").correct).toBe(false);
+    const unsafe = rowOf(history, "The upload limit is 25 MB.");
+    expect(unsafe.checks).toMatchObject({ "retains explicit date": true, "retains 100 mb": true, "does not invent is 25 mb": false });
+    expect(unsafe.correct).toBe(false);
+  });
+
+  test("a qualification survives: 'not enabled for the EU' is safe and 'enabled for the EU' is not", () => {
+    const region = publicCase("infer-negated-region");
+    const rowOf = (content: string) => makeRow(region, ok({ derived: derived({ title: "Export", description: "Nightly export.", content: `eu data-residency. ${content}` }) }));
+    expect(rowOf("The nightly export is not enabled for the EU region.").correct).toBe(true);
+    expect(rowOf("The nightly export is enabled for the EU region.").correct).toBe(false);
+  });
+
+  test("the metrics keep their denominators: a no-change is scored and in the count, and is not a document", () => {
+    const rows = [makeRow(restraint, noChange()), makeRow(positive, ok({ derived: good(positive), inference: { noChange: 0 } })), makeRow(positive, noChange()), makeRow(positive, { outcome: "error", reason: "x", seconds: 1 })];
+    const m = metrics(rows);
+    expect(m.valid_output).toEqual({ n: 3, passed: 1, rate: 0.3333 });
+    expect(m.case_pass).toEqual({ n: 3, passed: 2, rate: 0.6667 });
+    expect(m.by_process["memory-inference"]?.outcomes).toEqual({ output: 1, "no-change": 2, unusable: 0, error: 1 });
   });
 });
 
@@ -206,6 +310,27 @@ describe("scoring a stored row again", () => {
     expect(rawOf({ process: "consolidate-promote", outcome: "output", reason: "", seconds: 1, planned: [] })).toHaveProperty("raw");
     expect(rawOf({ outcome: "error", seconds: 1 })).toEqual({ missing: ["error"] });
     expect(rawOf({ outcome: "maybe" })).toEqual({ missing: ["outcome", "seconds", "reason"] });
-    expect(rawOf({ process: "memory-inference", outcome: "unusable", reason: "r", seconds: 1 })).toHaveProperty("raw"); // nothing was made, so nothing is missing
+    expect(rawOf({ process: "remember-enrich", outcome: "unusable", reason: "r", seconds: 1 })).toHaveProperty("raw"); // nothing was made, so nothing is missing
+  });
+
+  test("a memory-inference row with no derived memory needs akm's counters: a missing file is never read as a decision", () => {
+    const old = { process: "memory-inference", outcome: "unusable", reason: "akm wrote no derived memory", seconds: 1 };
+    const refused = rawOf(old);
+    expect(refused).toEqual({ missing: [expect.stringMatching(/^inference .*recollect the case with bakeoff 0\.3/)] });
+    expect(rawOf({ ...old, inference: { noChange: 0, skippedNoFacts: 1 } })).toHaveProperty("raw");
+    expect(rawOf({ ...old, outcome: "no-change" })).toHaveProperty("missing");
+    expect(rawOf({ ...old, outcome: "no-change", inference: { noChange: 0 } })).toHaveProperty("missing"); // a no-change that akm did not count
+    expect(rawOf({ ...old, outcome: "no-change", inference: { noChange: 1 } })).toHaveProperty("raw");
+    // an old row that has an output or an error needs nothing new
+    expect(rawOf({ process: "memory-inference", outcome: "output", reason: "", seconds: 1, derived: "x" })).toHaveProperty("raw");
+    expect(rawOf({ process: "memory-inference", outcome: "error", error: "boom", seconds: 1 })).toHaveProperty("raw");
+  });
+
+  test("a no-change row gives back its counters, and the same row when it is scored again", () => {
+    const restraint = publicCase("infer-tool-tally-noise");
+    const row = makeRow(restraint, noChange({ served: "m1" }));
+    const read = rawOf(JSON.parse(JSON.stringify(row)));
+    expect("raw" in read && makeRow(restraint, read.raw)).toEqual(row);
+    expect(row.inference).toEqual({ noChange: 1, skippedNoFacts: 0 });
   });
 });

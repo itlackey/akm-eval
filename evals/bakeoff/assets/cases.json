@@ -366,6 +366,176 @@
     }
   },
   {
+    "id": "infer-tool-tally-noise",
+    "process": "memory-inference",
+    "files": [
+      "memories/session-tool-tally.md"
+    ],
+    "expected": {
+      "noChange": true
+    }
+  },
+  {
+    "id": "infer-checkpoint-progress-noise",
+    "process": "memory-inference",
+    "files": [
+      "memories/export-checkpoint-progress.md"
+    ],
+    "expected": {
+      "noChange": true
+    }
+  },
+  {
+    "id": "infer-context-resume-noise",
+    "process": "memory-inference",
+    "files": [
+      "memories/context-resume-marker.md"
+    ],
+    "expected": {
+      "noChange": true
+    }
+  },
+  {
+    "id": "infer-short-log-directory",
+    "process": "memory-inference",
+    "files": [
+      "memories/log-directory.md"
+    ],
+    "expected": {
+      "noChange": true
+    }
+  },
+  {
+    "id": "infer-short-format-command",
+    "process": "memory-inference",
+    "files": [
+      "memories/format-before-push.md"
+    ],
+    "expected": {
+      "noChange": true
+    }
+  },
+  {
+    "id": "infer-regex-size-limit",
+    "process": "memory-inference",
+    "files": [
+      "memories/regex-size-limit.md"
+    ],
+    "expected": {
+      "required": [
+        "size_limit",
+        "compiledtoobig",
+        "fancy-regex",
+        "rules/legacy"
+      ],
+      "forbidden": [
+        "2026-05-12"
+      ]
+    }
+  },
+  {
+    "id": "infer-resvg-thumbnails",
+    "process": "memory-inference",
+    "files": [
+      "memories/resvg-thumbnails.md"
+    ],
+    "expected": {
+      "required": [
+        "resvg",
+        "--skip-system-fonts",
+        "assets/fonts",
+        "192"
+      ],
+      "forbidden": [
+        "2026-06-09"
+      ]
+    }
+  },
+  {
+    "id": "infer-request-not-completed",
+    "process": "memory-inference",
+    "files": [
+      "memories/deploy-key-request.md"
+    ],
+    "expected": {
+      "required": [
+        "deploy key",
+        "maintenance window"
+      ],
+      "forbidden": [
+        "has been rotated",
+        "was rotated",
+        "have been rotated",
+        "is rotated",
+        "rotation is complete",
+        "rotation completed",
+        "2026-03-18"
+      ]
+    }
+  },
+  {
+    "id": "infer-reference-not-executed",
+    "process": "memory-inference",
+    "files": [
+      "memories/rollback-runbook-lookup.md"
+    ],
+    "expected": {
+      "required": [
+        "release-rollback",
+        "snapshot"
+      ],
+      "forbidden": [
+        "was executed",
+        "was run",
+        "ran the",
+        "rolled back",
+        "executed the",
+        "was performed",
+        "2026-04-09"
+      ]
+    }
+  },
+  {
+    "id": "infer-historical-limit",
+    "process": "memory-inference",
+    "files": [
+      "memories/upload-limit-change.md"
+    ],
+    "expected": {
+      "required": [
+        "100 mb",
+        "upload_max_mb"
+      ],
+      "date": "2026-03-01",
+      "forbidden": [
+        "is 25 mb",
+        "currently 25",
+        "now 25",
+        "limit is 25",
+        "2026-05-01"
+      ]
+    }
+  },
+  {
+    "id": "infer-negated-region",
+    "process": "memory-inference",
+    "files": [
+      "memories/export-region-exclusion.md"
+    ],
+    "expected": {
+      "required": [
+        "eu",
+        "data-residency"
+      ],
+      "forbidden": [
+        "enabled for the eu",
+        "enabled in the eu",
+        "enable it for the eu",
+        "2026-07-11"
+      ]
+    }
+  },
+  {
     "id": "enrich-ios-certificate-memory",
     "process": "remember-enrich",
     "files": [

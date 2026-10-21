@@ -206,6 +206,48 @@ describe("runCorpus", () => {
     expect(summary.manifest.completion).toMatchObject({ scored: ["infer-ok", "enrich-ok", "summary-ok", "promote-ok"], errored: ["repair-ok"] });
   });
 
+  test("a no-change akm counted is an outcome of its own: correct where the case expects it, a false abstention where it does not, and no document", async () => {
+    const restraint: Spec = { id: "infer-quiet", process: "memory-inference", files: { "memories/retry-backoff.md": MEMORY }, expected: { noChange: true } };
+    const plan = { infer: { "retry-backoff": { noChange: true } } };
+    const quietRun = setup([restraint], plan);
+    const kept = await quiet(() => runCorpus(quietRun.corpus, quietRun.ctx, quietRun.results));
+    const [row] = samplesOf(kept);
+    expect(row).toMatchObject({ outcome: "no-change", structure: null, correct: true, checks: { "decides no-change": true }, served: "served-model", inference: { noChange: 1, skippedNoFacts: 0, writtenFacts: 0 } });
+    expect(row.derived).toBeUndefined();
+    expect(row.reason).toBe("");
+    expect(kept).toMatchObject({ n_scored: 1, n_errored: 0 });
+    expect(kept.metrics).toMatchObject({ valid_output: { n: 1, passed: 0 }, case_pass: { n: 1, passed: 1 } });
+    expect(kept.metrics.by_process["memory-inference"]?.outcomes).toEqual({ output: 0, "no-change": 1, unusable: 0, error: 0 });
+    expect("raw" in (MEASUREMENT.rawOf(row) as object)).toBe(true);
+    const abstained = setup([SPECS[0] as Spec], plan); // the same decision on a note that needs a child
+    const wrong = await quiet(() => runCorpus(abstained.corpus, abstained.ctx, abstained.results));
+    expect(samplesOf(wrong)[0]).toMatchObject({ outcome: "no-change", correct: false, checks: { "does not abstain": false } });
+  });
+
+  test("no derived memory is never a no-change by itself: akm's own count decides, and anything it does not explain is an error", async () => {
+    const restraint: Spec = { id: "infer-quiet", process: "memory-inference", files: { "memories/retry-backoff.md": MEMORY }, expected: { noChange: true } };
+    const run = async (plan: object) => {
+      const s = setup([restraint], plan);
+      return samplesOf(await quiet(() => runCorpus(s.corpus, s.ctx, s.results)))[0];
+    };
+    // a reply akm could not use is counted as skipped, not as a decision
+    expect(await run({ infer: { "retry-backoff": { skip: true } } })).toMatchObject({ outcome: "unusable", correct: false, inference: { noChange: 0, skippedNoFacts: 1 } });
+    // a failed call is an error, even with the counters of a skipped reply
+    expect(await run({ infer: { "retry-backoff": { provider: true } } })).toMatchObject({ outcome: "error", correct: null });
+    // the pass did not run at all (disabled): an error, not a decision
+    const disabled = await run({ noInference: true, infer: { "retry-backoff": { noChange: true } } });
+    expect(disabled).toMatchObject({ outcome: "error", correct: null });
+    expect(disabled.error).toContain("improve ran no memory inference");
+    // nothing counted and nothing written: the child went missing unexplained
+    const missing = await run({ infer: { "retry-backoff": { nothing: true } } });
+    expect(missing).toMatchObject({ outcome: "error", correct: null });
+    expect(missing.error).toContain("its counters do not explain it");
+    // an akm from before akm#1208 cannot make the decision, so a missing file there is unusable, as it was
+    const legacy = await run({ legacyInference: true, infer: { "retry-backoff": { skip: true } } });
+    expect(legacy).toMatchObject({ outcome: "unusable", correct: false });
+    expect(legacy.reason).toContain("predates akm#1208");
+  });
+
   test("a call that failed is an error, and a skipped session is one", async () => {
     const plan = {
       ...PLAN,
@@ -308,7 +350,7 @@ describe("selection", () => {
 describe("the public corpus", () => {
   test("loads, and every case has the files and the refs it names", () => {
     const cases = loadCases(join(import.meta.dir, "..", "assets"));
-    expect(cases.length).toBe(40);
+    expect(cases.length).toBe(51);
     expect(new Set(cases.map((c) => c.process))).toEqual(new Set(["memory-inference", "remember-enrich", "schema-repair", "session-summary", "consolidate-promote"]));
   });
 });
