@@ -193,14 +193,14 @@
   "engine": {
     "engine": "bakeoff",
     "model": "fast/qwen3.6-35b-a3b",
-    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "endpoint": "<MODEL_BASE_URL>",
     "temperature": 0,
     "enableThinking": false,
     "timeoutMs": 600000,
     "engines": {
       "bakeoff": {
         "model": "fast/qwen3.6-35b-a3b",
-        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "endpoint": "<MODEL_BASE_URL>",
         "temperature": 0,
         "enableThinking": false,
         "timeoutMs": 600000
@@ -682,7 +682,7 @@
         },
         "embedding": {
           "provider": "openai",
-          "endpoint": "https://ai.lab.fwdslsh.dev/v1/embeddings",
+          "endpoint": "<MODEL_BASE_URL>/embeddings",
           "model": "embed/qwen3-embedding-0.6b",
           "apiKey": "$LAB_API_KEY",
           "dimension": 1024,
@@ -700,7 +700,7 @@
     "engines": {
       "bakeoff": {
         "model": "fast/qwen3.6-35b-a3b",
-        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "endpoint": "<MODEL_BASE_URL>",
         "temperature": 0,
         "enableThinking": false,
         "timeoutMs": 600000

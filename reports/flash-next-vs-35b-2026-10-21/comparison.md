@@ -117,4 +117,4 @@ Changed settings:
 | Setting | A | B |
 |---|---|---|
 | model | fast/qwen3.6-35b-a3b | splinter-b70/qwen3.8-flash-next-iq2_xs |
-| engines | {"bakeoff":{"model":"fast/qwen3.6-35b-a3b","endpoint":"https://ai.lab.fwdslsh.dev","temperature":0,"enableThinking":false,"timeoutMs":600000}} | {"bakeoff":{"model":"splinter-b70/qwen3.8-flash-next-iq2_xs","endpoint":"https://ai.lab.fwdslsh.dev","temperature":0,"enableThinking":false,"timeoutMs":600000}} |
+| engines | {"bakeoff":{"model":"fast/qwen3.6-35b-a3b","endpoint":"<MODEL_BASE_URL>","temperature":0,"enableThinking":false,"timeoutMs":600000}} | {"bakeoff":{"model":"splinter-b70/qwen3.8-flash-next-iq2_xs","endpoint":"<MODEL_BASE_URL>","temperature":0,"enableThinking":false,"timeoutMs":600000}} |

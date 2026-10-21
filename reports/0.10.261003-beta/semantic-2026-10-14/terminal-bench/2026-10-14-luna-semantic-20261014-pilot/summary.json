@@ -111,7 +111,7 @@
   "assets_sha256": "9ee744bf9dbbf582540cfb86180b03869b42450639ba792843f36a8c058a17de",
   "engine": {
     "model": "openai/eval-luna/gpt-6-luna",
-    "endpoint": "https://ai.lab.fwdslsh.dev"
+    "endpoint": "<MODEL_BASE_URL>"
   },
   "config": {
     "n_attempts": 1,
@@ -491,7 +491,7 @@
     "engines": {
       "opencode": {
         "model": "openai/eval-luna/gpt-6-luna",
-        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "endpoint": "<MODEL_BASE_URL>",
         "temperature": null,
         "enableThinking": null,
         "timeoutMs": null

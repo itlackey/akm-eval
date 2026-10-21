@@ -33,7 +33,7 @@ Results go to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (`priva
 
 `--cases DIR` runs a labelled set of yours. The folder holds:
 
-- `queries.jsonl` and `qrels.jsonl`, in the format of `assets/README.md`. A query whose `kind` is `nontask` (or `chitchat`, `notification`, `log`, `status`) should get no result; every other query needs grades.
+- `queries.jsonl` and `qrels.jsonl`, in the format of `assets/README.md`. A query whose `kind` is `nontask` (or `chitchat`, `notification`, `log`, `status`) should get no result; every other query needs grades. A query can carry `searchArgs`, extra `akm search` flags; akm ignores a flag it does not know, so read the unknown-flag warning in `assets/README.md` first.
 - `library/`: the folder akm indexes, or a link to it. The refs in `qrels.jsonl` are the refs `akm search` prints for it.
 - `bundles.json`, only when `library/` is a folder of bundles: `{ "notes": "akm", "site": "website-snapshot" }`, each bundle's folder and adapter. Each bundle is indexed in place, read only, and its refs are `<folder>//<path>`.
 

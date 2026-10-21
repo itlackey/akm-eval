@@ -239,7 +239,7 @@ describe("runCorpus", () => {
     expect(stored.config).toEqual(hideEndpoint(JSON.parse(JSON.stringify(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey))), ctx.baseUrl)); // the key is the reference "$MODEL_API_KEY", which holds no secret, and the endpoint is <MODEL_BASE_URL>
     const settings = { model: "the-model", endpoint: endpointHost("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 };
     expect(stored.engine).toEqual({ engine: "reflect", ...settings, engines: { reflect: settings } });
-    expect(settings.endpoint).toBe("http://localhost:9"); // the host: never the path
+    expect(settings.endpoint).toBe("<MODEL_BASE_URL>"); // not the host or the path
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
 
@@ -447,7 +447,7 @@ describe("the manifest of a run", () => {
     expect(manifest.config.redacted).toEqual(withoutEngineSettings(config));
     expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
     expect(manifest.engines).toEqual(engine.engines);
-    expect(manifest.engines.reflect).toEqual({ model: "the-model", endpoint: "http://localhost:9", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(manifest.engines.reflect).toEqual({ model: "the-model", endpoint: "<MODEL_BASE_URL>", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
   });
 
   test("a path segment of the model URL is in no summary and no row, only its host and the digest (#65)", async () => {
@@ -460,8 +460,8 @@ describe("the manifest of a run", () => {
       expect(text).not.toContain("k-DUMMY");
     }
     const { manifest, engine } = stored(summary);
-    expect(manifest.engines.reflect).toMatchObject({ endpoint: "https://gateway.example" });
-    expect(engine.endpoint).toBe("https://gateway.example");
+    expect(manifest.engines.reflect).toMatchObject({ endpoint: "<MODEL_BASE_URL>" });
+    expect(engine.endpoint).toBe("<MODEL_BASE_URL>");
     // two deployments on one host are one endpoint
     const other = stored(await quiet(() => runPublic({ ...ctx, baseUrl: "https://gateway.example/deployment-B/v1" }, setup(cases.slice(0, 1), plan).folders)));
     expect(other.manifest.engines.reflect).toEqual(manifest.engines.reflect);

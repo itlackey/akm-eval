@@ -367,7 +367,7 @@ describe("runCollection", () => {
       const s = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, newSandbox }, folders));
       expect((s.config.keyword as typeof withKey).engines.model.apiKey).toBe("<redacted>");
       expect(readFileSync(join(s.results_dir, "summary.json"), "utf8")).not.toContain("sk-secret");
-      expect(s.engine).toMatchObject({ engine: "model", model: "m", endpoint: "https://api.example.com", timeoutMs: 1000, engines: { model: { model: "m", endpoint: "https://api.example.com" } } });
+      expect(s.engine).toMatchObject({ engine: "model", model: "m", endpoint: "<MODEL_BASE_URL>", timeoutMs: 1000, engines: { model: { model: "m", endpoint: "<MODEL_BASE_URL>" } } });
     });
 
     test("has a digest of the queries and qrels the run read, the same on another machine and different when a grade is added", async () => {

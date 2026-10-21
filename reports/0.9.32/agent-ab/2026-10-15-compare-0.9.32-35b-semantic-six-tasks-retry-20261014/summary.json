@@ -108,7 +108,7 @@
   "assets_sha256": "bd9e998102c9a2f7f6af71327f87a78703aa2ca774a16b124c19320826259cab",
   "engine": {
     "model": "openai/fast/qwen3.6-35b-a3b",
-    "endpoint": "https://ai.lab.fwdslsh.dev"
+    "endpoint": "<MODEL_BASE_URL>"
   },
   "config": {
     "n_attempts": 1,
@@ -629,7 +629,7 @@
     "engines": {
       "opencode": {
         "model": "openai/fast/qwen3.6-35b-a3b",
-        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "endpoint": "<MODEL_BASE_URL>",
         "temperature": null,
         "enableThinking": null,
         "timeoutMs": null

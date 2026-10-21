@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { engineConfig } from "./akm/akm.ts";
-import { canonical, credentialField, endpointHost, endpointIdentity, engineSettings, redactConfig, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
+import { canonical, credentialField, endpointHost, endpointDigest, endpointIdentity, endpointOrigin, engineSettings, redactConfig, sameEndpoint, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
 const files = (contents: Record<string, string>) => {
@@ -68,11 +68,32 @@ describe("redactConfig", () => {
       dbPassword: "p",
     };
     expect(redactConfig(config)).toEqual({
-      engines: { m: { apiKey: "<redacted>", API_KEY: "<redacted>", Token: "<redacted>", maxTokens: 5, model: "x", endpoint: "https://h.example/v1", timeoutMs: 5 } },
+      engines: { m: { apiKey: "<redacted>", API_KEY: "<redacted>", Token: "<redacted>", maxTokens: 5, model: "x", endpoint: "<MODEL_BASE_URL>/v1", timeoutMs: 5 } },
       list: [{ api_key: "<redacted>", secret: "<redacted>", name: "n" }, ["x-api-key", "kept"]],
       headers: { Authorization: "<redacted>", "Set-Cookie": "<redacted>", Accept: "*/*" },
       dbPassword: "<redacted>",
     });
+  });
+
+  test("writes the host of every endpoint field as <MODEL_BASE_URL> and keeps its path, whatever the field is called and however deep it is", () => {
+    const config = {
+      embedding: { provider: "openai", endpoint: "https://embed.example.test/v1/embeddings", model: "e" },
+      engines: { m: { endpoint: "http://192.168.0.9:8102/v1/chat/completions?api_key=k", model: "x" } },
+      settings: { list: [{ baseUrl: "https://u:p@gw.example:8443/v1" }, { model_endpoint: "http://localhost:8080" }], OPENAI_BASE_URL: "http://lab.internal:1" },
+      registries: [{ url: "https://registry.example/index.json" }],
+      note: "https://embed.example.test is a string, not an endpoint field",
+      endpointNote: 7,
+    };
+    const shown = redactConfig(config);
+    expect(shown).toEqual({
+      embedding: { provider: "openai", endpoint: "<MODEL_BASE_URL>/v1/embeddings", model: "e" },
+      engines: { m: { endpoint: "<MODEL_BASE_URL>/v1/chat/completions?api_key=<redacted>", model: "x" } },
+      settings: { list: [{ baseUrl: "<MODEL_BASE_URL>/v1" }, { model_endpoint: "<MODEL_BASE_URL>" }], OPENAI_BASE_URL: "<MODEL_BASE_URL>" },
+      registries: [{ url: "https://registry.example/index.json" }],
+      note: "https://embed.example.test is a string, not an endpoint field",
+      endpointNote: 7,
+    });
+    expect(redactConfig(shown)).toEqual(shown); // a config already written this way stays so
   });
 
   test("keeps a $NAME or ${NAME} reference, which holds no secret, and redacts a value that only looks like one", () => {
@@ -96,16 +117,16 @@ describe("redactConfig", () => {
 describe("engineSettings", () => {
   const nulls = { model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null };
 
-  test("reads the engine that defaults.llmEngine names, with its endpoint's host: no path, no credentials (#65)", () => {
+  test("reads the engine that defaults.llmEngine names, with its endpoint as <MODEL_BASE_URL>: no host, no path, no credentials (#65)", () => {
     const url = "https://user:pw@gateway.example:8443/k-DUMMYSECRET0123/v1/chat/completions?key=abc";
     const config = { engines: { other: { model: "no" }, m: { kind: "llm", model: "the-model", endpoint: url, temperature: 0, enableThinking: false, timeoutMs: 600000 } }, defaults: { llmEngine: "m" } };
-    const settings = { model: "the-model", endpoint: "https://gateway.example:8443", temperature: 0, enableThinking: false, timeoutMs: 600000 };
+    const settings = { model: "the-model", endpoint: "<MODEL_BASE_URL>", temperature: 0, enableThinking: false, timeoutMs: 600000 };
     expect(engineSettings(config)).toEqual({ engine: "m", ...settings, engines: { m: settings } });
-    expect(JSON.stringify(engineSettings(config))).not.toMatch(/pw|abc|DUMMYSECRET|k-DUMMY|\/v1/);
+    expect(JSON.stringify(engineSettings(config))).not.toMatch(/pw|abc|DUMMYSECRET|k-DUMMY|\/v1|gateway/);
   });
 
   test("reads what engineConfig writes", () => {
-    const settings = { model: "the-model", endpoint: "http://localhost:8080", temperature: null, enableThinking: null, timeoutMs: 600000 };
+    const settings = { model: "the-model", endpoint: "<MODEL_BASE_URL>", temperature: null, enableThinking: null, timeoutMs: 600000 };
     expect(engineSettings(engineConfig("http://localhost:8080/v1", "the-model", true))).toEqual({ engine: "model", ...settings, engines: { model: settings } });
   });
 
@@ -124,7 +145,7 @@ describe("engineSettings", () => {
     const s = engineSettings(config);
     expect(s.engine).toBe("m");
     expect(Object.keys(s.engines)).toEqual(["agent", "judge", "m", "worker"]);
-    expect(s.engines.worker).toEqual({ model: "w", endpoint: "https://worker.example", temperature: 0.2, enableThinking: null, timeoutMs: null });
+    expect(s.engines.worker).toEqual({ model: "w", endpoint: "<MODEL_BASE_URL>", temperature: 0.2, enableThinking: null, timeoutMs: null });
     // another deployment path of the routed engine on the same host is the same engine: only the host is recorded
     const moved = engineSettings({ ...config, engines: { ...config.engines, worker: { ...config.engines.worker, endpoint: "https://worker.example/deployment-B/v1" } } });
     expect(moved.engines.worker).toEqual(s.engines.worker);
@@ -167,10 +188,41 @@ describe("endpointIdentity, the sanitized endpoint for corpus destination report
 });
 
 describe("endpointHost (#65)", () => {
-  test("the host has the scheme and port and never a path, a query or credentials", () => {
-    expect(endpointHost("https://user:pw@Gateway.Example:8443/k-DUMMYSECRET0123/v1?api_key=abc#f")).toBe("https://gateway.example:8443");
-    expect(endpointHost("http://localhost:8080/v1/")).toBe("http://localhost:8080");
+  test("a result records <MODEL_BASE_URL> for an endpoint: no scheme, host, port, path, query or credentials", () => {
+    expect(endpointHost("https://user:pw@Gateway.Example:8443/k-DUMMYSECRET0123/v1?api_key=abc#f")).toBe("<MODEL_BASE_URL>");
+    expect(endpointHost("http://localhost:8080/v1/")).toBe("<MODEL_BASE_URL>");
+    expect(endpointHost("<MODEL_BASE_URL>/chat/completions")).toBe("<MODEL_BASE_URL>"); // an endpoint a redacted config already names so
     for (const v of [undefined, null, "", "not a url", 7]) expect(endpointHost(v)).toBeNull();
+  });
+
+  test("endpointOrigin is the scheme, host and port, for what is printed to the person who runs the eval", () => {
+    expect(endpointOrigin("https://user:pw@Gateway.Example:8443/k-DUMMYSECRET0123/v1?api_key=abc#f")).toBe("https://gateway.example:8443");
+    expect(endpointOrigin("http://localhost:8080/v1/")).toBe("http://localhost:8080");
+    for (const v of [undefined, null, "", "not a url", 7]) expect(endpointOrigin(v)).toBeNull();
+  });
+});
+
+describe("endpointDigest and sameEndpoint", () => {
+  const digest = endpointDigest("https://Gateway.Example:8443/v1");
+
+  test("the digest is of the origin only, so a path, a login, a query, a slash or the case of the host do not change it", () => {
+    expect(digest).toMatch(/^[0-9a-f]{64}$/);
+    for (const same of ["https://gateway.example:8443", "https://user:pw@gateway.example:8443/k-DUMMYSECRET/v1/?api_key=abc#f"]) expect(endpointDigest(same)).toBe(digest);
+    for (const other of ["https://gateway.example:8444", "http://gateway.example:8443", "https://gateway2.example:8443"]) expect(endpointDigest(other)).not.toBe(digest);
+    for (const v of [undefined, null, "", "not a url", "<MODEL_BASE_URL>", 7]) expect(endpointDigest(v)).toBeNull();
+  });
+
+  test("a stored digest is compared to the digest now, a stored host by its digest, and <MODEL_BASE_URL> alone is unknown", () => {
+    expect(sameEndpoint({ endpoint: "<MODEL_BASE_URL>", endpoint_sha256: digest }, digest)).toBe("same");
+    expect(sameEndpoint({ endpoint: "<MODEL_BASE_URL>", endpoint_sha256: digest }, endpointDigest("https://other.example"))).toBe("different");
+    expect(sameEndpoint({ endpoint: "https://gateway.example:8443" }, digest)).toBe("same"); // written before the host was hidden
+    expect(sameEndpoint({ endpoint: "https://gateway.example:8443" }, endpointDigest("https://other.example"))).toBe("different");
+    expect(sameEndpoint({ endpoint: "<MODEL_BASE_URL>" }, digest)).toBe("unknown");
+    expect(sameEndpoint({ endpoint: "<MODEL_BASE_URL>", endpoint_sha256: null }, digest)).toBe("unknown");
+    expect(sameEndpoint({ endpoint: null }, null)).toBe("same");
+    expect(sameEndpoint({ endpoint: null }, digest)).toBe("different");
+    expect(sameEndpoint(undefined, digest)).toBe("different");
+    expect(sameEndpoint(undefined, null)).toBe("same");
   });
 });
 

@@ -127,13 +127,21 @@ describe("the manifest", () => {
     expect(manifestProblems(m)).toEqual([]);
   });
 
-  test("keeps the config redacted and without the model's settings, with its digest, and the engines with a host and no path (#65)", () => {
+  test("keeps the config redacted and without the model's settings, with its digest, and the engines with <MODEL_BASE_URL> as their endpoint (#65)", () => {
     const m = build();
     expect(m.config.redacted).toEqual(withoutEngineSettings(m.config.redacted));
     expect(m.config.sha256).toBeUndefined();
-    expect(m.engines.m).toEqual({ model: "the-model", endpoint: "https://gateway.example", temperature: 0, enableThinking: false, timeoutMs: 600000 });
+    expect(m.engines.m).toEqual({ model: "the-model", endpoint: "<MODEL_BASE_URL>", temperature: 0, enableThinking: false, timeoutMs: 600000 });
     const text = JSON.stringify(m);
-    for (const secret of ["sk-literal", "DUMMYSECRET0123"]) expect(text).not.toContain(secret);
+    for (const secret of ["sk-literal", "DUMMYSECRET0123", "gateway.example"]) expect(text).not.toContain(secret);
+  });
+
+  test("names no host in the config it keeps, whichever field holds an endpoint", () => {
+    const withEmbedding = { ...config, embedding: { provider: "openai", endpoint: "https://embed.example.test/v1/embeddings", model: "e" } };
+    const m = buildManifest({ measurement: TOY, corpus: "public", cases: {}, config: withEmbedding, completion: { selected: [], scored: [], errored: [] } });
+    expect((m.config.redacted as any).embedding.endpoint).toBe("<MODEL_BASE_URL>/v1/embeddings");
+    expect(JSON.stringify(m)).not.toMatch(/embed\.example|gateway\.example/);
+    expect(manifestProblems(m)).toEqual([]);
   });
 
   test("a config without engines gives none, and a run with no config has no digest of it", () => {
@@ -158,8 +166,10 @@ describe("the manifest", () => {
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: 1 }, at: "now", dropped: [] }))).toEqual(["rescored_from needs results (a folder name), scorer (or null), at and dropped"]);
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: "0.3", sha256: "a".repeat(64) }, at: "now", dropped: [] }))).toEqual([]);
 
-    expect(mutate((x) => (x.engines.m.endpoint = "https://gateway.example/k-DUMMYSECRET0123/v1"))).toEqual(["the engine m needs a model and an endpoint that is a host with no path"]);
+    expect(mutate((x) => (x.engines.m.endpoint = "https://gateway.example/k-DUMMYSECRET0123/v1"))).toEqual(["the engine m needs a model and an endpoint that is <MODEL_BASE_URL> (or, in an older manifest, a host with no path)"]);
     expect(mutate((x) => (x.engines.m.endpoint = "https://user:pw@gateway.example"))).toHaveLength(1);
+    expect(mutate((x) => (x.engines.m.endpoint_sha256 = "a".repeat(64)))).toEqual([]);
+    expect(mutate((x) => (x.engines.m.endpoint_sha256 = "short"))).toEqual(["the engine m has an endpoint_sha256 that is not a digest"]);
     expect(mutate((x) => (x.completion.scored = ["a", "zzz"]))).toEqual(["completion.scored and completion.errored name a case that was not selected"]);
     expect(mutate((x) => (x.completion.errored = ["a"]))).toEqual(["a case is both scored and errored"]);
 
