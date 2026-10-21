@@ -1,0 +1,22 @@
+smoke --contract: akm 0.10.261008 (bun /tmp/akm-125-current/dist/cli.js, build v0.9.0-beta.60-2843-g946c4b5ac), a stub model that answers each call with a reply that fits its schema
+
+ok      retrieval         4.4s  success: reached
+FAIL    consolidate       2.8s  success: FAILED, malformed: reached
+          success, first row: outcome: keep
+          success, FAILED: duplicate-01: outcome is keep, expected retire
+          success, FAILED: duplicate-01: judged_as is overlap, expected duplicate: the label of the judge
+          success, FAILED: duplicate-01: staged is false, expected true: akm staged the retirement
+          success, FAILED: the canned reply for a schema that requires onlyInA, onlyInB, relation, redundant, stale, confidence, reason was never used. akm sent: a schema that requires reason, onlyInA, onlyInB, confidence; a schema that requires operations
+          success, FAILED: the canned reply for a schema that requires missing was never used. akm sent: a schema that requires reason, onlyInA, onlyInB, confidence; a schema that requires operations
+          malformed, first row: outcome: error; error: akm paired the notes but its judge gave no verdict (akm said: Chunk 1: invalid plan from AI — skipping.)
+ok      extract           1.6s  success: reached, malformed: reached
+          success, first row: outcome: saved
+          malformed, first row: outcome: unusable; detail: malformed_model_output: malformed_model_output: LLM response: no JSON object found; attempts=2; responseLength=41; responseSha256=6b7fb3bab0ec09521e928df5ab4bd6393001a6bda8b7ccabb864f93e4d6d103c
+FAIL    nightly           4.7s  success: FAILED, malformed: reached
+          success, first row: state: both notes kept
+          success, FAILED: duplicate-01: ok is false, expected true
+          success, FAILED: the canned reply for a schema that requires onlyInA, onlyInB, relation, redundant, stale, confidence, reason was never used. akm sent: no schema, prompt "Respond with just the word: ok"; a schema that requires reason, onlyInA, onlyInB, confidence; a schema that requires operations
+          success, FAILED: the canned reply for a schema that requires missing was never used. akm sent: no schema, prompt "Respond with just the word: ok"; a schema that requires reason, onlyInA, onlyInB, confidence; a schema that requires operations
+          malformed, first row: state: both notes kept
+
+smoke --contract: 4 run, 2 reached their outcomes, 0 skipped, 2 FAILED: consolidate, nightly

@@ -98,6 +98,40 @@ For scale: a night that does nothing gets 15 of 35 right and no harm. One item i
 - Items share one night, so a pair can be paired with another item's note; the made-up subjects make that rare.
 - A retirement archives the note under `.akm/`; the eval leaves that folder out of its reading.
 
+## Opt-in memory lifecycle checks
+
+`src/memory-lifecycle.test.ts` drives a real AKM CLI against the existing local
+scripted endpoint, with isolated homes, sessions, configuration, indexes and state:
+
+```sh
+AKM_EVAL_REAL_AKM=1 AKM_BIN='bun /absolute/akm-checkout/dist/cli.js' \
+  bun test evals/nightly/src/memory-lifecycle.test.ts
+```
+
+Select and build the intended AKM checkout explicitly. An unavailable command or
+unsupported behavior fails when opted in; these tests never silently skip by
+version. The ordinary suite runs the assertion-corruption test without AKM.
+
+The cases cover extraction evidence through acceptance/index/show/improve/curate,
+complete long-note judgments, duplicate archival/revert, separate and matching
+user/agent scopes, current/historical recall, filtered candidate starvation, and
+failed/stale/interrupted acceptance. The interruption case needs POSIX shell,
+`ps`, and Git reference-transaction hooks (Git 2.29+); it kills only its disposable
+AKM child during a local commit and resumes through `proposal accept`.
+
+Raw commands (including exit codes, stderr and timings), complete model requests,
+controlled files/databases and completion/error details remain under
+`results/memory-lifecycle-<timestamp>/`. Temporary sandboxes and the endpoint are
+cleaned up on assertion failures too. No paid model, developer sessions, private
+library or embedding download is needed; vectors use the existing deterministic
+embedder. This proves finite path integrity, not general model reasoning or
+semantic ranking quality. Existing collectors, scores and measurement versions
+are unchanged; no saved run needs rescoring.
+
+See the [#125 change record](../../reports/memory-lifecycle-125/README.md) for
+tested builds, failures and pending combined-build acceptance. These checks can
+remain red on a release missing the linked product fixes.
+
 ## Licence
 
 MPL-2.0.
