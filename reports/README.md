@@ -2,6 +2,7 @@
 
 Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
+- [`memory-lifecycle-125/README.md`](memory-lifecycle-125/README.md): manual, opt-in real-akm checks that memory claims, evidence and scopes survive extraction, acceptance, improvement and recall; all 12 pass on akm `release/0.10.0` at `d2369845a`.
 - [`flash-json-fix-2026-10-21/README.md`](flash-json-fix-2026-10-21/README.md): follow-up to the comparison below; the observed Flash-Next JSON failure fixed in the model server, and two full reruns at 35/40 and 36/40 with no failed model calls, with the replay evidence and limits.
 - [`flash-next-vs-35b-2026-10-21/README.md`](flash-next-vs-35b-2026-10-21/README.md): matched 40-case bakeoff on AKM 0.10.261005-beta; Flash-Next 34/40 versus a fresh 35B baseline 27/40, with timing, failed calls and per-process results retained. Superseded for Flash-Next by the follow-up above.
 

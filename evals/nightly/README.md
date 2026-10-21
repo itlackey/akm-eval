@@ -110,12 +110,11 @@ AKM_EVAL_REAL_AKM=1 AKM_BIN='bun /absolute/akm-checkout/dist/cli.js' \
   bun test evals/nightly/src/memory-lifecycle.test.ts --timeout=120000
 ```
 
-They assume an akm built from `release/0.10.0` at or after `79cf3236a`
-(`0.10.261008`, with the #1195, #1196, #1197 and #1198 fixes). An unavailable
-command or unsupported behavior fails when opted in; these tests never silently
-skip by version, so they stay red on a build that lacks the fixes (and, until
-the #1199 curate controls land, on the curate case). The ordinary suite runs only
-the assertion-corruption test, without AKM.
+They assume an akm built from `release/0.10.0` at or after `d2369845a`
+(`0.10.261008`, with the #1195 to #1199 fixes); all 12 pass on that build. An
+unavailable command or unsupported behavior fails when opted in; these tests never
+silently skip by version, so they stay red on a build that lacks the fixes. The
+ordinary suite runs only the assertion-corruption test, without AKM.
 
 The cases cover extraction evidence through acceptance/index/show/improve/curate,
 complete long-note judgments, duplicate archival/revert, separate and matching

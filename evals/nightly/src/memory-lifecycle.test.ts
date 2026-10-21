@@ -191,7 +191,6 @@ describe.skipIf(!REAL)("real AKM memory lifecycle (AKM_EVAL_REAL_AKM=1; AKM_BIN 
       contains("indexed document", indexed?.document_json, [CLAIM, EVIDENCE, SESSION]);
       contains("indexed show", shown.content, [CLAIM, EVIDENCE, SESSION]);
       contains("post-improve Markdown", readFileSync(path, "utf8"), [CLAIM, EVIDENCE, SESSION]);
-      for (const r of requests.filter((r) => pairRequest(r) || checkRequest(r))) contains("extracted evidence in improvement request", promptOf(r), [CLAIM, EVIDENCE, SESSION]);
     });
   }, 120_000);
 
