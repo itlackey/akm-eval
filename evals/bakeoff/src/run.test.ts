@@ -156,7 +156,7 @@ describe("runCorpus", () => {
     expect(text).not.toContain("model-secret");
     expect((summary.config as any).engines.bakeoff.apiKey).toBe("$MODEL_API_KEY");
     expect((summary.config as any).engines.bakeoff.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
-    expect(summary.engine).toMatchObject({ model: "the-model", endpoint: "http://localhost:9", temperature: 0, enableThinking: false });
+    expect(summary.engine).toMatchObject({ model: "the-model", endpoint: "<MODEL_BASE_URL>", temperature: 0, enableThinking: false });
   });
 
   test("writes a manifest that names the collector and the scorer of the lock, the digest of each case and which cases were scored", async () => {

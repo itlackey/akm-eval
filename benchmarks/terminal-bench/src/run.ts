@@ -40,7 +40,7 @@ import { type Report, type Trial, formatReport, sideBySide as sideBySideOf } fro
 import { type RunTrial, makeRow, summarize as scoreRows } from "../../../lib/harbor/score.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, type ModelLimits } from "../../../lib/models.ts";
-import { canonical, endpointHost, redactConfig, sha256File } from "../../../lib/provenance.ts";
+import { canonical, endpointDigest, endpointHost, redactConfig, sameEndpoint, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir, markRunning, clearRunning } from "../../../lib/results.ts";
 import { DEFAULT_ATTEMPTS, type LibraryCount, type Lock, NAME, type Collected, collect, jobConfig, jobName, readLock } from "./collect.ts";
@@ -110,8 +110,8 @@ interface Summary {
   completion: Completion;
   /** One digest over the library's digest, the pinned dataset (its digest and the digest of each selected task) and the attempts: the cases the run scored. */
   assets_sha256: string;
-  /** The model and the host of the endpoint it was sent to (scheme, host and port, null for the provider's own). Never the path, never a key. */
-  engine: { model: string; endpoint: string | null };
+  /** The model and its endpoint as <MODEL_BASE_URL> (null for the provider's own), with a digest of the endpoint's host that a resume compares. Never the host or the path, never a key. */
+  engine: { model: string; endpoint: string | null; endpoint_sha256?: string | null };
   /** The Harbor job as `job` has it, with every apiKey, api_key, token and secret redacted. */
   config: Record<string, unknown>;
   /** Trials that hit a time limit, by arm. They are counted among the errors too when they got no reward. */
@@ -179,8 +179,10 @@ export function summarize(o: {
   akmEnv?: Record<string, string>;
   packages?: { file: string; sha256: string }[];
   library?: LibraryCount & { sha256: string | null };
-  /** The host of the endpoint the model was sent to, null for the provider's own. */
+  /** The endpoint the model was sent to as endpointHost writes it, null for the provider's own. */
   endpoint?: string | null;
+  /** endpointDigest of that endpoint. */
+  endpointSha256?: string | null;
   job?: Record<string, unknown>;
 }): Summary {
   const jobDir = join(o.dir, "jobs", jobName(o.corpus.name));
@@ -200,6 +202,7 @@ export function summarize(o: {
 
   const akmFields = akmSummary(arm, akmEnv, o.packages ?? [], observed);
   const endpoint = o.endpoint ?? null;
+  const endpoint_sha256 = o.endpointSha256 ?? null;
   const { datasets: _datasets, n_attempts: _attempts, ...jobSettings } = o.job ?? {}; // the tasks and the attempts are the cases and the hint below
   const manifest = buildManifest({
     measurement: MEASUREMENT,
@@ -208,7 +211,7 @@ export function summarize(o: {
     cases: caseDigests(MEASUREMENT, o.tasks.map((id) => caseOf(id, o.lock.tasks[id], o.library?.sha256))),
     akm: { version: arm.cli.version, bin: arm.bin, build: arm.build, build_fingerprint: akmFields.akm_build_fingerprint },
     config: jobSettings,
-    engines: { opencode: { model: o.model, endpoint, temperature: null, enableThinking: null, timeoutMs: null } },
+    engines: { opencode: { model: o.model, endpoint, endpoint_sha256, temperature: null, enableThinking: null, timeoutMs: null } },
     settings: { seed: o.corpus.seed },
     // attempts decide how much a task's pass rate says: a run of three is not compared with a run of one
     eval_settings: { attempts },
@@ -238,7 +241,7 @@ export function summarize(o: {
     harbor_config_sha256: existsSync(join(jobDir, "config.json")) ? sha256File(join(jobDir, "config.json")) : null,
     completion,
     assets_sha256: assetsSha256({ library: o.library?.sha256 ?? null, dataset, attempts }),
-    engine: { model: o.model, endpoint },
+    engine: { model: o.model, endpoint, endpoint_sha256 },
     config: redactConfig(o.job ?? {}),
     timeouts: scored.timeouts,
     n_errored: scored.n_errored,
@@ -269,7 +272,7 @@ export async function runCorpus(
   const arm = ctx.arm ?? releaseArm();
   const akmEnv = ctx.akmEnv ?? {};
   const dir = ctx.resume ? resolve(ctx.resume) : makeResultsDir(results, ctx.label);
-  const save = (got: Collected, running = false) => summarize({ corpus: c, label: prior?.label ?? ctx.label, model: ctx.model, limit: ctx.limit ?? prior?.limit ?? undefined, lock, tasks, dir, exit: got.exit, running, resumed: prior !== null, attempts, arm, akmEnv, packages: got.staged?.files ?? prior?.akm_install.packages, library: got.library, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL), job: jobRecord(got.cfg, dir, ROOT) });
+  const save = (got: Collected, running = false) => summarize({ corpus: c, label: prior?.label ?? ctx.label, model: ctx.model, limit: ctx.limit ?? prior?.limit ?? undefined, lock, tasks, dir, exit: got.exit, running, resumed: prior !== null, attempts, arm, akmEnv, packages: got.staged?.files ?? prior?.akm_install.packages, library: got.library, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL), endpointSha256: endpointDigest(ctx.env.OPENAI_BASE_URL), job: jobRecord(got.cfg, dir, ROOT) });
   let got: Collected;
   if (prior) {
     const cfg = JSON.parse(readFileSync(join(dir, "job.json"), "utf8"));
@@ -278,11 +281,13 @@ export async function runCorpus(
       concurrency: ctx.concurrency ?? cfg.n_concurrent_trials, lock, tasks, attempts, jobsDir: join(dir, "jobs"),
       librariesDir: join(dir, "libraries"), arm, akmEnv, libraryAssets: cfg.agents[1].kwargs.library_assets,
       packagesDir: arm.cli.tarball || arm.plugin.tarball ? join(dir, "akm-packages") : null });
+    const endpointNow = sameEndpoint(prior.engine, endpointDigest(ctx.env.OPENAI_BASE_URL));
+    if (endpointNow === "unknown") fail("--resume cannot tell whether the model endpoint is the same: the stored run wrote <MODEL_BASE_URL> and no digest of its host. Start a fresh run.");
     if (prior.corpus !== c.name || prior.model !== ctx.model ||
       prior.akm_bin !== arm.bin || prior.akm_build !== arm.build ||
       prior.akm_build_fingerprint !== buildFingerprint(arm.build_fingerprint ?? null, prior.akm_install.dependency_tree_sha256) ||
       canonical(prior.manifest.cases) !== canonical(caseDigests(MEASUREMENT, tasks.map(id => caseOf(id, lock.tasks[id], prior.library.sha256)))) ||
-      prior.engine.endpoint !== endpointHost(ctx.env.OPENAI_BASE_URL) || canonical(cfg) !== canonical(wanted) ||
+      endpointNow !== "same" || canonical(cfg) !== canonical(wanted) ||
       prior.library.sha256 !== sha256Dir(libraryOf(c)) || !prior.harbor_config_sha256 ||
       prior.harbor_config_sha256 !== sha256File(join(jobDir, "config.json")))
       fail("--resume must use the original corpus, library, model, model limits, AKM settings and unmodified Harbor job; start a fresh run for changed settings");

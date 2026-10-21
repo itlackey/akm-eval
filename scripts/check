@@ -41,7 +41,9 @@ run_python() {
 }
 
 run_test() {
-  bun test
+  # bunfig.toml has no [test] timeout (bun 1.4 ignores one), so it is a flag. The 5 s default is too short under load for the tests
+  # that start a fake akm many times (the retrieval fixtures).
+  bun test --timeout=120000
 }
 
 checks=("$@")

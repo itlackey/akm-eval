@@ -58,14 +58,14 @@
   "engine": {
     "engine": "judge",
     "model": "fast/qwen3.6-35b-a3b",
-    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "endpoint": "<MODEL_BASE_URL>",
     "temperature": 0,
     "enableThinking": false,
     "timeoutMs": 600000,
     "engines": {
       "judge": {
         "model": "fast/qwen3.6-35b-a3b",
-        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "endpoint": "<MODEL_BASE_URL>",
         "temperature": 0,
         "enableThinking": false,
         "timeoutMs": 600000
@@ -740,7 +740,7 @@
     "engines": {
       "judge": {
         "model": "fast/qwen3.6-35b-a3b",
-        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "endpoint": "<MODEL_BASE_URL>",
         "temperature": 0,
         "enableThinking": false,
         "timeoutMs": 600000

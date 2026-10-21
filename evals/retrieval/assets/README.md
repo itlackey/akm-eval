@@ -45,8 +45,9 @@ One JSON object per line.
 | `query` | the text an agent would send to `akm search` or `akm curate` |
 | `kind` | how the query was written. See below. `chitchat`, `notification`, `log`, `status` and `nontask` mark a non-task input |
 | `expected` | task queries only: the refs of the assets the author expected to answer it. Empty when the library has no answer |
+| `searchArgs` | optional: extra `akm search` arguments for this query, described below. Not `--`, `--limit`, `--format` or `--detail`: the runner sets those |
 
-`searchArgs` is an optional array of existing `akm search` CLI arguments, for example `["--filter", "user=alice", "--belief", "current"]`. The collector and label pool pass them before `--` to both keyword and semantic search. Curate keeps its usual invocation: this field does not add filters to commands that lack them. Arguments are direct argv, with no shell expansion. akm ignores flags it does not declare, so use only flags the pinned akm build supports: an unknown flag returns unfiltered results that score as if the filter had applied.
+`searchArgs` is an optional array of existing `akm search` CLI arguments, for example `["--filter", "user=alice", "--belief", "current"]`. The collector and label pool pass them before `--` to both keyword and semantic search. Curate keeps its usual invocation: this field does not add filters to commands that lack them. Arguments are direct argv, with no shell expansion. `--`, `--limit`, `--format` and `--detail` are the runner's own and are rejected. akm ignores flags it does not declare, so use only flags the pinned akm build supports: an unknown flag returns unfiltered results that score as if the filter had applied.
 
 ### How they were written
 

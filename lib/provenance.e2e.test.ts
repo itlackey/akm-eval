@@ -128,11 +128,13 @@ describe("what a run writes holds no endpoint credential", () => {
     // None of it holds a secret, anywhere in any file.
     for (const [name, text] of Object.entries(written)) for (const secret of SECRETS) expect(`${name}: ${text.includes(secret)}`).toBe(`${name}: false`);
 
-    // And the summary still says which endpoint it was: the host and port. Its `engine` holds no path, and its config names the endpoint (#65).
+    // And the summary names the endpoint only as <MODEL_BASE_URL>, in its config, `engine` and manifest alike: no host appears anywhere (#65).
     const stored = JSON.parse(written["summary.json"]);
+    const host = new URL(BASE_URL).hostname;
+    for (const [name, text] of Object.entries(written)) expect(`${name}: ${text.includes(host)}`).toBe(`${name}: false`);
     expect(stored.config.engines.model.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
     expect(stored.config.engines.model.apiKey).toBe("$MODEL_API_KEY");
-    expect(stored.engine.endpoint).toBe("https://gateway.example:8443");
+    expect(stored.engine.endpoint).toBe("<MODEL_BASE_URL>");
     expect(JSON.stringify(stored.engine)).not.toContain("/v1");
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, n_errored: 1 });
     expect(existsSync(join(summary.results_dir, "summary.json"))).toBe(true);

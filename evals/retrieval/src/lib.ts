@@ -59,11 +59,16 @@ function parseLines<T>(text: string, where: string, check: (row: Record<string, 
   return rows;
 }
 
+/** The arguments the runner puts on `akm search` itself, and `--`, which ends the flags before the query. A query's searchArgs may not carry them: they would break the call or make runs differ in more than the filter. */
+const RUNNER_ARGS = ["--", "--limit", "--format", "--detail"];
+
 export function parseQueries(text: string, where = "queries"): Query[] {
   const queries = parseLines<Query>(text, where, (r) => {
     for (const key of ["id", "query", "kind"]) if (typeof r[key] !== "string" || !r[key]) return `has no string "${key}"`;
     if (r.expected !== undefined && !(Array.isArray(r.expected) && r.expected.every((x) => typeof x === "string" && x))) return 'has an "expected" that is not a list of refs';
     if (r.searchArgs !== undefined && !(Array.isArray(r.searchArgs) && r.searchArgs.every((x) => typeof x === "string"))) return 'has a "searchArgs" that is not a list of strings';
+    const owned = (r.searchArgs as string[] | undefined)?.find((x) => RUNNER_ARGS.some((flag) => x === flag || x.startsWith(`${flag}=`)));
+    if (owned !== undefined) return `has a "searchArgs" with ${JSON.stringify(owned)}, which the runner sets itself (${RUNNER_ARGS.join(", ")} are not allowed)`;
     return null;
   });
   const ids = new Set<string>();
