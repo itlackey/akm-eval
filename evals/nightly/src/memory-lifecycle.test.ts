@@ -351,11 +351,28 @@ describe.skipIf(!REAL)("real AKM memory lifecycle (AKM_EVAL_REAL_AKM=1; AKM_BIN 
       await improve(cli);
       const p = (await proposals(cli)).find((p) => p.source === "consolidate-pair");
       expect(p?.gateDecision.outcome).toBe("staged");
-      // The disposable bundle's ref-transaction hook kills its own AKM parent
-      // after archival/intent persistence, before acceptance is finalized. No product fault
-      // hook, private repository API, race timing, or developer git hook is used.
+      // The disposable bundle's ref-transaction hook kills the AKM invocation after archival/intent
+      // persistence, before acceptance is finalized. It kills only the processes between git and
+      // this test process (the akm command, plus any wrapper AKM_BIN adds), and nothing if this
+      // test process is not among git's ancestors. No product fault hook, private repository API,
+      // race timing, or developer git hook is used.
       const hook = join(s.dir, "bundle", ".git", "hooks", "reference-transaction");
-      writeFileSync(hook, '#!/bin/sh\n[ "$1" = prepared ] || exit 0\nprintf interrupted > ../accept-interrupted.marker\nakm_pid=$(ps -o ppid= -p "$PPID" | tr -d " ")\nkill -KILL "$akm_pid"\nexit 1\n', { mode: 0o755 });
+      s.env.LIFECYCLE_TEST_PID = String(process.pid);
+      writeFileSync(hook, [
+        "#!/bin/sh",
+        '[ "$1" = prepared ] || exit 0',
+        'pid=$(ps -o ppid= -p "$PPID" | tr -d " ")',
+        "chain=",
+        'while [ -n "$pid" ] && [ "$pid" -gt 1 ] && [ "$pid" != "$LIFECYCLE_TEST_PID" ]; do',
+        '  chain="$chain $pid"',
+        '  pid=$(ps -o ppid= -p "$pid" | tr -d " ")',
+        "done",
+        '[ "$pid" = "$LIFECYCLE_TEST_PID" ] && [ -n "$chain" ] || exit 1',
+        "printf interrupted > ../accept-interrupted.marker",
+        "kill -KILL $chain",
+        "exit 1",
+        "",
+      ].join("\n"), { mode: 0o755 });
       const interrupted = await cli(["proposal", "accept", p.id], undefined, true);
       expect(existsSync(join(s.dir, "accept-interrupted.marker"))).toBe(true);
       expect(interrupted.code).not.toBe(0);

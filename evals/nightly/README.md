@@ -101,36 +101,40 @@ For scale: a night that does nothing gets 15 of 35 right and no harm. One item i
 ## Opt-in memory lifecycle checks
 
 `src/memory-lifecycle.test.ts` drives a real AKM CLI against the existing local
-scripted endpoint, with isolated homes, sessions, configuration, indexes and state:
+scripted endpoint, with isolated homes, sessions, configuration, indexes and state.
+**These tests are manual and opt-in.** No CI workflow runs them: they need
+`AKM_EVAL_REAL_AKM=1` and an `AKM_BIN` you built yourself.
 
 ```sh
 AKM_EVAL_REAL_AKM=1 AKM_BIN='bun /absolute/akm-checkout/dist/cli.js' \
-  bun test evals/nightly/src/memory-lifecycle.test.ts
+  bun test evals/nightly/src/memory-lifecycle.test.ts --timeout=120000
 ```
 
-Select and build the intended AKM checkout explicitly. An unavailable command or
-unsupported behavior fails when opted in; these tests never silently skip by
-version. The ordinary suite runs the assertion-corruption test without AKM.
+They assume an akm built from `release/0.10.0` at or after `79cf3236a`
+(`0.10.261008`, with the #1195, #1196, #1197 and #1198 fixes). An unavailable
+command or unsupported behavior fails when opted in; these tests never silently
+skip by version, so they stay red on a build that lacks the fixes (and, until
+the #1199 curate controls land, on the curate case). The ordinary suite runs only
+the assertion-corruption test, without AKM.
 
 The cases cover extraction evidence through acceptance/index/show/improve/curate,
 complete long-note judgments, duplicate archival/revert, separate and matching
 user/agent scopes, current/historical recall, filtered candidate starvation, and
 failed/stale/interrupted acceptance. The interruption case needs POSIX shell,
-`ps`, and Git reference-transaction hooks (Git 2.29+); it kills only its disposable
-AKM child during a local commit and resumes through `proposal accept`.
+`ps`, and Git reference-transaction hooks (Git 2.29+); during a local commit it
+kills the processes between git and the test process (the akm command and any
+wrapper `AKM_BIN` adds), then resumes through `proposal accept`.
 
 Raw commands (including exit codes, stderr and timings), complete model requests,
 controlled files/databases and completion/error details remain under
-`results/memory-lifecycle-<timestamp>/`. Temporary sandboxes and the endpoint are
-cleaned up on assertion failures too. No paid model, developer sessions, private
-library or embedding download is needed; vectors use the existing deterministic
-embedder. This proves finite path integrity, not general model reasoning or
+`results/memory-lifecycle-<timestamp>/`. No paid model, developer sessions,
+private library or embedding download is needed; vectors use the existing
+deterministic embedder. This checks finite path integrity, not model reasoning or
 semantic ranking quality. Existing collectors, scores and measurement versions
-are unchanged; no saved run needs rescoring.
+are unchanged.
 
-See the [#125 change record](../../reports/memory-lifecycle-125/README.md) for
-tested builds, failures and pending combined-build acceptance. These checks can
-remain red on a release missing the linked product fixes.
+See the [#125 result summary](../../reports/memory-lifecycle-125/README.md) for
+the tested build and per-test results.
 
 ## Licence
 

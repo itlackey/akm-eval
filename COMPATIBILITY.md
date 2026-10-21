@@ -31,10 +31,9 @@ The contract smoke (`scripts/smoke/run --contract`) has passed for retrieval, ju
 
 ## Memory lifecycle integration
 
-The [nightly opt-in lifecycle checks](evals/nightly/README.md#opt-in-memory-lifecycle-checks)
+The [manual, opt-in lifecycle checks](evals/nightly/README.md#opt-in-memory-lifecycle-checks)
 use `AKM_EVAL_REAL_AKM=1` and the exact command in `AKM_BIN`. They do not select
-the Harbor pin, impose version equality, or skip unsupported opted-in builds.
-They also inspect `entries(file_path, document_json)` in the real index and the
-public proposal/archive output. Their [change record](reports/memory-lifecycle-125/README.md)
-tracks finite failure detection and the remaining product dependencies; a passing
-component or a scripted model response is not final combined-build acceptance.
+the Harbor pin, impose version equality, or skip unsupported opted-in builds. They
+also read `entries(file_path, document_json)` from the real index and the public
+proposal/archive output. See the [result summary](reports/memory-lifecycle-125/README.md)
+for the akm build tested.
