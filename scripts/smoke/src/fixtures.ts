@@ -115,3 +115,9 @@ const CHANGED_IN_0_9_31: Fixture[] = [
 
 /** Every request an eval makes, as akm-cli 0.9.31 sends it, in the order of AKM_0_9_26_REQUESTS: the four that changed, and the others as they were. */
 export const AKM_0_9_31_REQUESTS: Fixture[] = AKM_0_9_26_REQUESTS.map((f) => CHANGED_IN_0_9_31.find((c) => c.name === f.name) ?? f);
+
+/** The claim-only pair request captured from the AKM #1195 candidate on 2026-10-20; other process schemas are not implied. */
+export const AKM_COMPLETE_CLAIM_REQUEST: Fixture = {
+  eval: "consolidate", name: "pair judge", prompt: "Asset A (older):",
+  schema: {"type":"object","required":["reason","onlyInA","onlyInB","confidence"],"additionalProperties":false,"properties":{"reason":{"type":"string","maxLength":400},"onlyInA":{"type":"array","items":{"type":"string","maxLength":200},"maxItems":20},"onlyInB":{"type":"array","items":{"type":"string","maxLength":200},"maxItems":20},"confidence":{"type":"number","minimum":0,"maximum":1}}},
+};
