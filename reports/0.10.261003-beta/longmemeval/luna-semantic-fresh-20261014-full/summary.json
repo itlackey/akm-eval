@@ -12,8 +12,8 @@
   "harness_sha256": "65cff2c079b6b9ff1f7ea826779e5929c74dd3d006e3639358d9020a43a1c906",
   "model": "eval-luna/gpt-6-luna",
   "judge_model": "chat/qwen3.8-27b",
-  "model_endpoint": "https://ai.lab.fwdslsh.dev",
-  "judge_endpoint": "https://ai.lab.fwdslsh.dev",
+  "model_endpoint": "<MODEL_BASE_URL>",
+  "judge_endpoint": "<MODEL_BASE_URL>",
   "temperature": 0,
   "max_tokens": {
     "model": 512,
@@ -2250,14 +2250,14 @@
     "engines": {
       "model": {
         "model": "eval-luna/gpt-6-luna",
-        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "endpoint": "<MODEL_BASE_URL>",
         "temperature": 0,
         "enableThinking": null,
         "timeoutMs": 900000
       },
       "judge": {
         "model": "chat/qwen3.8-27b",
-        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "endpoint": "<MODEL_BASE_URL>",
         "temperature": 0,
         "enableThinking": null,
         "timeoutMs": 900000
