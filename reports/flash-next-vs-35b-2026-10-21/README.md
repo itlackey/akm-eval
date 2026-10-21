@@ -1,5 +1,9 @@
 # Flash-Next IQ2_XS versus the 35B fast tier
 
+> Follow-up, October 21: the observed JSON failure was addressed and two new full
+> runs passed 35/40 and 36/40 with no failed model calls. Flash-Next now has the
+> moe role, while fast stays on the 35B and chat stays on the 27B. See the [fix, evidence and limitations](../flash-json-fix-2026-10-21/README.md).
+
 Collected October 21, 2026 UTC. Two complete public bakeoff runs, one per model,
 using AKM **0.10.261005-beta**, collector/scorer **0.2**, the same 40 cases and
 labels, temperature 0, thinking off, and the same lab embedding configuration.
