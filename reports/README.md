@@ -7,6 +7,7 @@ Published public results of the evals, and notes. Raw benchmark datasets and Har
 - [`flash-json-fix-2026-10-21/README.md`](flash-json-fix-2026-10-21/README.md): follow-up to the comparison below; the observed Flash-Next JSON failure fixed in the model server, and two full reruns at 35/40 and 36/40 with no failed model calls, with the replay evidence and limits.
 - [`flash-next-vs-35b-2026-10-21/README.md`](flash-next-vs-35b-2026-10-21/README.md): matched 40-case bakeoff on AKM 0.10.261005-beta; Flash-Next 34/40 versus a fresh 35B baseline 27/40, with timing, failed calls and per-process results retained. Superseded for Flash-Next by the follow-up above.
 
+- [`0.10.261010-beta/README.md`](0.10.261010-beta/README.md): every eval but LongMemEval and Terminal-Bench on the 35B with semantic search, full public sets, next to 0.10.261009-beta; bakeoff 0.3 on both betas with the no-change outcomes apart.
 - [`0.10.261009-beta/README.md`](0.10.261009-beta/README.md): every eval but LongMemEval and Terminal-Bench on the 35B with semantic search, full public sets, next to 0.9.32 and 0.10.261006-beta.
 - [`0.10.261006-beta/README.md`](0.10.261006-beta/README.md): every eval but LongMemEval and Terminal-Bench on the 35B with semantic search, full public sets, next to 0.10.261005-beta.
 - [`0.9.32-vs-0.10.261005-beta/README.md`](0.9.32-vs-0.10.261005-beta/README.md): matched semantic retrieval, eight full 35B process pairs, full SkillRet for both versions, six-task Agent A/B, warm timing and bounded Luna pilots; larger cloud collections held.

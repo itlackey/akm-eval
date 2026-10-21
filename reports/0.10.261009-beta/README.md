@@ -112,6 +112,8 @@ keyword index 21 s (2,086 s measured outside the run).
   0.10.261006-beta run had), because the worktree had no model-limits file. It
   was discarded and rerun with the limits; the published run is the rerun.
 
+The bakeoff in the table above is version 0.2 (40 cases). The same akm was later run with bakeoff 0.3 (51 cases) for the [0.10.261010-beta report](../0.10.261010-beta/): [bakeoff/2026-10-21-0.10.261009-beta-35b-semantic-full-bakeoff03-20261021](bakeoff/2026-10-21-0.10.261009-beta-35b-semantic-full-bakeoff03-20261021).
+
 Retrieval and SkillRet make no model calls. Everything else used the same lab
 route as the 0.10.261006-beta round; the gateway reports the model it served in
 each summary.
