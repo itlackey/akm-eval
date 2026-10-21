@@ -315,15 +315,13 @@ async function main(): Promise<void> {
     const data = await loadCorpus(c === "public" ? "public" : "private", assets, limit);
     const results = c === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results");
     const run = (runLabel: string | undefined) => runCorpus(data, { label: runLabel, limit, semantic: values.semantic === true }, { assets, results });
-    if (repeat === undefined) summaries.push(await run(label));
-    else {
-      // The repeat summary spreads n_errored. This summary counts the calls that failed for each line, and the repeat summary takes their sum.
-      const runs = await repeatRuns(repeat, label as string, async (runLabel) => {
-        const summary = await run(runLabel);
-        return { ...summary, n_errored: failedCalls(summary).errored };
-      });
-      summaries.push(...runs);
-    }
+    // repeatRuns also stores wall_seconds in each run's summary.json, as in every other eval, with or without --repeat.
+    // The repeat summary spreads n_errored. This summary counts the calls that failed for each line, and the repeat summary takes their sum.
+    const runs = await repeatRuns(repeat, label as string, async (runLabel) => {
+      const summary = await run(runLabel);
+      return { ...summary, n_errored: failedCalls(summary).errored };
+    });
+    summaries.push(...runs);
   }
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
   // The summaries are written, and say so, before the run fails.

@@ -24,6 +24,11 @@ Add a release entry here when a version changes.
   still refuses a run at another host. A run stored before it is compared by the host it holds, and one stored with
   `<MODEL_BASE_URL>` and no digest cannot be resumed.
 
+- No eval changed version. A summary and a sample written by `lib/run.ts` (nightly, reflect and the other process evals) write an
+  akm actor id `human:<login>` as `human:<user>`: akm stamps the OS login of whoever ran it into the notes it writes, and the
+  nightly samples store those notes. The three published nightly samples that held a login were rewritten the same way; no digest
+  covers a samples file. SkillRet now records `wall_seconds` in `summary.json` as every other eval does, with or without `--repeat`.
+
 - Retrieval collection version 0.3 supports optional per-query `searchArgs` in
   `queries.jsonl`. Collection and label pooling pass those existing CLI flags
   to keyword and semantic search only; curate and queries without this field
