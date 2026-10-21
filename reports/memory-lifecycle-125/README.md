@@ -221,7 +221,13 @@ inspect raw outputs, then complete affected real-model measurements. Do not
 weaken assertions, silently skip cases or implement AKM fixes in the harness.
 
 Applicable rollout is harness merge/publication plus remote and installed-path
-verification. A branch push preserves the work; it is not accepted publication.
+verification. Implementation commit
+`c210251ef289c8cbabca3b4dc20215b27babc75a` was pushed to
+[`test/125-memory-lifecycle`](https://github.com/itlackey/akm-eval/tree/test/125-memory-lifecycle)
+and `git ls-remote origin refs/heads/test/125-memory-lifecycle` returned that
+exact commit. A branch push preserves the work; it is not accepted publication.
+The worktree is `/tmp/akm-125-eval`; the normal suite and final real-CLI checks
+above verified this implementation. This record update does not change the tests.
 Opening the requested PR remains conditional on the user's required combined
 acceptance evidence. No production data migration applies. Rollback is reverting
 the harness commit; test recovery uses the existing `proposal accept`/`revert`
