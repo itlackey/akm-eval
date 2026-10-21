@@ -818,6 +818,7 @@ describe("--repeat and --semantic", () => {
     const single = benchmark();
     expect(single.run("--limit", "3", "--label", "once").code).toBe(0);
     expect(single.names()).toEqual(["once"]);
+    expect(single.read("once").wall_seconds).toBeGreaterThan(0); // every eval's summary records its total time, with or without --repeat
   }, 120_000);
 
   test("--semantic scores the semantic search too, with --limit as well, and a run without it scores keyword search alone, a full one too", () => {

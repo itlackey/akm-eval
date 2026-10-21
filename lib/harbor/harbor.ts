@@ -135,6 +135,9 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
     const model = m.name.startsWith("openai/") ? m.name : `openai/${m.name}`; // the endpoint's own id, as opencode's openai provider takes it
     if (/^https?:\/\/(localhost|127\.|\[::1\])/.test(m.baseUrl)) fail(`the endpoint of ${model}, ${m.baseUrl}, would be the container itself, not the model server. Use the address a container reaches it at.`);
     if (!m.apiKey) console.warn(`model key is empty: sending "unused" to ${hostnameOf(m.baseUrl) || "the endpoint"} (a server that needs a key will fail every trial after its setup)`);
+    // No limits is a documented choice (a cloud model needs none), so this warns and does not refuse. But the usual cause is a
+    // checkout or worktree without models.json (it is gitignored), and then the run is quietly not comparable with one that had them.
+    if (!m.limits) console.warn(`WARNING: no context and output limits for ${model}: models.json has no "limits" for it (the file is gitignored, so a new checkout or worktree has none). OpenCode runs without provider.openai.models.<model>.limit in both arms, and the results are not comparable with runs that had limits. Add "limits": { "context": N, "output": N } to its line in models.json to set them.`);
     return { model, env: { ...env, OPENAI_API_KEY: m.apiKey || "unused", OPENAI_BASE_URL: m.baseUrl }, ...(m.limits ? { modelLimits: m.limits } : {}), ...(m.chat?.reasoning_effort !== undefined ? { modelReasoningEffort: m.chat.reasoning_effort } : {}) };
   }
 

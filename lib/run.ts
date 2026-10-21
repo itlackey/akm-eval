@@ -30,7 +30,7 @@ import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, corpusUsage, resolv
 import { type Measurement, type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf } from "./manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "./models.ts";
 import { type Probe, probeModel } from "./probe.ts";
-import { type EngineSettings, endpointOrigin, engineSettings, redactConfig } from "./provenance.ts";
+import { type EngineSettings, endpointOrigin, engineSettings, redactActors, redactConfig } from "./provenance.ts";
 import { repeatRuns } from "./repeat.ts";
 import { makeResultsDir } from "./results.ts";
 
@@ -271,7 +271,7 @@ export async function runCorpus<Case, Row extends Obj, Extra extends Obj>(
   let written = 0;
   const record = (row: Row, c = byId.get(String(row.id))): void => {
     if (c === undefined) throw new Error(`${name}: a row for ${row.id}, which is not a case that was selected`);
-    appendFileSync(samples, `${JSON.stringify(row)}\n`);
+    appendFileSync(samples, `${JSON.stringify(redactActors(row))}\n`); // akm stamps notes with the OS login (human:<login>); published samples must not carry it
     console.log(`  [${String(++written).padStart(String(cases.length).length)}/${cases.length}] ${spec.progress(c, row)}`);
   };
 
@@ -337,7 +337,7 @@ export async function runCorpus<Case, Row extends Obj, Extra extends Obj>(
     results_dir: dir,
   } as Summary;
   const { results_dir: _dir, ...stored } = summary;
-  writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
+  writeFileSync(join(dir, "summary.json"), `${JSON.stringify(redactActors(stored), null, 2)}\n`);
   spec.printSummary(summary);
   if (aborted !== null) fail(`${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and that akm can reach the model.`, 1);
   return summary;

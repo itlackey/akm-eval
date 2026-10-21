@@ -66,6 +66,23 @@ export function redactConfig(config: any): any {
   );
 }
 
+/** What a result writes in place of the OS login name akm stamps into a note as its actor (`generated.by: human:<login>`). */
+export const HIDDEN_ACTOR = "human:<user>";
+
+/** An akm actor id of the `human:` kind, up to the next space, quote, backslash, comma or closing bracket. */
+const HUMAN_ACTOR = /\bhuman:[^\s"'\\,;)\]}]+/g;
+
+/**
+ * A deep copy for samples and summaries with every `human:<anything>` actor id written as `human:<user>`: akm stamps the OS login of whoever
+ * ran it into the notes it writes, and the eval stores those notes' text. Other `by` values (`agent:...`) are not logins and stay.
+ */
+export function redactActors<T>(x: T): T {
+  if (typeof x === "string") return x.replace(HUMAN_ACTOR, HIDDEN_ACTOR) as T;
+  if (Array.isArray(x)) return x.map(redactActors) as T;
+  if (isRecord(x)) return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, redactActors(v)])) as T;
+  return x;
+}
+
 /** Does a name hold the URL of a model or embedding server: it ends in endpoint or base url, in any case (endpoint, model_endpoint, baseUrl, OPENAI_BASE_URL)? */
 const urlField = (name: string): boolean => /(?:endpoint|base_?url)$/i.test(name);
 

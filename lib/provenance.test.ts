@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { engineConfig } from "./akm/akm.ts";
-import { canonical, credentialField, endpointHost, endpointDigest, endpointIdentity, endpointOrigin, engineSettings, redactConfig, sameEndpoint, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
+import { canonical, credentialField, endpointHost, endpointDigest, endpointIdentity, endpointOrigin, engineSettings, redactActors, redactConfig, sameEndpoint, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
 const files = (contents: Record<string, string>) => {
@@ -236,5 +236,25 @@ describe("canonical and withoutEngineSettings", () => {
   test("leaves out the settings of the model from every engine, and nothing else", () => {
     const config = { semanticSearchMode: "off", engines: { m: { kind: "llm", provider: "openai", model: "x", endpoint: "https://h.example/v1", temperature: 0, enableThinking: false, timeoutMs: 5, apiKey: "$K" } } };
     expect(withoutEngineSettings(config)).toEqual({ semanticSearchMode: "off", engines: { m: { kind: "llm", provider: "openai", apiKey: "$K" } } });
+  });
+});
+
+describe("redactActors", () => {
+  test("writes every human:<login> actor id as human:<user>, at any depth, and leaves the rest of the text alone", () => {
+    const note = "---\ngenerated:\n  by: human:alice\n  at: 2026-10-21T07:29:43.823Z\nverified:\n  by: \"human:jane.doe@example\"\n---\nbody by agent:opencode, not human\n";
+    expect(redactActors({ before: note, proposals: [{ content: note }], n: 3, none: null, ok: true })).toEqual({
+      before: note.replace("human:alice", "human:<user>").replace("human:jane.doe@example", "human:<user>"),
+      proposals: [{ content: note.replace("human:alice", "human:<user>").replace("human:jane.doe@example", "human:<user>") }],
+      n: 3,
+      none: null,
+      ok: true,
+    });
+    expect(JSON.stringify(redactActors({ x: ["by: human:alice\n"] }))).not.toContain("alice");
+  });
+
+  test("is idempotent, and an actor that is not a human stays", () => {
+    const once = redactActors("by: human:unknown, then agent:opencode and system:akm");
+    expect(once).toBe("by: human:<user>, then agent:opencode and system:akm");
+    expect(redactActors(once)).toBe(once);
   });
 });

@@ -643,6 +643,15 @@ describe("the cases of a run", () => {
     expect(done?.rows.map((row) => row.id)).toEqual(counters.map((m) => m[2]));
   });
 
+  test("a row holding the OS login akm stamps on a note (human:<login>) is written to samples.jsonl with human:<user>", () => {
+    setCases([{ id: "actor0", fail: "note generated.by: human:alice at 2026-10-21" }, ...ok(1)]);
+    const r = run(["--label", "actors"]);
+    expect(r.code).toBe(0);
+    const [done] = resultsOf("actors");
+    expect(done?.rows[0]?.error).toContain("generated.by: human:<user> at");
+    for (const file of ["samples.jsonl", "summary.json"]) expect(readFileSync(join(done?.folder as string, file), "utf8"), file).not.toContain("alice");
+  });
+
   test("--limit takes the first cases, and the summary says how many there were", () => {
     setCases(ok(6));
     const r = run(["--limit", "2", "--label", "limited"]);
