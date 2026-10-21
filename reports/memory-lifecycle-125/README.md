@@ -228,8 +228,10 @@ and `git ls-remote origin refs/heads/test/125-memory-lifecycle` returned that
 exact commit. A branch push preserves the work; it is not accepted publication.
 The worktree is `/tmp/akm-125-eval`; the normal suite and final real-CLI checks
 above verified this implementation. This record update does not change the tests.
-Opening the requested PR remains conditional on the user's required combined
-acceptance evidence. No production data migration applies. Rollback is reverting
+The user subsequently authorized a **draft PR against main** with the pending
+status and dependencies explicit. Draft review is authorized now; readiness for
+merge still requires combined-build acceptance, smoke compatibility and the
+remaining validation above. Issue #125 remains open. No production data migration applies. Rollback is reverting
 the harness commit; test recovery uses the existing `proposal accept`/`revert`
 commands in disposable libraries. Publishing this harness does not deploy any
 AKM product fixes.
