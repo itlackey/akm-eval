@@ -113,7 +113,7 @@ memory-inference notes need no child, 14 do):
   Since that round akm-eval changed the redaction of `human:<login>` to
   `human:<user>` in stored note text, SkillRet's `wall_seconds`, and
   agent-ab's missing-limits warning (#134); none changes what a run measures.
-  No `founder3` or other login appears in the new files.
+  No login name appears in the new files (actor ids read `human:<user>`).
 - **Process evals move by zero to three cases.** distill, reflect, nightly and
   consolidate `--pool` have the same headline as 0.10.261009-beta; extract +1
   (36/40), consolidate -3 (39 to 36 of 40), judge-gate 14/14 to 17/17,
