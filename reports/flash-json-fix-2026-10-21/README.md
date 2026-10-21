@@ -80,7 +80,7 @@ fast, and consolidation/promotion needs more validation before migration.
 Production process bindings and evaluator model/judge defaults remain unchanged.
 
 The deployment uses local image `homelab/strata-b70:0.1.46.5`, image ID
-`sha256:72b71ae7c099fadaafa070653f73820faa6fe0e6475a91d6e1b4648410fe9412`,
+`sha256:a5f448b19c7191cd1bb64630e018c8fbc53cbe4f339695c77cc2c09e35b0d3d9`,
 from upstream revision `9de04cd44e927a9a3df6bbc0e94fc1be8b844ba4`, Intel Arc Pro B70
 32 GB with 128 GB host RAM, 131,072 context, int8 KV and a 32,768-token resident
 window. The evaluator image ID remains
