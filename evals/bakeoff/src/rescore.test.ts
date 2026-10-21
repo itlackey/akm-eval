@@ -32,17 +32,17 @@ const CASES = (required: string[]) => [
 ];
 
 /** A corpus folder in `parent`, a fake akm and a results folder, and a custom run on it. The fake derives the memory and plans the one promotion. */
-async function customRun(parent: string, required = ["retries", "2 seconds"]) {
+async function customRun(parent: string, required = ["retries", "2 seconds"], more: { cases?: unknown[]; files?: Record<string, string>; plan?: object } = {}) {
   const root = mkdtempSync(join(tmpdir(), "bakeoff-rescore-"));
   dirs.push(root);
   const folder = join(parent, "corpus");
   mkdirSync(join(folder, "memories"), { recursive: true });
-  for (const [path, text] of Object.entries({ "memories/retry.md": MEMORY, ...POOL })) writeFileSync(join(folder, path), text);
-  writeFileSync(join(folder, "cases.json"), JSON.stringify(CASES(required)));
+  for (const [path, text] of Object.entries({ "memories/retry.md": MEMORY, ...POOL, ...more.files })) writeFileSync(join(folder, path), text);
+  writeFileSync(join(folder, "cases.json"), JSON.stringify(more.cases ?? CASES(required)));
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
   process.env.AKM_BIN = commandLine(["bun", script]);
-  process.env.FAKE_PLAN = JSON.stringify({ infer: { retry: { derived: DERIVED } }, promote: { refs: ["memories/signed"] } });
+  process.env.FAKE_PLAN = JSON.stringify(more.plan ?? { infer: { retry: { derived: DERIVED } }, promote: { refs: ["memories/signed"] } });
   process.env.FAKE_LOG = join(root, "calls.jsonl");
   process.env.MODEL_API_KEY = "model-secret";
   const corpus: ResolvedCorpus = { name: "custom", folder, rewrite: false, seed: null, flag: `--cases ${folder}` };
@@ -135,5 +135,47 @@ describe("a custom run on a folder outside the repository is rescored with --cas
 
     expect(done.rows.map((r) => [r.id, r.correct])).toEqual([["infer", false], ["promote", true]]);
     expect(folder).not.toBe(moved);
+  });
+});
+
+describe("memory-inference no-change decisions are scored again from akm's counters", () => {
+  const TALLY = "---\ndescription: Tool tally.\n---\n\nTool calls this session: Read 11, Edit 4. Total: 15.\n";
+  const cases = [
+    { id: "quiet", process: "memory-inference", files: ["memories/tally.md"], expected: { noChange: true } },
+    { id: "needs-child", process: "memory-inference", files: ["memories/retry.md"], expected: { required: ["retries", "2 seconds"] } },
+  ];
+  /** A saved run of an always-abstain treatment: akm counted a no-change for both notes. */
+  const abstained = (parent: string) => customRun(parent, [], { cases, files: { "memories/tally.md": TALLY }, plan: { infer: { tally: { noChange: true }, retry: { noChange: true } } } });
+  const rewrite = (dir: string, change: (row: Record<string, unknown>) => void): void => {
+    const file = join(dir, "samples.jsonl");
+    writeFileSync(file, readFileSync(file, "utf8").trim().split("\n").map((l) => { const row = JSON.parse(l); change(row); return JSON.stringify(row); }).join("\n") + "\n");
+  };
+
+  test("a saved always-abstain arm rescored passes the note that needs no child and still fails the one that needs a child", async () => {
+    const { summary, folder } = await abstained(outside());
+    expect(summary.metrics.by_process["memory-inference"]).toMatchObject({ n: 2, passed: 1, valid_output: 0, outcomes: { "no-change": 2 }, failed: { "does not abstain": 1 } });
+    const done = rescoreRun(readStored(summary.results_dir), { cases: folder });
+    expect(done.changed).toEqual([]);
+    expect(done.rows.map((r) => [r.id, r.outcome, r.correct])).toEqual([["quiet", "no-change", true], ["needs-child", "no-change", false]]);
+    expect(done.summary.metrics.by_process["memory-inference"]).toMatchObject({ passed: 1, failed: { "does not abstain": 1 } });
+  });
+
+  test("a row collected before the decision was recorded, with no derived memory, is refused with a recollection requirement, not guessed", async () => {
+    const { summary, folder } = await abstained(outside());
+    rewrite(summary.results_dir, (row) => { // what an earlier collection left: the outcome it could name, and no counters
+      row.outcome = "unusable";
+      row.reason = "akm wrote no derived memory: the reply was not a derived memory";
+      row.structure = false;
+      delete row.inference;
+    });
+    expect(() => rescoreRun(readStored(summary.results_dir), { cases: folder })).toThrow(/cannot be scored again.*inference \(.*recollect the case with bakeoff 0\.3\) \(2 rows: quiet, needs-child\)/);
+  });
+
+  test("an old row that holds a derived memory needs nothing new and is scored again, and no-change is never inferred for it", async () => {
+    const { summary, folder } = await customRun(outside(), ["retries", "2 seconds"], { cases, files: { "memories/tally.md": TALLY }, plan: { infer: { tally: { derived: DERIVED }, retry: { derived: DERIVED } } } });
+    rewrite(summary.results_dir, (row) => { delete row.inference; });
+    const done = rescoreRun(readStored(summary.results_dir), { cases: folder });
+    expect(done.rows.map((r) => [r.id, r.outcome, r.correct])).toEqual([["quiet", "output", false], ["needs-child", "output", true]]); // a child for the note that needs none is unjustified
+    expect(done.rows[0]?.checks).toEqual({ "decides no-change": false });
   });
 });

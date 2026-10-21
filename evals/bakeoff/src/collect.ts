@@ -18,7 +18,7 @@ import { basename, dirname, join } from "node:path";
 import { type Sandbox, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
-import { type Case, type Process, type Raw, type Row, makeRow } from "./score.ts";
+import { type Case, type Inference, type Process, type Raw, type Row, makeRow } from "./score.ts";
 
 export const NAME = "bakeoff";
 
@@ -121,7 +121,18 @@ const bodyOf = (text: string): string => (/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S
 
 type Collect = (c: LoadedCase, sandbox: Sandbox, timeoutMs: number) => Promise<Out>;
 
-/** memory-inference: the memory in a bundle, `akm improve` with only memory inference on, and the derived memory it writes next to it. */
+/** The counters of the improve result's `memoryInference` that decide a case with no derived memory. Only whole numbers are kept. */
+function inferenceOf(improve: Obj): Inference {
+  const mi = (improve.memoryInference ?? {}) as Obj;
+  return Object.fromEntries((["noChange", "skippedNoFacts", "writtenFacts", "htmlErrorCount"] as const).flatMap((k) => (Number.isInteger(mi[k]) ? [[k, mi[k]]] : [])));
+}
+
+/**
+ * memory-inference: the memory in a bundle, `akm improve` with only memory inference on, and the derived memory it writes next to it.
+ * With none written, a missing file decides nothing. What happened is what akm counted: a no-change decision (`noChange`, akm#1208), or a reply
+ * it could not use (`skippedNoFacts`: malformed, empty, HTML), or nothing counted, which is an error. A pass that did not run, a failed model
+ * call and a timeout are errors as well, whatever the counters say.
+ */
 const memoryInference: Collect = async (c, sandbox, timeoutMs) => {
   const file = c.files[0] as string;
   place(c, sandbox);
@@ -130,10 +141,16 @@ const memoryInference: Collect = async (c, sandbox, timeoutMs) => {
   const improve = await runAkmJson<Obj>(sandbox, ["improve", "--strategy", STRATEGIES["memory-inference"], "--no-sync", "--require-engines", "--json-to-stdout"], opts);
   const served = servedBy(improve, "memoryInference");
   const derived = bundleFile(sandbox, join(dirname(file), `${basename(file, ".md")}.derived.md`));
-  if (existsSync(derived)) return { outcome: "output", derived: readFileSync(derived, "utf8"), served };
+  const inference = inferenceOf(improve);
+  if (existsSync(derived)) return { outcome: "output", derived: readFileSync(derived, "utf8"), inference, served };
   if (!improve.memoryInference) throw new Error("improve ran no memory inference. Does this akm have it, behind experimental.improveAutonomy?");
   if (callFailed(improve, "memoryInference")) throw new Error("the model call of memory inference failed");
-  return { outcome: "unusable", reason: "akm wrote no derived memory: the reply was not a derived memory with a title, a description, tags, search hints and content", served };
+  const { noChange, skippedNoFacts = 0 } = inference;
+  // An akm without akm#1208 has no no-change decision, so a missing derived memory there is an unusable reply.
+  if (noChange === undefined) return { outcome: "unusable", reason: "akm wrote no derived memory, and this akm does not report memoryInference.noChange (it predates akm#1208), so the reply was not a derived memory with a title, a description, tags, search hints and content", inference, served };
+  if (noChange === 1 && skippedNoFacts === 0) return { outcome: "no-change", inference, served };
+  if (noChange === 0 && skippedNoFacts > 0) return { outcome: "unusable", reason: "akm wrote no derived memory: the reply was not a derived memory with a title, a description, tags, search hints and content, nor a no-change decision", inference, served };
+  throw new Error(`akm wrote no derived memory and its counters do not explain it (noChange ${noChange}, skippedNoFacts ${skippedNoFacts}, considered ${improve.memoryInference.considered ?? "?"})`);
 };
 
 /** remember-enrich: `akm remember --enrich` on the text of the memory, and the memory file it wrote. akm exits 0 and writes the memory without enrichment when the model gives nothing, and says so on stderr. */

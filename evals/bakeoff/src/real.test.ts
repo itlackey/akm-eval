@@ -25,8 +25,13 @@ const realVersion = realAkm();
 const cases = loadCases(join(import.meta.dir, "..", "assets"));
 const bodyOf = (text: string): string => text.replace(/^---[\s\S]*?\n---\n?/, "").trim();
 
-/** What a model that knows the answer says to the prompt of each process. `mode` makes it fail: a reply in prose, or an HTTP 500. */
-function model(mode: "oracle" | "prose" | "down") {
+const NO_CHANGE = { noChange: true, title: "", description: "", content: "", tags: [], searchHints: [] };
+
+/**
+ * What a model that knows the answer says to the prompt of each process. For a note whose case expects no change, that is a no-change decision.
+ * `mode` changes it: a reply in prose, an HTTP 500, a model that is too slow, or one that decides no-change for every note (the always-abstain treatment).
+ */
+function model(mode: "oracle" | "prose" | "down" | "slow" | "abstain") {
   const caseFor = (process: LoadedCase["process"], prompt: string): LoadedCase | undefined => cases.find((c) => c.process === process && c.files.some((f) => f.endsWith(".md") && prompt.includes(bodyOf(c.texts[f] as string).slice(0, 60))));
   return Bun.serve({
     port: 0,
@@ -35,11 +40,13 @@ function model(mode: "oracle" | "prose" | "down") {
       const body = (await req.json().catch(() => ({}))) as { messages?: { content: string }[] };
       const prompt = (body.messages ?? []).map((m) => m.content).join("\n");
       if (mode === "down") return new Response("upstream failure", { status: 500 });
+      if (mode === "slow") await new Promise((resolve) => setTimeout(resolve, 8000));
       let reply: unknown = {};
       if (mode === "prose") reply = "I cannot answer in JSON.";
-      else if (/Compress the memory/.test(prompt)) {
+      else if (/Compress the memory|needs a derived memory/.test(prompt)) {
         const e = caseFor("memory-inference", prompt)?.expected ?? {};
-        reply = { title: "A derived memory", description: `It keeps ${(e.required ?? []).join(" and ")}.`, tags: ["one", "two", "three"], searchHints: ["first hint", "second hint", "third hint"], content: `${(e.required ?? []).join(". ")}. ${e.date ?? ""}` };
+        if (e.noChange || mode === "abstain") reply = NO_CHANGE;
+        else reply = { title: "A derived memory", description: `It keeps ${(e.required ?? []).join(" and ")}.`, tags: ["one", "two", "three"], searchHints: ["first hint", "second hint", "third hint"], content: `${(e.required ?? []).join(". ")}. ${e.date ?? ""}` };
       } else if (/memory tagger/.test(prompt)) {
         const e = caseFor("remember-enrich", prompt)?.expected ?? {};
         reply = { tags: (e.keywords ?? []).map((k) => k.toLowerCase()).slice(0, 4), description: `About ${(e.keywords ?? []).join(" ")}.`, ...(e.observed_at ? { observed_at: e.observed_at } : {}) };
@@ -73,20 +80,58 @@ describe.skipIf(!realVersion)(`with the akm on this machine (${realVersion})`, (
     }
   });
 
-  const run = async (mode: "oracle" | "prose" | "down", list: LoadedCase[]) => {
+  const run = async (mode: "oracle" | "prose" | "down" | "slow" | "abstain", list: LoadedCase[], more: Partial<Parameters<typeof runCase>[1]> = {}) => {
     const server = model(mode);
     try {
       const rows = [];
-      for (const c of list) rows.push(await runCase(c, { baseUrl: `http://localhost:${server.port}/v1`, model: "scripted-model", hasKey: true }));
+      for (const c of list) rows.push(await runCase(c, { baseUrl: `http://localhost:${server.port}/v1`, model: "scripted-model", hasKey: true, ...more }));
       return rows;
     } finally {
       server.stop(true);
     }
   };
 
-  test("every case of the public corpus, answered right, is correct, and akm wrote what the scorer reads", async () => {
+  const inference = cases.filter((c) => c.process === "memory-inference");
+  const restraint = inference.filter((c) => c.expected.noChange);
+  const one = (id: string) => cases.find((c) => c.id === id) as LoadedCase;
+
+  test("every case of the public corpus, answered right, is correct: a child where one is wanted, akm's no-change decision where it is not", async () => {
     const rows = await run("oracle", cases);
-    expect(rows.map((r) => [r.id, r.outcome, r.correct])).toEqual(cases.map((c) => [c.id, "output", true]));
+    expect(rows.map((r) => [r.id, r.outcome, r.correct])).toEqual(cases.map((c) => [c.id, c.expected.noChange ? "no-change" : "output", true]));
+    for (const r of rows.filter((x) => x.outcome === "no-change")) expect(r.inference).toMatchObject({ noChange: 1, skippedNoFacts: 0, writtenFacts: 0 }); // from akm's own result, not from a missing file
+    for (const r of rows.filter((x) => x.process === "memory-inference" && x.outcome === "output")) expect(r.inference).toMatchObject({ noChange: 0, writtenFacts: 1 });
+  }, 600_000);
+
+  test("a model that decides no-change for every note passes the notes that need none and fails every note that needs a child", async () => {
+    const rows = await run("abstain", inference);
+    expect(rows.map((r) => r.outcome)).toEqual(inference.map(() => "no-change"));
+    expect(rows.map((r) => [r.id, r.correct])).toEqual(inference.map((c) => [c.id, !!c.expected.noChange]));
+    expect(rows.filter((r) => !r.correct).every((r) => r.checks?.["does not abstain"] === false)).toBe(true);
+    expect(restraint.length).toBeGreaterThan(0);
+  }, 600_000);
+
+  test("a malformed reply is unusable, never a no-change, even for a note that needs no child", async () => {
+    const rows = await run("prose", restraint);
+    expect(rows.map((r) => [r.outcome, r.correct, r.inference?.noChange, r.inference?.skippedNoFacts])).toEqual(restraint.map(() => ["unusable", false, 0, 1]));
+  }, 600_000);
+
+  test("a memory akm does not consider, so that no derived memory and no count follow, is an error and not a no-change", async () => {
+    const stamped = { ...one("infer-tool-tally-noise"), texts: { "memories/session-tool-tally.md": one("infer-tool-tally-noise").texts["memories/session-tool-tally.md"]?.replace("updated:", "inferenceProcessed: true\nupdated:") as string } };
+    const [row] = await run("oracle", [stamped]);
+    expect(row).toMatchObject({ outcome: "error", correct: null });
+    expect(row?.error).toContain("its counters do not explain it");
+  }, 600_000);
+
+  test("a pass that is switched off is an error saying so, not a no-change", async () => {
+    const off = { strategy: "", configPatch: { path: "off", sha256: "", patch: { improve: { strategies: { "bakeoff-memory-inference": { processes: { memoryInference: { enabled: false } } } } } } } };
+    const [row] = await run("oracle", [one("infer-tool-tally-noise")], { overrides: off });
+    expect(row).toMatchObject({ outcome: "error", correct: null });
+    expect(row?.error).toContain("improve ran no memory inference");
+  }, 600_000);
+
+  test("a model that is too slow is a timeout error, not a no-change", async () => {
+    const [row] = await run("slow", [one("infer-tool-tally-noise")], { timeoutMs: 2000 });
+    expect(row).toMatchObject({ outcome: "error", correct: null, timed_out: true });
   }, 600_000);
 
   test("a reply in prose is unusable for every case, and never correct", async () => {

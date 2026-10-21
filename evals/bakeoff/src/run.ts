@@ -40,7 +40,7 @@ function printSummary(s: Summary & Own): void {
     const k = m.by_process[process];
     if (!k) continue;
     const failed = Object.entries(k.failed).map(([name, n]) => `${name} ${n}`).join(", ");
-    const other = (["unusable", "error"] as const).filter((o) => k.outcomes[o] > 0).map((o) => `${o} ${k.outcomes[o]}`).join(", ");
+    const other = (["no-change", "unusable", "error"] as const).filter((o) => k.outcomes[o] > 0).map((o) => `${o} ${k.outcomes[o]}`).join(", ");
     console.log(`    ${process.padEnd(20)} ${`${k.passed}/${k.n}`.padEnd(5)} ${pct(k.checks).padEnd(7)} ${[failed && `failed: ${failed}`, other && `outcomes: ${other}`].filter(Boolean).join("; ")}`);
   }
   console.log(`  results         ${relative(ROOT, s.results_dir)}/`);
@@ -74,7 +74,7 @@ const SPEC: EvalSpec<LoadedCase, Row, Extra> = {
   configFor,
   runCase,
   progress: (c, row) => {
-    const verdict = row.outcome === "error" ? `error  ${(row.error ?? "").slice(0, 120)}` : `${row.outcome.padEnd(8)} ${row.correct ? "ok" : `FAIL ${Object.entries(row.checks ?? {}).filter(([, ok]) => !ok).map(([name]) => name).join(", ") || "shape"}`}`;
+    const verdict = row.outcome === "error" ? `error  ${(row.error ?? "").slice(0, 120)}` : `${row.outcome.padEnd(9)} ${row.correct ? "ok" : `FAIL ${Object.entries(row.checks ?? {}).filter(([, ok]) => !ok).map(([name]) => name).join(", ") || "shape"}`}`;
     return `${c.id.padEnd(34)} ${c.process.padEnd(19)} ${verdict}  ${row.seconds}s`;
   },
   prepare: (values) => {

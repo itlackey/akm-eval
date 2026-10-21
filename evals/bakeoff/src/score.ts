@@ -12,10 +12,15 @@ export type Process = (typeof PROCESSES)[number];
 export interface Expected {
   /** Terms the output must keep (memory-inference, session-summary). */
   required?: string[];
-  /** Terms the output must not hold (memory-inference, session-summary). */
+  /** Terms the output must not hold (memory-inference, session-summary). In memory-inference a mention that a nearby negation rules out ("was not rotated") does not hold the term. */
   forbidden?: string[];
   /** A date a derived memory must keep (memory-inference). */
   date?: string;
+  /**
+   * The note needs no derived memory, so akm's model should decide no-change (memory-inference). A child for such a note is unjustified,
+   * and a no-change on a note without this flag is a false abstention. `required`, `forbidden` and `date` are then optional.
+   */
+  noChange?: boolean;
   /** The date an enriched memory must carry, or null when the memory writes none (remember-enrich). */
   observed_at?: string | null;
   /** Terms the metadata must cover (remember-enrich, schema-repair). Any one is enough for schema-repair. */
@@ -90,12 +95,33 @@ export type Checks = Record<string, boolean>;
 
 /** The shape of the output, and the checks. A case with no output is not well formed and holds none of what it expects, and its checks say so. */
 interface Scored {
-  structure: boolean;
+  /** Null when there is no document to shape: a no-change decision. */
+  structure: boolean | null;
   checks: Checks;
 }
 
-/** memory-inference: the derived memory akm writes next to the memory (memories/<name>.derived.md). */
-function scoreInference(c: Case, derived: string | undefined): Scored {
+/** A word that turns the term after it into its opposite, within the same clause: "not", "never", "n't", "without", "yet to", "instead of". Finite on purpose. */
+const NEGATION = /\b(?:not|no|never|none|nothing|neither|nor|cannot|without|unable|yet to|failed to|fails to|instead of|rather than)\b|n['\u2019]t\b/;
+
+/**
+ * Does the text hold the term as a claim? A mention counts unless one of the four words before it, in the same clause, is a negation:
+ * "the key was rotated" holds "rotated", "the key was not rotated" does not. This is the whole rule: no judge, no parse.
+ */
+export function assertsTerm(text: string, term: string): boolean {
+  const needle = normalize(term);
+  for (let at = needle === "" ? -1 : text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + needle.length)) {
+    const clause = text.slice(0, at).split(/[.;:!?]\s|\s;\s/).pop() ?? "";
+    if (!NEGATION.test(clause.trim().split(/\s+/).slice(-4).join(" "))) return true;
+  }
+  return false;
+}
+
+/**
+ * memory-inference: the derived memory akm writes next to the memory (memories/<name>.derived.md), or akm's decision that the memory needs
+ * none. A no-change is a valid decision and not a document: it has no shape (`structure` is null), and it earns the checks only on a case
+ * that expects it. On any other case it is a false abstention, and the case holds none of what it expects.
+ */
+function scoreInference(c: Case, derived: string | undefined, noChange: boolean): Scored {
   const doc = parseDocument(derived);
   const title = text(doc?.data.title);
   const description = text(doc?.data.description);
@@ -105,11 +131,14 @@ function scoreInference(c: Case, derived: string | undefined): Scored {
   const content = (doc?.body ?? "").replace(/^#[^\n]*\n*/, "").trim();
   const structure = !!doc && title !== "" && description !== "" && content !== "" && !!tags && tags.length >= 3 && tags.length <= 8 && nonEmpty(tags) && !!searchHints && searchHints.length >= 3 && searchHints.length <= 6 && nonEmpty(searchHints);
   const output = normalize({ title, description, tags: tags ?? [], searchHints: searchHints ?? [], content });
+  const claims = normalize([title, description, content, ...(tags ?? []), ...(searchHints ?? [])].join(" ; "));
   const checks: Checks = {};
+  if (c.expected.noChange) checks["decides no-change"] = noChange;
+  else if (noChange) checks["does not abstain"] = false;
   for (const term of c.expected.required ?? []) checks[`retains ${term}`] = !!doc && containsTerm(output, term);
   if (c.expected.date) checks["retains explicit date"] = !!doc && output.includes(c.expected.date.toLowerCase());
-  for (const term of c.expected.forbidden ?? []) checks[`does not invent ${term}`] = !doc || !output.includes(normalize(term));
-  return { structure, checks };
+  for (const term of c.expected.forbidden ?? []) checks[`does not invent ${term}`] = !doc || !assertsTerm(claims, term);
+  return { structure: noChange ? null : structure, checks };
 }
 
 /** remember-enrich: the memory `akm remember --enrich` wrote, with the tags, the description and the date the model gave. */
@@ -189,9 +218,23 @@ function scorePromote(c: Case, planned: string[] | undefined): Scored {
 
 // --- Rows and metrics --------------------------------------------------------------------------------------------
 
-/** What akm gave back for the case: `output` is what the process makes (a file, a proposal, promotions), `unusable` is a case akm ran for and got nothing it could use from the model's reply, `error` is a case that did not run to the end. */
-export type Outcome = "output" | "unusable" | "error";
-export const OUTCOMES: readonly Outcome[] = ["output", "unusable", "error"];
+/**
+ * What akm gave back for the case: `output` is what the process makes (a file, a proposal, promotions), `no-change` is memory inference's
+ * explicit decision that the memory needs no derived memory (akm counted it in `memoryInference.noChange`: a missing file never means it),
+ * `unusable` is a case akm ran for and got nothing it could use from the model's reply, `error` is a case that did not run to the end.
+ */
+export type Outcome = "output" | "no-change" | "unusable" | "error";
+export const OUTCOMES: readonly Outcome[] = ["output", "no-change", "unusable", "error"];
+
+/** The counters of akm's `memoryInference` result that decide a case with no derived memory. Only those are kept. */
+export interface Inference {
+  /** Fresh and cached no-change decisions. Absent when this akm does not report it (before akm#1208). */
+  noChange?: number;
+  /** Replies akm could not use (malformed, empty, HTML, a failed call). Never a no-change. */
+  skippedNoFacts?: number;
+  writtenFacts?: number;
+  htmlErrorCount?: number;
+}
 
 /**
  * The raw output of one case: what the collector got back from akm, and nothing the scorer decides. The fields are the ones a row stores
@@ -207,6 +250,8 @@ export interface Raw {
   seconds: number;
   /** memory-inference: the derived memory, memories/<name>.derived.md, as akm wrote it. */
   derived?: string;
+  /** memory-inference: the counters of akm's result that say why there is a derived memory or none. Rows collected before bakeoff 0.3 lack it. */
+  inference?: Inference;
   /** remember-enrich: the memory file `akm remember --enrich` wrote. */
   written?: string;
   /** schema-repair: the content of the proposal akm queued, the lesson with its two fields repaired. */
@@ -229,9 +274,9 @@ export interface Row extends Omit<Raw, "outcome" | "timedOut" | "error"> {
   id: string;
   process: Process;
   outcome: Outcome;
-  /** The output has the shape the process asks for. Null for an error. */
+  /** The output has the shape the process asks for. Null for an error, and for a no-change, which is a decision and has no document. */
   structure: boolean | null;
-  /** The shape is right and every check holds. Null for an error. */
+  /** The shape is right (or the decision is a no-change) and every check holds. Null for an error. */
   correct: boolean | null;
   checks: Checks | null;
   reason: string;
@@ -252,7 +297,7 @@ function score(c: Case, run: Raw): Scored {
   const output = run.outcome === "output" ? run[OUTPUT_FIELD[c.process]] : undefined;
   switch (c.process) {
     case "memory-inference":
-      return scoreInference(c, output as string | undefined);
+      return scoreInference(c, output as string | undefined, run.outcome === "no-change");
     case "remember-enrich":
       return scoreEnrich(c, output as string | undefined);
     case "schema-repair":
@@ -270,8 +315,8 @@ export function makeRow(c: Case, run: Raw): Row {
   const base = { id: c.id, process: c.process, outcome: run.outcome, reason: run.reason ?? "", ...(run.served && run.outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
   if (run.outcome === "error") return { ...base, structure: null, correct: null, checks: null, error: run.error ?? run.reason, ...(run.timedOut ? { timed_out: true as const } : {}) };
   const { structure, checks } = score(c, run);
-  const kept = Object.fromEntries((["derived", "written", "proposal", "asset", "planned", "promoted", "skipped"] as const).filter((k) => run[k] !== undefined).map((k) => [k, run[k]]));
-  return { ...base, ...kept, structure, correct: structure && Object.values(checks).every(Boolean), checks };
+  const kept = Object.fromEntries((["derived", "inference", "written", "proposal", "asset", "planned", "promoted", "skipped"] as const).filter((k) => run[k] !== undefined).map((k) => [k, run[k]]));
+  return { ...base, ...kept, structure, correct: (structure === true || run.outcome === "no-change") && Object.values(checks).every(Boolean), checks };
 }
 
 export interface Rate {
@@ -283,6 +328,7 @@ export interface Rate {
 export interface ProcessMetrics {
   /** The cases that ran to the end, with the output akm made or without it. */
   n: number;
+  /** Cases with a document of the right shape. A no-change is a valid decision but no document: it stays in `n` and is not counted here (see `outcomes`). */
   valid_output: number;
   passed: number;
   /** The mean over the cases of the share of their checks that held. A case without the right shape earns none. */
@@ -293,7 +339,7 @@ export interface ProcessMetrics {
 }
 
 export interface Metrics {
-  /** Cases with output of the right shape, of the cases that ran to the end. */
+  /** Cases with a document of the right shape, of the cases that ran to the end. A no-change decision is not a document: it is in the denominator and not in the numerator. */
   valid_output: Rate;
   /** Cases whose shape is right and whose every check holds. */
   case_pass: Rate;
@@ -305,10 +351,10 @@ export interface Metrics {
 
 const ratio = (n: number, of: number): number | null => (of === 0 ? null : Number((n / of).toFixed(4)));
 
-/** The share of a case's checks that held. A case with the wrong shape earns none, however many checks pass by saying nothing. */
+/** The share of a case's checks that held. A case with the wrong shape earns none, however many checks pass by saying nothing. A no-change has no shape to get wrong. */
 function share(row: Row): number {
   const checks = Object.values(row.checks ?? {});
-  return row.structure && checks.length > 0 ? checks.filter(Boolean).length / checks.length : 0;
+  return (row.structure || row.outcome === "no-change") && checks.length > 0 ? checks.filter(Boolean).length / checks.length : 0;
 }
 
 const meanShare = (rows: Row[]): number | null => ratio(rows.reduce((sum, r) => sum + share(r), 0), rows.length);
@@ -329,7 +375,7 @@ export function metrics(rows: Row[]): Metrics {
   for (const process of PROCESSES) {
     const mine = rows.filter((r) => r.process === process);
     if (mine.length === 0) continue;
-    const outcomes: Record<Outcome, number> = { output: 0, unusable: 0, error: 0 };
+    const outcomes: Record<Outcome, number> = { output: 0, "no-change": 0, unusable: 0, error: 0 };
     const failed: Record<string, number> = {};
     for (const r of mine) {
       outcomes[r.outcome]++;
@@ -351,6 +397,8 @@ export const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 1
 
 // --- Scoring a stored row again -----------------------------------------------------------------------------------
 
+const isCounters = (x: unknown): x is Inference => typeof x === "object" && x !== null && Object.values(x).every((n) => Number.isInteger(n));
+
 /**
  * The raw output of a stored row: the fields of the row that `makeRow` reads, or the names of those the row lacks. A run whose rows lack
  * one cannot be scored again (scripts/rescore refuses it and names them).
@@ -365,9 +413,14 @@ export function rawOf(row: Record<string, any>): { raw: Raw } | { missing: strin
   const fields = OUTPUT_FIELD[row.process as Process] ? [OUTPUT_FIELD[row.process as Process]] : Object.values(OUTPUT_FIELD);
   const has = (f: keyof Raw): boolean => (f === "planned" ? Array.isArray(row.planned) : typeof row[f] === "string");
   if (row.outcome === "output" && !fields.some(has)) missing.push(fields.length === 1 ? String(fields[0]) : `the output (${fields.slice(0, -1).join(", ")} or ${fields[fields.length - 1]})`);
+  // Memory inference with no derived memory is a no-change or an unusable reply, and only akm's own counters say which. A row collected before
+  // bakeoff 0.3 has none, and a missing file is never read as a decision: that case has to be collected again.
+  if ((row.outcome === "no-change" || (row.outcome === "unusable" && row.process === "memory-inference")) && !(isCounters(row.inference) && (row.outcome === "unusable" || (row.inference.noChange ?? 0) >= 1))) {
+    missing.push("inference (the memoryInference counters of akm's result, which tell a no-change from an unusable reply; recollect the case with bakeoff 0.3)");
+  }
   if (missing.length > 0) return { missing };
-  const { derived, written, proposal, asset, promoted, planned, skipped } = row;
-  return { raw: { outcome: row.outcome, reason: row.reason ?? "", served: row.served, seconds: row.seconds, derived, written, proposal, asset, planned, promoted, skipped, error: row.error, timedOut: row.timed_out === true } };
+  const { derived, inference, written, proposal, asset, promoted, planned, skipped } = row;
+  return { raw: { outcome: row.outcome, reason: row.reason ?? "", served: row.served, seconds: row.seconds, derived, inference, written, proposal, asset, planned, promoted, skipped, error: row.error, timedOut: row.timed_out === true } };
 }
 
 /** A case that ended in an error has no verdict. */

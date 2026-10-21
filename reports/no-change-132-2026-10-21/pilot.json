@@ -1,0 +1,951 @@
+{
+  "note": "Paired pilot for akm-eval#132: bakeoff memory-inference, 19 public cases, same model, akm build and settings in both arms. 'base' is akm-eval main (collector/scorer 0.2) on the same notes as a custom corpus, whose no-change cases carry placeholder 'required' terms because 0.2 cannot express no-change; 'cand' is the 0.3 harness on the public corpus. Compact rows only: the raw runs are not published.",
+  "model": "splinter-b70/qwen3.8-flash-next-iq2_xs",
+  "served": "qwen3.8-flash-next-iq2_xs",
+  "akm": "0.10.261009 build v0.9.0-beta.60-2852-gef6ea7ab3 (release/0.10.0 at ef6ea7ab3, run from source)",
+  "settings": {
+    "temperature": 0,
+    "thinking": "off",
+    "search": "keyword",
+    "concurrency": 1,
+    "timeout_ms": 900000
+  },
+  "runs": {
+    "base-r1": {
+      "harness": "0.2",
+      "status": "complete",
+      "n_run": 19,
+      "n_errored": 0,
+      "timeouts": 0,
+      "passed": 14,
+      "valid_output": 15,
+      "outcomes": {
+        "output": 15,
+        "unusable": 4,
+        "error": 0
+      },
+      "failed_checks": {
+        "retains session": 1,
+        "retains export": 1,
+        "retains context": 1,
+        "retains release-rollback": 1,
+        "retains snapshot": 1,
+        "does not invent enabled for the eu": 1
+      },
+      "checks": 0.7807,
+      "model_calls": {
+        "calls": 38,
+        "errors": 0,
+        "prompt_tokens": 300.7,
+        "completion_tokens": 55.5,
+        "seconds": 1.37,
+        "output_tokens_per_second": 40.6
+      },
+      "median_seconds": 3.4,
+      "wall_seconds": 61.566,
+      "cases": [
+        {
+          "id": "infer-checkpoint-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-signing-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-cache-policy-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-operator-preference-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-partition-filter-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-press-proof-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-test-quarantine-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-dns-cutover-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-tool-tally-noise",
+          "expects": "child (placeholder)",
+          "outcome": "unusable",
+          "correct": false,
+          "failed": [
+            "retains session"
+          ]
+        },
+        {
+          "id": "infer-checkpoint-progress-noise",
+          "expects": "child (placeholder)",
+          "outcome": "unusable",
+          "correct": false,
+          "failed": [
+            "retains export"
+          ]
+        },
+        {
+          "id": "infer-context-resume-noise",
+          "expects": "child (placeholder)",
+          "outcome": "unusable",
+          "correct": false,
+          "failed": [
+            "retains context"
+          ]
+        },
+        {
+          "id": "infer-short-log-directory",
+          "expects": "child (placeholder)",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-short-format-command",
+          "expects": "child (placeholder)",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-regex-size-limit",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-resvg-thumbnails",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-request-not-completed",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-reference-not-executed",
+          "expects": "child",
+          "outcome": "unusable",
+          "correct": false,
+          "failed": [
+            "retains release-rollback",
+            "retains snapshot"
+          ]
+        },
+        {
+          "id": "infer-historical-limit",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-negated-region",
+          "expects": "child",
+          "outcome": "output",
+          "correct": false,
+          "failed": [
+            "does not invent enabled for the eu"
+          ]
+        }
+      ]
+    },
+    "base-r2": {
+      "harness": "0.2",
+      "status": "complete",
+      "n_run": 19,
+      "n_errored": 0,
+      "timeouts": 0,
+      "passed": 14,
+      "valid_output": 15,
+      "outcomes": {
+        "output": 15,
+        "unusable": 4,
+        "error": 0
+      },
+      "failed_checks": {
+        "retains session": 1,
+        "retains export": 1,
+        "retains context": 1,
+        "retains release-rollback": 1,
+        "retains snapshot": 1,
+        "does not invent enabled for the eu": 1
+      },
+      "checks": 0.7807,
+      "model_calls": {
+        "calls": 38,
+        "errors": 0,
+        "prompt_tokens": 300.7,
+        "completion_tokens": 55.5,
+        "seconds": 1.36,
+        "output_tokens_per_second": 40.8
+      },
+      "median_seconds": 3.3,
+      "wall_seconds": 61.102,
+      "cases": [
+        {
+          "id": "infer-checkpoint-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-signing-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-cache-policy-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-operator-preference-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-partition-filter-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-press-proof-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-test-quarantine-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-dns-cutover-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-tool-tally-noise",
+          "expects": "child (placeholder)",
+          "outcome": "unusable",
+          "correct": false,
+          "failed": [
+            "retains session"
+          ]
+        },
+        {
+          "id": "infer-checkpoint-progress-noise",
+          "expects": "child (placeholder)",
+          "outcome": "unusable",
+          "correct": false,
+          "failed": [
+            "retains export"
+          ]
+        },
+        {
+          "id": "infer-context-resume-noise",
+          "expects": "child (placeholder)",
+          "outcome": "unusable",
+          "correct": false,
+          "failed": [
+            "retains context"
+          ]
+        },
+        {
+          "id": "infer-short-log-directory",
+          "expects": "child (placeholder)",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-short-format-command",
+          "expects": "child (placeholder)",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-regex-size-limit",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-resvg-thumbnails",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-request-not-completed",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-reference-not-executed",
+          "expects": "child",
+          "outcome": "unusable",
+          "correct": false,
+          "failed": [
+            "retains release-rollback",
+            "retains snapshot"
+          ]
+        },
+        {
+          "id": "infer-historical-limit",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": []
+        },
+        {
+          "id": "infer-negated-region",
+          "expects": "child",
+          "outcome": "output",
+          "correct": false,
+          "failed": [
+            "does not invent enabled for the eu"
+          ]
+        }
+      ]
+    },
+    "cand-r1": {
+      "harness": "0.3",
+      "status": "complete",
+      "n_run": 19,
+      "n_errored": 0,
+      "timeouts": 0,
+      "passed": 16,
+      "valid_output": 15,
+      "outcomes": {
+        "output": 15,
+        "no-change": 4,
+        "unusable": 0,
+        "error": 0
+      },
+      "failed_checks": {
+        "decides no-change": 2,
+        "does not abstain": 1,
+        "retains release-rollback": 1,
+        "retains snapshot": 1
+      },
+      "checks": 0.8789,
+      "model_calls": {
+        "calls": 38,
+        "errors": 0,
+        "prompt_tokens": 300.7,
+        "completion_tokens": 55.5,
+        "seconds": 1.36,
+        "output_tokens_per_second": 40.8
+      },
+      "median_seconds": 3.3,
+      "wall_seconds": 61.045,
+      "cases": [
+        {
+          "id": "infer-checkpoint-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-signing-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-cache-policy-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-operator-preference-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-partition-filter-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-press-proof-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-test-quarantine-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-dns-cutover-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-tool-tally-noise",
+          "expects": "no-change",
+          "outcome": "no-change",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 1,
+            "skippedNoFacts": 0,
+            "writtenFacts": 0,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-checkpoint-progress-noise",
+          "expects": "no-change",
+          "outcome": "no-change",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 1,
+            "skippedNoFacts": 0,
+            "writtenFacts": 0,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-context-resume-noise",
+          "expects": "no-change",
+          "outcome": "no-change",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 1,
+            "skippedNoFacts": 0,
+            "writtenFacts": 0,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-short-log-directory",
+          "expects": "no-change",
+          "outcome": "output",
+          "correct": false,
+          "failed": [
+            "decides no-change"
+          ],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-short-format-command",
+          "expects": "no-change",
+          "outcome": "output",
+          "correct": false,
+          "failed": [
+            "decides no-change"
+          ],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-regex-size-limit",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-resvg-thumbnails",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-request-not-completed",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-reference-not-executed",
+          "expects": "child",
+          "outcome": "no-change",
+          "correct": false,
+          "failed": [
+            "does not abstain",
+            "retains release-rollback",
+            "retains snapshot"
+          ],
+          "inference": {
+            "noChange": 1,
+            "skippedNoFacts": 0,
+            "writtenFacts": 0,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-historical-limit",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-negated-region",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        }
+      ]
+    },
+    "cand-r2": {
+      "harness": "0.3",
+      "status": "complete",
+      "n_run": 19,
+      "n_errored": 0,
+      "timeouts": 0,
+      "passed": 16,
+      "valid_output": 15,
+      "outcomes": {
+        "output": 15,
+        "no-change": 4,
+        "unusable": 0,
+        "error": 0
+      },
+      "failed_checks": {
+        "decides no-change": 2,
+        "does not abstain": 1,
+        "retains release-rollback": 1,
+        "retains snapshot": 1
+      },
+      "checks": 0.8789,
+      "model_calls": {
+        "calls": 38,
+        "errors": 0,
+        "prompt_tokens": 300.7,
+        "completion_tokens": 55.5,
+        "seconds": 1.36,
+        "output_tokens_per_second": 40.8
+      },
+      "median_seconds": 3.3,
+      "wall_seconds": 61.161,
+      "cases": [
+        {
+          "id": "infer-checkpoint-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-signing-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-cache-policy-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-operator-preference-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-partition-filter-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-press-proof-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-test-quarantine-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-dns-cutover-memory",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-tool-tally-noise",
+          "expects": "no-change",
+          "outcome": "no-change",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 1,
+            "skippedNoFacts": 0,
+            "writtenFacts": 0,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-checkpoint-progress-noise",
+          "expects": "no-change",
+          "outcome": "no-change",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 1,
+            "skippedNoFacts": 0,
+            "writtenFacts": 0,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-context-resume-noise",
+          "expects": "no-change",
+          "outcome": "no-change",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 1,
+            "skippedNoFacts": 0,
+            "writtenFacts": 0,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-short-log-directory",
+          "expects": "no-change",
+          "outcome": "output",
+          "correct": false,
+          "failed": [
+            "decides no-change"
+          ],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-short-format-command",
+          "expects": "no-change",
+          "outcome": "output",
+          "correct": false,
+          "failed": [
+            "decides no-change"
+          ],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-regex-size-limit",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-resvg-thumbnails",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-request-not-completed",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-reference-not-executed",
+          "expects": "child",
+          "outcome": "no-change",
+          "correct": false,
+          "failed": [
+            "does not abstain",
+            "retains release-rollback",
+            "retains snapshot"
+          ],
+          "inference": {
+            "noChange": 1,
+            "skippedNoFacts": 0,
+            "writtenFacts": 0,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-historical-limit",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        },
+        {
+          "id": "infer-negated-region",
+          "expects": "child",
+          "outcome": "output",
+          "correct": true,
+          "failed": [],
+          "inference": {
+            "noChange": 0,
+            "skippedNoFacts": 0,
+            "writtenFacts": 1,
+            "htmlErrorCount": 0
+          }
+        }
+      ]
+    }
+  }
+}

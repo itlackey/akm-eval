@@ -3,7 +3,9 @@
 // an enriched memory, a session asset) into the bundle. It is not code of the eval: only tests import it.
 //
 // FAKE_PLAN is a JSON object. What each process does is looked up by the name of the file it reads, or by the process for a pool:
-//   infer[<memory name>]     { derived: <file text> } | { skip: true } | { provider: true } | { crash: true } | { slow: true }
+//   infer[<memory name>]     { derived: <file text> } | { noChange: true } | { skip: true } | { nothing: true } | { provider: true } | { crash: true } | { slow: true }
+//   legacyInference          true: the memoryInference result has no noChange counter, as before akm#1208
+//   noInference              true: the improve result has no memoryInference, as when the pass did not run
 //   enrich[<memory name>]    { file: <memory file text>, say?: <the line akm prints on stderr> } | { crash: true }
 //   repair[<lesson ref>]     { outcome: "queued", content } | { outcome: "error", error } | { crash: true }
 //   session[<session id>]    { asset: <session asset text> } | { skip: <skipReason> } | { none: true } | { crash: true }
@@ -36,17 +38,19 @@ else if (cmd === "improve") {
   if (strategy === "bakeoff-memory-inference") {
     const dir = join(bundle, "memories");
     const names = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".md") && !f.endsWith(".derived.md")).map((f) => f.slice(0, -3)) : [];
-    const result = { considered: names.length, splitParents: 0, writtenFacts: 0, skippedNoFacts: 0 };
+    const result = { considered: names.length, splitParents: 0, writtenFacts: 0, ...(plan.legacyInference ? {} : { noChange: 0 }), skippedNoFacts: 0 };
     let provider = false;
     for (const name of names) {
       const p = plan.infer?.[name] ?? { skip: true };
       if (p.crash) crash();
       if (p.slow) await new Promise((resolve) => setTimeout(resolve, 30000));
       if (p.provider) { provider = true; result.skippedNoFacts++; }
+      else if (p.noChange) result.noChange++;
+      else if (p.nothing) result.considered--;
       else if (p.skip) result.skippedNoFacts++;
       else { put(join(dir, name + ".derived.md"), p.derived); result.splitParents++; result.writtenFacts++; }
     }
-    out({ ok: true, memoryInference: result, usageReport: usage("memoryInference", provider ? 1 : 0) });
+    out({ ok: true, ...(plan.noInference ? {} : { memoryInference: result }), usageReport: usage("memoryInference", provider ? 1 : 0) });
   } else if (strategy === "bakeoff-schema-repair") {
     const ref = rest[0];
     const p = plan.repair?.[ref] ?? { outcome: "error", error: "LLM returned unparseable JSON for schema repair" };
