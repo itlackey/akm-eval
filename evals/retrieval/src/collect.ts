@@ -123,7 +123,7 @@ export async function collectQuery(boxes: Indexes["boxes"], c: Case, systems: re
   const raw: Partial<Record<System, RawAnswer>> = {};
   const modes: [Mode, string][] = [];
   for (const sys of systems) {
-    const a = await akm.ask(boxes[modeOf(sys)] as Sandbox, commandOf(sys), c.query, akm.LIMIT, modeOf(sys), timeoutMs);
+    const a = await akm.ask(boxes[modeOf(sys)] as Sandbox, commandOf(sys), c.query, akm.LIMIT, modeOf(sys), timeoutMs, c.searchArgs);
     if (a.mode) modes.push([modeOf(sys), a.mode]);
     raw[sys] = { refs: a.refs, seconds: a.seconds, ...(a.error ? { error: a.error } : {}), ...(a.timedOut ? { timedOut: true } : {}) };
   }

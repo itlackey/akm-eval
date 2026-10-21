@@ -17,6 +17,8 @@ export interface Query {
   kind: string;
   /** The assets the author expected to answer a task query, from reading the library. Empty when the library has no answer. They join the label pool and are graded like any other pooled asset. */
   expected?: string[];
+  /** Existing search CLI flags, e.g. ["--filter", "user=alice"]. */
+  searchArgs?: string[];
 }
 
 export interface Qrel {
@@ -61,6 +63,7 @@ export function parseQueries(text: string, where = "queries"): Query[] {
   const queries = parseLines<Query>(text, where, (r) => {
     for (const key of ["id", "query", "kind"]) if (typeof r[key] !== "string" || !r[key]) return `has no string "${key}"`;
     if (r.expected !== undefined && !(Array.isArray(r.expected) && r.expected.every((x) => typeof x === "string" && x))) return 'has an "expected" that is not a list of refs';
+    if (r.searchArgs !== undefined && !(Array.isArray(r.searchArgs) && r.searchArgs.every((x) => typeof x === "string"))) return 'has a "searchArgs" that is not a list of strings';
     return null;
   });
   const ids = new Set<string>();
@@ -140,7 +143,7 @@ export function casesOf(queries: Query[], qrels: Qrel[]): Case[] {
   const grades = gradesByQuery(qrels);
   const banned = bannedByQuery(qrels);
   const aliases = aliasesOf(qrels);
-  return queries.map((q) => ({ id: q.id, query: q.query, kind: q.kind, grades: grades.get(q.id) ?? {}, banned: banned.get(q.id) ?? [], ...(Object.keys(aliases).length ? { aliases } : {}) }));
+  return queries.map((q) => ({ id: q.id, query: q.query, kind: q.kind, grades: grades.get(q.id) ?? {}, banned: banned.get(q.id) ?? [], ...(q.searchArgs ? { searchArgs: q.searchArgs } : {}), ...(Object.keys(aliases).length ? { aliases } : {}) }));
 }
 
 /**

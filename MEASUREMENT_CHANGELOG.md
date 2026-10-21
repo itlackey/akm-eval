@@ -15,6 +15,15 @@ current scoring rules to unchanged inputs: it records the current scoring versio
 while retaining the original collector version. New inputs require collection.
 Add a release entry here when a version changes.
 
+## Unreleased
+
+- Retrieval collection version 0.3 supports optional per-query `searchArgs` in
+  `queries.jsonl`. Collection and label pooling pass those existing CLI flags
+  to keyword and semantic search only; curate and queries without this field
+  keep their existing invocations. The per-case input digest and saved sample
+  retain the argv. Scoring remains 0.3. Earlier saved runs retain their
+  collector identity; use a new collection to measure newly added filters.
+
 ## 0.7.1
 
 No eval changed version. The manifest field `treatment_hints` is now

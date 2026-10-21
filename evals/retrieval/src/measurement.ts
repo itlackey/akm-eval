@@ -39,12 +39,12 @@ export function setFolder(root: string, summary: Record<string, any>): string {
 }
 
 /** Everything the case presents to akm: its query, in the library the run indexed. */
-const inputOf = (c: Case, library?: unknown): unknown => ({ query: c.query, library: library ?? null });
+const inputOf = (c: Case, library?: unknown): unknown => ({ query: c.query, library: library ?? null, ...(c.searchArgs ? { searchArgs: c.searchArgs } : {}) });
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.2",
+  version: "0.3",
   scoringVersion: "0.3",
   loadCases: (root, summary) => {
     const folder = setFolder(root, summary);

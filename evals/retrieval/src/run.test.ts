@@ -1023,6 +1023,24 @@ console.log(${JSON.stringify(JSON.stringify(json))});
     return { ...sandbox, cmd: ["bun", script] };
   };
 
+  test("passes per-query search argv before the query separator, without applying them to curate", async () => {
+    const sb = boxFor({ hits: [], items: [], searchMode: "keyword" });
+    const script = sb.cmd[1]!;
+    writeFileSync(script, printing({ hits: [], items: [], searchMode: "keyword" }) + `
+const args = process.argv.slice(2);
+if (args[0] !== "search" || args[1] !== "--help") {
+  require("node:fs").writeFileSync(${JSON.stringify(join(sb.dir, "argv.json"))}, JSON.stringify(args));
+}
+`);
+    const flags = ["--filter", "user=alice", "--from", "notes"];
+    await akm.ask(sb, "search", "quartz", 10, "keyword", 30_000, flags);
+    const searched = JSON.parse(readFileSync(join(sb.dir, "argv.json"), "utf8"));
+    expect(searched.slice(-6)).toEqual([...flags, "--", "quartz"]);
+    await akm.ask(sb, "curate", "quartz", 10, "keyword", 30_000, flags);
+    const curated = JSON.parse(readFileSync(join(sb.dir, "argv.json"), "utf8"));
+    expect(curated).not.toContain("--filter");
+  });
+
   test("a semantic call has to say it searched with embeddings: no searchMode is an error, as keyword and fts-fallback are", async () => {
     const hits = [{ ref: "a/x" }];
     const said = await akm.ask(boxFor({ hits, searchMode: "semantic" }), "search", "q", 10, "semantic");

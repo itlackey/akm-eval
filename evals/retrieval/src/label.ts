@@ -129,10 +129,10 @@ export function makeJudge(baseUrl: string, apiKey: string, model: string, timeou
 }
 
 /** For each task query, the assets its pool holds: the top `depth` of akm search, akm curate and BM25, and the assets the author expected. */
-export async function poolQueries(queries: Query[], ask: (system: "search" | "curate", query: string) => Promise<akm.Answer>, bm25: Bm25, depth = DEPTH): Promise<Map<string, string[]>> {
+export async function poolQueries(queries: Query[], ask: (system: "search" | "curate", query: string, searchArgs?: string[]) => Promise<akm.Answer>, bm25: Bm25, depth = DEPTH): Promise<Map<string, string[]>> {
   const pooled = new Map<string, string[]>();
   for (const q of queries) {
-    const search = await ask("search", q.query);
+    const search = await ask("search", q.query, q.searchArgs);
     const curate = await ask("curate", q.query);
     for (const a of [search, curate]) if (a.error) throw new Error(`${q.id}: ${a.error}`);
     pooled.set(q.id, pool([search.refs, curate.refs, bm25.search(q.query, depth), q.expected ?? []], depth));
@@ -345,8 +345,8 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
     if (mixed.length > 0) console.error(`retrieval label: warning: ${name("qrels.jsonl")} has ${mixed.join(" and ")}, and this run grades with ${ctx.model}. Grades of different judges do not mix cleanly: use one judge for a set.`);
 
     // The own library has no listing: an asset is known by the first hit akm returned for it.
-    const ask = async (system: "search" | "curate", q: string) => {
-      const a = await akm.ask(sb, system, q);
+    const ask = async (system: "search" | "curate", q: string, searchArgs?: string[]) => {
+      const a = await akm.ask(sb, system, q, akm.LIMIT, "keyword", akm.CALL_TIMEOUT_MS, searchArgs);
       if (own) for (const h of a.assets) if (!byRef.has(h.ref)) byRef.set(h.ref, h);
       return a;
     };
@@ -357,7 +357,7 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
       // An own library has no listing: what akm says of an asset comes from the hits it returns for the query now.
       if (own) {
         for (const q of queries) {
-          await ask("search", q.query);
+          await ask("search", q.query, q.searchArgs);
           await ask("curate", q.query);
         }
       }
