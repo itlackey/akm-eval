@@ -1,0 +1,82 @@
+[
+  {
+    "request": "1792552795037490444-request.json",
+    "response": {
+      "id": "chatcmpl-82cc323ef5e745e1bc513e7d",
+      "object": "chat.completion",
+      "created": 1792553036,
+      "model": "qwen3.8-flash-next-iq2_xs",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "{\"title\":\"Release Controller Signature Requirement\",\"description\":\"Production artifacts require a Release Controller signature, which the Worker Service validates before processing payloads.\",\"content\":\"All production artifacts must include a Release Controller signature as part of their metadata. The Worker Service enforces this by rejecting any unsigned artifact prior to payload inspection.\",\"tags\":[\"release-controller\",\"worker-service\",\"artifact-signature\",\"production-artifacts\",\"validation\"],\"searchHints\":[\"Release Controller signature requirement\",\"Worker Service rejects unsigned artifacts\",\"production artifact validation rules\"]}"
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 435,
+        "completion_tokens": 98,
+        "total_tokens": 533,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 435,
+        "prompt_ms": 937.8,
+        "prompt_per_token_ms": 2.156,
+        "prompt_per_second": 463.9,
+        "predicted_n": 98,
+        "predicted_ms": 1718.5,
+        "predicted_per_token_ms": 17.536,
+        "predicted_per_second": 57.0,
+        "draft_n": 92,
+        "draft_n_accepted": 56
+      }
+    }
+  },
+  {
+    "request": "1792552052994191163-request.json",
+    "response": {
+      "id": "chatcmpl-ec117232157548b1933321ea",
+      "object": "chat.completion",
+      "created": 1792553039,
+      "model": "qwen3.8-flash-next-iq2_xs",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "{\"summary\":\"Fixed a dbt unique test failure on fct_orders.order_id caused by duplicate payment rows from installment payments. Created stg_payments_by_order to aggregate payments per order_id and updated fct_orders.sql to join this new model instead of raw stg_payments. Verified the fix with dbt build --select +fct_orders, resulting in all 12 nodes passing.\",\"key_topics\":[\"dbt unique test failure\",\"duplicate order_id in fct_orders\",\"stg_payments_by_order aggregation model\",\"installment payment handling\",\"dbt build verification\"],\"tags\":[\"dbt\",\"data-modeling\",\"bug-fix\",\"warehouse\",\"sql\"]}"
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 685,
+        "completion_tokens": 130,
+        "total_tokens": 815,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 685,
+        "prompt_ms": 1099.7,
+        "prompt_per_token_ms": 1.605,
+        "prompt_per_second": 622.9,
+        "predicted_n": 130,
+        "predicted_ms": 2005.2,
+        "predicted_per_token_ms": 15.425,
+        "predicted_per_second": 64.8,
+        "draft_n": 107,
+        "draft_n_accepted": 77
+      }
+    }
+  }
+]

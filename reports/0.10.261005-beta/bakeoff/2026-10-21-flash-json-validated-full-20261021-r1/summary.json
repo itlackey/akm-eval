@@ -1,0 +1,788 @@
+{
+  "eval": "bakeoff",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "flash-json-validated-full-20261021-r1",
+  "date": "2026-10-21T03:28:42.722Z",
+  "git_commit": "be1e8be64eb7e2d65c885a246776c5720b041eab",
+  "model": "splinter-b70/qwen3.8-flash-next-iq2_xs",
+  "akm_version": "0.10.261005-beta",
+  "akm_bin": "akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "limit": null,
+  "process": null,
+  "config_patch": {
+    "path": "--semantic",
+    "sha256": "ba3f91407bc586a9a20984e033b702182e2e3094b83c4efa825af72d06c49488"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "bakeoff": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "splinter-b70/qwen3.8-flash-next-iq2_xs",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "bakeoff"
+    },
+    "experimental": {
+      "improveAutonomy": true
+    },
+    "improve": {
+      "strategies": {
+        "bakeoff-memory-inference": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": true
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        },
+        "bakeoff-schema-repair": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": true
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        },
+        "bakeoff-session-summary": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": true,
+              "indexSessions": true,
+              "minSessionDuration": 0,
+              "triage": {
+                "enabled": false
+              }
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        },
+        "bakeoff-consolidate-promote": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": true,
+              "minPoolSize": 0
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        }
+      }
+    },
+    "embedding": {
+      "provider": "openai",
+      "endpoint": "<MODEL_BASE_URL>/embeddings",
+      "model": "embed/qwen3-embedding-0.6b",
+      "apiKey": "$LAB_API_KEY",
+      "dimension": 1024,
+      "queryTimeoutMs": 600000,
+      "timeoutMs": 600000
+    }
+  },
+  "engine": {
+    "engine": "bakeoff",
+    "model": "splinter-b70/qwen3.8-flash-next-iq2_xs",
+    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "bakeoff": {
+        "model": "splinter-b70/qwen3.8-flash-next-iq2_xs",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "70b86a9dadee30a95208b372e9c61f38314f57aa89208818b777ac40e7a86bf0",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 40,
+  "n_run": 40,
+  "n_scored": 40,
+  "n_errored": 0,
+  "timeouts": 0,
+  "served": {
+    "qwen3.8-flash-next-iq2_xs": 24
+  },
+  "metrics": {
+    "valid_output": {
+      "n": 40,
+      "passed": 40,
+      "rate": 1
+    },
+    "case_pass": {
+      "n": 40,
+      "passed": 35,
+      "rate": 0.875
+    },
+    "checks": {
+      "n": 40,
+      "rate": 0.9579
+    },
+    "median_seconds": 4.8,
+    "by_process": {
+      "memory-inference": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 8,
+        "checks": 1,
+        "outcomes": {
+          "output": 8,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "remember-enrich": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 7,
+        "checks": 0.9688,
+        "outcomes": {
+          "output": 8,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "metadata covers pt-br": 1
+        }
+      },
+      "schema-repair": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 8,
+        "checks": 1,
+        "outcomes": {
+          "output": 8,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "session-summary": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 6,
+        "checks": 0.925,
+        "outcomes": {
+          "output": 8,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "topics include webhooks.md": 1,
+          "topics include v3/subscriptions": 1,
+          "topics include android.yml": 1
+        }
+      },
+      "consolidate-promote": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 6,
+        "checks": 0.8958,
+        "outcomes": {
+          "output": 8,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "leaves protected memories/operator-preference untouched": 1,
+          "no extra or missing promotions": 1,
+          "promotes memories/artifact-signing-observation": 1
+        }
+      }
+    }
+  },
+  "model_calls": {
+    "calls": 80,
+    "errors": 0,
+    "prompt_tokens": 638.6,
+    "completion_tokens": 123.4,
+    "seconds": 2.81,
+    "output_tokens_per_second": 43.9
+  },
+  "semantic_verification": {
+    "index_checks": 24,
+    "indexed_entries": 116,
+    "embedded_entries": 116,
+    "searches": {
+      "semantic": 0,
+      "non_semantic": 0,
+      "unknown": 0
+    },
+    "telemetry_errors": 0,
+    "failures": 0
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "bakeoff",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "scorer": {
+      "version": "0.2"
+    },
+    "cases": {
+      "infer-checkpoint-memory": {
+        "input_sha256": "f6a06764d330ffb5f869ea77878b4ab05b58ccb2698526fb318a45e8ecdf22c4",
+        "label_sha256": "478e1124586617d6ab744f861d194072af760f59024752f3c1b10c5ef4a699bc"
+      },
+      "infer-signing-memory": {
+        "input_sha256": "b9115e2c2e91a7b2691a0433c867a2ba4c3964746652b9a0303a9463b6184409",
+        "label_sha256": "93aaf3a0cf4be8bbf96db1ff6a60affe38401d9212df8a08b6ee3f3978cfdda3"
+      },
+      "infer-cache-policy-memory": {
+        "input_sha256": "7a349fed2ed5c9b9a9d12de318a2e94282511c8c474a90d353a6b3c23d7359e8",
+        "label_sha256": "f2c5120b3d38c198211a1813081e98b01ead78130465fcfb9e4589e2a000a7ef"
+      },
+      "infer-operator-preference-memory": {
+        "input_sha256": "2a32f5a56ba36dc982380e1c70d1879c9f022b3e47ca8131e392d51910d1c770",
+        "label_sha256": "b859557f44f4b59e29ed5f87286920f6efee4e7c73ed23bb4a2f32f8c98f2e6d"
+      },
+      "enrich-checkpoint-memory": {
+        "input_sha256": "03fbe9ee5c7d148cd9898262306129a5e02ae6dc48b09b562547ddabe6246981",
+        "label_sha256": "abbe3a8f098f5fac77320d8b2ed38e1fe8504a86f8929c7fc0af630c5dbbb28d"
+      },
+      "enrich-signing-memory": {
+        "input_sha256": "3036d809902baf4b714daad816e1ea67342f0d15e7f7f889bd7621080b889377",
+        "label_sha256": "e2bce547d567b46f16901c9ca01a46867c2e29d3506fc2b1727e049dba91de45"
+      },
+      "enrich-cache-policy-memory": {
+        "input_sha256": "c4b9c490b0493b23e4faf860ad6bb62d859168b018eac2680903e3efe688a370",
+        "label_sha256": "ae00d0673b8b5cc7e49655089f0d92deb5dcaf476950da6a618eb0e151d84d99"
+      },
+      "enrich-operator-preference-memory": {
+        "input_sha256": "f605b5f5a0db6af80bcc5d01a20603da2a9be822f065d98e119e38c01704efc5",
+        "label_sha256": "c6bdcd43ad25f71c065023da4102b2557cd963b4558ace5648ac4dd24a6a1856"
+      },
+      "repair-lesson-metadata": {
+        "input_sha256": "39a1d919c36b0db515058492ab2633444f90042c2b90945bec811fd86207a88d",
+        "label_sha256": "536a8db98cf0c2dec7301bd839be087026f80330a5819d1b15088c5d771ba2e2"
+      },
+      "repair-backpressure-metadata": {
+        "input_sha256": "2377aa7b6d33f31feb9026ca888d1b96d1a3e173646f55b0f3a6cda50d9e3013",
+        "label_sha256": "9367911f02eec644fec9a3c19f1dc14452369121870d40d8459e0cbc6322b7c6"
+      },
+      "repair-signing-metadata": {
+        "input_sha256": "c52c435d93f2730508aa0607cbf1977f6dfe6e71d274be08ee91255bbc3bb90a",
+        "label_sha256": "9c513d64176463513ba6f714898bf5bce533022b455bd0946ccc10aa81a9b92d"
+      },
+      "repair-rollback-metadata": {
+        "input_sha256": "896e2b2ee35f6f468bd1ea4a3bc0216ca4817fcfe29a90bf1e53978edd63673c",
+        "label_sha256": "bf11f84571ad34c1287d2f61ca1ad16a95dbf5189c90e65e96750fbd13c57433"
+      },
+      "prod-session-summary": {
+        "input_sha256": "a39dd49a137dd42ba8a5b1a476d3a04d8dc97dedacf4813509a1ff011d0b2777",
+        "label_sha256": "b71133644f0c39c1fba48fd5008842cb5fb977b161a8e3ad994e0106768e9acc"
+      },
+      "consolidate-memory-pool": {
+        "input_sha256": "128f3391ae701939079e686f5f0127e58b12ca137d2bc3d1e1a5859c6ebbdd90",
+        "label_sha256": "b567c479778c26a8ef2266324ee8eff06e74dfc4297c85f9c510a736fbb4f2e6"
+      },
+      "prod-consolidate-full-pool": {
+        "input_sha256": "1c7e0e0ac58dea128fb2dd6730925cc44c6157bfea44554302d0913e9120da6f",
+        "label_sha256": "a3a210ca992dc32e252addd1c2e2cf6d5c26499ed5782e5c2337a695df0e51c2"
+      },
+      "infer-partition-filter-memory": {
+        "input_sha256": "7a560631288f7cf2536f8b61f9442d9c9c68008e5f77421334efa6f1d4509c82",
+        "label_sha256": "54f7f1a70b85d5c0ac8bd1aaaecccfba15c7867a27f389585aa92df316848d43"
+      },
+      "infer-press-proof-memory": {
+        "input_sha256": "91cda657fb188e4acfeff7a7f9743a1951b8d4fdf5df1399dfece6f639e5c57e",
+        "label_sha256": "e94603235465aea173ceac6afb88985a6f74b040310dd0f8ab7192db0654d0e1"
+      },
+      "infer-test-quarantine-memory": {
+        "input_sha256": "2ae3f4a20c9ee640183e9335012f3de98fee668ce913e7d1dbc8f2d6126831cc",
+        "label_sha256": "414b931bfc89d575fd3b4a2b6c70deb3d7d61d01d2b869ef22fbcdf1bb78b829"
+      },
+      "infer-dns-cutover-memory": {
+        "input_sha256": "b813d5c859fd3d4d47c9f27414cb7179f9540e2c0be8300a62c1f024a43f1867",
+        "label_sha256": "3cc79c3795cd294d96db32ea6b4b159e8a6f03bde6b563a157fc071d54cd8d2a"
+      },
+      "enrich-ios-certificate-memory": {
+        "input_sha256": "211952fab14eef88e914577e42e65bd714f087079f9cdc42a5233867e20355cf",
+        "label_sha256": "e4c4a91d0a00da6c7bc85aedb9c437fbe7d2bfbc12a20517469663f8d0858c2e"
+      },
+      "enrich-csv-encoding-memory": {
+        "input_sha256": "30dc2bb26e81cbf26eee48fc04516a3ce09b932c3dd5e76051a71b96e37e67a5",
+        "label_sha256": "906afd97718b2a2dcdcc58145f8fc617ac0532c634330f0e7b066986932ff092"
+      },
+      "enrich-gpu-taint-memory": {
+        "input_sha256": "de2f1a400997eaf686a1c513e6b1bc12a95cb45879b7a49e650b69ea5a9ea74a",
+        "label_sha256": "df175c6b2a886a31902bd3cbdcec49f4615bca6d5d1de287871881b1a4ea507c"
+      },
+      "enrich-translation-keys-memory": {
+        "input_sha256": "477faad5418ce7ab6ab203455562bbdee6aa4a02d5417776e91ff63a89ccefbc",
+        "label_sha256": "cdee186fee9fd239104b67f08dcee23ee13b196ecbf5a1250ae70993c2856e77"
+      },
+      "repair-migration-metadata": {
+        "input_sha256": "6901eaef3bc00251268b67d88b1560d87d36212521d9dbda52e6662dd00ae3db",
+        "label_sha256": "4f5a669bf79559b3b43c2d2bc668445d1610564e16fd2b15427c5def9e951554"
+      },
+      "repair-booklet-metadata": {
+        "input_sha256": "8d8428ed326cef3e2c8fc40016cc923eb6f57275ca3191bb713f7d72b409cd11",
+        "label_sha256": "64595d0804cb01f4289d4e250f2b6fe534510e9ff35d4ef55b343f2a839f737a"
+      },
+      "repair-snapshot-metadata": {
+        "input_sha256": "8437279dbee77c72408576117e2b29d0f4bd1ea426b67bdfd8017b3914db9bb2",
+        "label_sha256": "986f0114f491ae0559c8bc950fd866b3087458403c43c1c258d83ca5debfa0a5"
+      },
+      "repair-credential-leak-metadata": {
+        "input_sha256": "38bd55ce906452075b8e6195f734a0520a7b08857d8d61c2e603aacc320623c8",
+        "label_sha256": "d165adf019fd65e4cbfda6050fe2dad948c630d650b389608bff4a6f1300ce2a"
+      },
+      "invoice-timezone-session-summary": {
+        "input_sha256": "476932f1b56f4e5bd1827227dadf6e59ccfcff8f420a265b734eb652467116a0",
+        "label_sha256": "ecfa512c39b7e198d63aface99692b5c987184bc86d4097040c3bfed6c83fdd1"
+      },
+      "node-disk-pressure-session-summary": {
+        "input_sha256": "b7767e637a592d67991b900f3703de229e17b9b31d38be103e85c16d2574b706",
+        "label_sha256": "bcd39dc383fff5cb94a8aea207f3138f368078841fe96c994331f9b717142a93"
+      },
+      "webhook-docs-session-summary": {
+        "input_sha256": "d7125925c3d16d3089238f1703ab3dc1332107350173e9182b24ee6f16aeb963",
+        "label_sha256": "6a1e0dffe7b25bc6830a36ab3622f67c06cd11b1da3499c2b0e1aae91bd020b6"
+      },
+      "orders-dedupe-session-summary": {
+        "input_sha256": "5e26e8d08297355ad8c24f1e8fbc9b0ff032955c88ac0d82a67650ef1a37ed6f",
+        "label_sha256": "a00b8fabacd1c2a1c4c3840ea149759524274c01b8fafd6332c6f628fddb0407"
+      },
+      "ci-cache-key-session-summary": {
+        "input_sha256": "eec7bef0db5312061aea493520aad8c989d76c927ebaad7011aed7b53d31b378",
+        "label_sha256": "981d5831c1abbfe363ecd473dd201d9ccba470caa92df66f48ba9b25d29b27a4"
+      },
+      "print-interior-session-summary": {
+        "input_sha256": "984adf03beefabfad38fd9f131bd867cebfe137ee3b34607ad7637be134106ce",
+        "label_sha256": "c45a81f85c99ef3e7343999e9fd9f7f60d27faf7e2961605ba29abce978e94db"
+      },
+      "checkout-flaky-session-summary": {
+        "input_sha256": "a72ff77d3ae35003dfb6a47e5d95c58418b644e1e48a64d022ceb13c154ac39d",
+        "label_sha256": "895a4f4268af963f2877c9b50f86be1477a3ce3be5077bcf471acfac0ba03cea"
+      },
+      "consolidate-warehouse-pool": {
+        "input_sha256": "347b8e857c8ba7a62b36076c606d1cb7cbc3b7f84971d7f0c4f7b0db027d50cc",
+        "label_sha256": "23ba79e8de5d96f769e8572cb4fbe0065abbb015a3d1198c4f7cdaa402c4ce4b"
+      },
+      "consolidate-mobile-release-pool": {
+        "input_sha256": "0a872c0b6017382ea6a5014bf0e2f4c81ba754132e9107c1737803b1541d5363",
+        "label_sha256": "ee58ef952d1fce88025ca6696005385574d16f488e8f097eb0be32425dbd27c4"
+      },
+      "consolidate-e2e-testing-pool": {
+        "input_sha256": "07c29f85c0e7c0927b0a53714a384762b834fd806a78c34bbb9474d788b017a2",
+        "label_sha256": "64292c8079b8753e1483c75d3a968efaf8936da4b587c5c8eb61f2c6af15b328"
+      },
+      "consolidate-docs-style-pool": {
+        "input_sha256": "581ae1470db5bfd56ab9c701b61c7735334863140491a516f3cafefb6c2fe759",
+        "label_sha256": "0e90f117bf7f3751f32d544fb9ded40ef4df68ed496557fcd1cbe5bf3a62ce28"
+      },
+      "consolidate-replica-lag-pool": {
+        "input_sha256": "5b981c4297d6e9c7a91af7b637a43509395e724d872c0d1d5562f47d9e8d9076",
+        "label_sha256": "f2b828dba17bf6dd7fd54b250633f52ace899f9ebd85372ff2ee796931b6f6d9"
+      },
+      "consolidate-mixed-library-pool": {
+        "input_sha256": "d8fe729c6e51fea15851faf471675a82c7676bf8a7b86b24e1cb27cbe0a44ce1",
+        "label_sha256": "dd40e153e32d0dc827463a5dbfa73319511507312b40f59409a115a53e02b39d"
+      }
+    },
+    "akm": {
+      "version": "0.10.261005-beta",
+      "bin": "akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "bakeoff": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "bakeoff"
+        },
+        "experimental": {
+          "improveAutonomy": true
+        },
+        "improve": {
+          "strategies": {
+            "bakeoff-memory-inference": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": true
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-schema-repair": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": true
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-session-summary": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": true,
+                  "indexSessions": true,
+                  "minSessionDuration": 0,
+                  "triage": {
+                    "enabled": false
+                  }
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-consolidate-promote": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": true,
+                  "minPoolSize": 0
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            }
+          }
+        },
+        "embedding": {
+          "provider": "openai",
+          "endpoint": "https://ai.lab.fwdslsh.dev/v1/embeddings",
+          "model": "embed/qwen3-embedding-0.6b",
+          "apiKey": "$LAB_API_KEY",
+          "dimension": 1024,
+          "queryTimeoutMs": 600000,
+          "timeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": "ba3f91407bc586a9a20984e033b702182e2e3094b83c4efa825af72d06c49488",
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "bakeoff": {
+        "model": "splinter-b70/qwen3.8-flash-next-iq2_xs",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "infer-checkpoint-memory",
+        "infer-signing-memory",
+        "infer-cache-policy-memory",
+        "infer-operator-preference-memory",
+        "enrich-checkpoint-memory",
+        "enrich-signing-memory",
+        "enrich-cache-policy-memory",
+        "enrich-operator-preference-memory",
+        "repair-lesson-metadata",
+        "repair-backpressure-metadata",
+        "repair-signing-metadata",
+        "repair-rollback-metadata",
+        "prod-session-summary",
+        "consolidate-memory-pool",
+        "prod-consolidate-full-pool",
+        "infer-partition-filter-memory",
+        "infer-press-proof-memory",
+        "infer-test-quarantine-memory",
+        "infer-dns-cutover-memory",
+        "enrich-ios-certificate-memory",
+        "enrich-csv-encoding-memory",
+        "enrich-gpu-taint-memory",
+        "enrich-translation-keys-memory",
+        "repair-migration-metadata",
+        "repair-booklet-metadata",
+        "repair-snapshot-metadata",
+        "repair-credential-leak-metadata",
+        "invoice-timezone-session-summary",
+        "node-disk-pressure-session-summary",
+        "webhook-docs-session-summary",
+        "orders-dedupe-session-summary",
+        "ci-cache-key-session-summary",
+        "print-interior-session-summary",
+        "checkout-flaky-session-summary",
+        "consolidate-warehouse-pool",
+        "consolidate-mobile-release-pool",
+        "consolidate-e2e-testing-pool",
+        "consolidate-docs-style-pool",
+        "consolidate-replica-lag-pool",
+        "consolidate-mixed-library-pool"
+      ],
+      "scored": [
+        "infer-checkpoint-memory",
+        "infer-signing-memory",
+        "infer-cache-policy-memory",
+        "infer-operator-preference-memory",
+        "enrich-checkpoint-memory",
+        "enrich-signing-memory",
+        "enrich-cache-policy-memory",
+        "enrich-operator-preference-memory",
+        "repair-lesson-metadata",
+        "repair-backpressure-metadata",
+        "repair-signing-metadata",
+        "repair-rollback-metadata",
+        "prod-session-summary",
+        "consolidate-memory-pool",
+        "prod-consolidate-full-pool",
+        "infer-partition-filter-memory",
+        "infer-press-proof-memory",
+        "infer-test-quarantine-memory",
+        "infer-dns-cutover-memory",
+        "enrich-ios-certificate-memory",
+        "enrich-csv-encoding-memory",
+        "enrich-gpu-taint-memory",
+        "enrich-translation-keys-memory",
+        "repair-migration-metadata",
+        "repair-booklet-metadata",
+        "repair-snapshot-metadata",
+        "repair-credential-leak-metadata",
+        "invoice-timezone-session-summary",
+        "node-disk-pressure-session-summary",
+        "webhook-docs-session-summary",
+        "orders-dedupe-session-summary",
+        "ci-cache-key-session-summary",
+        "print-interior-session-summary",
+        "checkout-flaky-session-summary",
+        "consolidate-warehouse-pool",
+        "consolidate-mobile-release-pool",
+        "consolidate-e2e-testing-pool",
+        "consolidate-docs-style-pool",
+        "consolidate-replica-lag-pool",
+        "consolidate-mixed-library-pool"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 278.52
+}
