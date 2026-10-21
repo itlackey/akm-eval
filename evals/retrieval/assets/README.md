@@ -46,6 +46,8 @@ One JSON object per line.
 | `kind` | how the query was written. See below. `chitchat`, `notification`, `log`, `status` and `nontask` mark a non-task input |
 | `expected` | task queries only: the refs of the assets the author expected to answer it. Empty when the library has no answer |
 
+`searchArgs` is an optional array of existing `akm search` CLI arguments, for example `["--filter", "user=alice", "--belief", "current"]`. The collector and label pool pass them before `--` to both keyword and semantic search. Curate keeps its usual invocation: this field does not add filters to commands that lack them. Arguments are direct argv, with no shell expansion.
+
 ### How they were written
 
 Claude Sonnet 5.5 wrote them from the library, in one sitting, after reading its titles, descriptions and headings, the opening of each asset, and more of the assets a query needed. They were written from the library and not from akm's results: no query was added, reworded or dropped after akm or the judge had seen it.
