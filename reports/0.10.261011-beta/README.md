@@ -142,13 +142,28 @@ its 51 cases are compared on their own; its stored run scored again with the 0.4
   of 80, extract 5 of 64, consolidate 6 of 80 and promotion 4 of 80. That is the size of movement the earlier rounds showed
   between runs of the same settings; for 0.9.32 itself the 2026-10-15 run and the new one differ by 5 on distill (16 and 11 of
   40) and 4 on consolidate (38 and 34 of 40).
-- **Distill is the one eval that moved by more than that: 14/40 to 8/40 good lessons**, 19 of 96 verdicts changed. 7
-  lesson-worthy memories that gave a good lesson now give a bad one (over-claiming past the memory), and five
-  `lesson-update` cases, which got no lesson or update at all last round, now get an output that the eval scores bad (four
-  updates that each miss the new fact, and one new lesson); one `restates-asset` control got a lesson (1 wrong of 16, none
-  before). None of the six changes above is aimed at distill and the cause was not traced; the same 0.9.32 gave 16 on this
-  eval on 2026-10-15 and 11 now, so a six-lesson move is not attributable from one run. A repeat of distill on both betas
-  would say whether it is akm or the route.
+- **Distill moved from 14/40 to 8/40 good lessons in the published rounds, and repeats show that is not the build.** In the
+  published pair 19 of 96 verdicts changed (7 lesson-worthy memories went good to bad, five `lesson-update` cases now got an
+  output scored bad, and one `restates-asset` control got a lesson). None of the six changes above touches distill's lesson
+  generation, so two more runs of each build, alternating one at a time on 2026-10-22 with the same settings, were made to
+  check (0.10.261010-beta from `akm-cli@0.10.261010-beta` in a temporary npm prefix through `AKM_BIN`, 0.10.261011-beta as
+  installed; all `complete`, no errored case, no failed model call):
+
+  | run | 0.10.261010-beta good / wrong | 0.10.261011-beta good / wrong |
+  |---|---:|---:|
+  | 1, the published round | 14 / 0 | 8 / 1 |
+  | 2, repeat | 14 / 0 | 14 / 0 |
+  | 3, repeat | 14 / 0 | 14 / 0 |
+  | mean (good) | 14.0 | 12.0 |
+
+  Good lessons are of 40, wrong lessons of 16 controls. The mean difference (2.0) is smaller than the spread of the 0.10.261011-beta
+  runs alone (8 to 14, sd 3.5), so it is not outside run-to-run spread. More tellingly, all four repeat runs (both builds,
+  runs 2 and 3) agree on every one of the 96 verdicts: at temperature 0 the two builds gave identical distill results, as
+  expected from unchanged lesson generation. The two published runs are the ones that differ: each disagrees with the repeats
+  on 16 (0.10.261010-beta) or 23 (0.10.261011-beta) verdicts and with each other on 19. Run 1 of 0.10.261010-beta lands on
+  14 good by coincidence of count, not of cases. The cause of the first-round difference was not found (the lab route, or
+  state of the cold first run); the published single rounds stay the ledger entries, and the repeats are not published as runs.
+  The same 0.9.32 gave 16 on 2026-10-15 and 11 in the new set, which is the same kind of spread.
 - **Nightly's `silent` items** (the uncached no-change path) are 4/6 on both betas and 0/6 on 0.9.32, which has no cached
   no-change: the gain predates this beta (#1208/#1218).
 - **Agent A/B.** The akm arm passed 11 of 18 trials and the control 2 of 18: +50.0 points (interval 16.7 to 83.3 over 6
