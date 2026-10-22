@@ -79,14 +79,18 @@ requests. Native system instructions and schema transport differ from a plain AP
 not independently exposed. The evaluator row's `served` value is the stub's echo, not independent model identification.
 AKM requests temperature 0/thinking off; native temperature is not controlled by that request.
 
-All four new public controls and two reserved actor/date perturbations produced grounded children: 6/6 pass under both
-the old and final scorers, 0 false abstentions, 0 grounding failures, 0 errors/timeouts/tool uses. No new no-change
-quality rate or stochastic improvement is measured: none of these six expects restraint, and there are no identical-input
-repeats. Native usage totals 59,080 input and 1,035 output tokens across six calls, about 26.8 seconds inside those calls;
+All four new public controls and two reserved actor/date perturbations produced grounded children, with 0 false abstentions,
+0 grounding failures, 0 errors/timeouts/tool uses. Under the earlier 0.4 draft scorer (`fcc1cbf`, which looked for the date in
+the description or content) all 6 passed. No new no-change quality rate or stochastic improvement is measured: none of these six
+expects restraint, and there are no identical-input repeats. Native usage totals 59,080 input and 1,035 output tokens across six calls, about 26.8 seconds inside those calls;
 this includes native instruction overhead. Dollar cost is unavailable. Synthetic smoke-envelope usage is excluded.
 
-The six saved raw outputs were replayed through the final scorer after the final deterministic nested-scope rejection;
-all rows and checks were unchanged. Inputs, model requests and product build did not change. Finite unsafe fixtures
+The six saved raw outputs were replayed through the final 0.4 scorer, which checks that the child's frontmatter carries the
+parent's observation date (akm's deterministic copy) and no longer requires the date in the description or content. Four rows
+and all their checks are unchanged. The two metadata-date children (the public control and the reserved perturbation) now fail
+`carries observation date`: akm `43851d11e` does not copy the observation date into the child's frontmatter, which akm#1225
+added. Against akm `036468e5e` (which includes #1225) the real-akm bakeoff tests pass all 55 cases, including that control.
+The six model responses were not collected again. Finite unsafe fixtures
 and saved-result tests establish the scoring corrections; the model calibration establishes usable grounded controls,
 not an AKM quality gain. Deterministic generation provenance remains separate in akm#1210. The new PR is the current
 acceptance/check/rollout record; this artifact is raw supporting evidence.

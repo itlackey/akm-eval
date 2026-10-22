@@ -20,9 +20,13 @@ Add a release entry here when a version changes.
 - bakeoff collection and scoring 0.4 (was 0.3). Four new memory-inference inputs bring the corpus to 55 cases (23 memory
   inference): nested and flat scope, an observation date only in metadata, and an undated observation with a file `updated` date.
   They use AKM's existing source-context/scope contract (akm#1209 / PR #1222); no prompt is duplicated in the evaluator.
-  A labeled `scope` checks the complete child tuple, including absent keys. A required date must be in the description or content,
-  not only a title, tag or hint. Finite unsafe temporal/request summaries still fail even when all required terms and the date occur;
-  valid negations pass. The raw derived file already contains these fields, so collection needs no new raw field.
+  A labeled `scope` checks the complete child tuple, including absent keys (values compared as text). A labeled `observed`
+  date (a parent that carries an observation date in its frontmatter) must appear verbatim in the child's frontmatter under
+  `observed` or `observed_at`, whichever akm writes (`observed` first); the date is no longer required in the description
+  or content. The scope and date checks measure akm's deterministic copy of the parent's metadata, not the model. The model-facing
+  checks are the forbidden unsafe-claims, which now match whole words ("is 32 MiB" no longer matches "this 32 MiB"); valid
+  negations pass. The remember-enrich scorer reads `observed` as well as `observed_at` from the enriched memory.
+  The raw derived file already contains these fields, so collection needs no new raw field.
   Compatible 0.2/0.3 output rows can be explicitly rescored with scorer 0.4, retaining their original collection identity;
   only the four new inputs require collection. The existing limitation on old unusable inference rows without decision counters
   remains: never infer no-change from an absent file. Existing scores are retained, and different case totals are not an AKM gain.
