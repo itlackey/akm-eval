@@ -31,34 +31,39 @@ const NO_CHANGE = { noChange: true, title: "", description: "", content: "", tag
  * What a model that knows the answer says to the prompt of each process. For a note whose case expects no change, that is a no-change decision.
  * `mode` changes it: a reply in prose, an HTTP 500, a model that is too slow, or one that decides no-change for every note (the always-abstain treatment).
  */
-function model(mode: "oracle" | "prose" | "down" | "slow" | "abstain") {
+function model(mode: "oracle" | "prose" | "down" | "slow" | "abstain", prompts: string[] = []) {
   const caseFor = (process: LoadedCase["process"], prompt: string): LoadedCase | undefined => cases.find((c) => c.process === process && c.files.some((f) => f.endsWith(".md") && prompt.includes(bodyOf(c.texts[f] as string).slice(0, 60))));
   return Bun.serve({
     port: 0,
     idleTimeout: 120,
     async fetch(req) {
-      const body = (await req.json().catch(() => ({}))) as { messages?: { content: string }[] };
+      const body = (await req.json().catch(() => ({}))) as { messages?: { content: string }[]; response_format?: { json_schema?: { schema?: { properties?: object } } } };
+      // Which process asked is read from the keys the reply must hold, not from the prompt's prose, so a prompt edit cannot break this model.
+      // Those are the keys of the request's schema; the repair and enrich calls send none, and ask for their keys in the prompt as JSON field names.
+      const keys = new Set(Object.keys(body.response_format?.json_schema?.schema?.properties ?? {}));
       const prompt = (body.messages ?? []).map((m) => m.content).join("\n");
+      const asks = (...wanted: string[]): boolean => wanted.every((k) => (body.response_format ? keys.has(k) : prompt.includes(`"${k}"`)));
+      prompts.push(prompt);
       if (mode === "down") return new Response("upstream failure", { status: 500 });
       if (mode === "slow") await new Promise((resolve) => setTimeout(resolve, 8000));
       let reply: unknown = {};
       if (mode === "prose") reply = "I cannot answer in JSON.";
-      else if (/Compress the memory|needs a derived memory/.test(prompt)) {
+      else if (asks("title", "description", "content", "tags", "searchHints")) {
         const e = caseFor("memory-inference", prompt)?.expected ?? {};
         if (e.noChange || mode === "abstain") reply = NO_CHANGE;
         else reply = { title: "A derived memory", description: `It keeps ${(e.required ?? []).join(" and ")}.`, tags: ["one", "two", "three"], searchHints: ["first hint", "second hint", "third hint"], content: `${(e.required ?? []).join(". ")}. ${e.date ?? ""}` };
-      } else if (/memory tagger/.test(prompt)) {
-        const e = caseFor("remember-enrich", prompt)?.expected ?? {};
-        reply = { tags: (e.keywords ?? []).map((k) => k.toLowerCase()).slice(0, 4), description: `About ${(e.keywords ?? []).join(" ")}.`, ...(e.observed_at ? { observed_at: e.observed_at } : {}) };
-      } else if (/Generate the missing frontmatter/.test(prompt)) {
+      } else if (asks("description", "when_to_use")) {
         const c = cases.find((x) => x.process === "schema-repair" && prompt.includes(bodyOf(x.texts[x.files[0] as string] as string).slice(0, 40)));
         reply = { description: `This lesson covers ${(c?.expected.keywords ?? []).join(" and ")} in some detail.`, when_to_use: `Use when you ${(c?.expected.trigger ?? ["act"])[0]} something in a release.` };
-      } else if (/summarizing an agent coding session/.test(prompt)) {
+      } else if (asks("tags", "description") && !asks("title")) {
+        const e = caseFor("remember-enrich", prompt)?.expected ?? {};
+        reply = { tags: (e.keywords ?? []).map((k) => k.toLowerCase()).slice(0, 4), description: `About ${(e.keywords ?? []).join(" ")}.`, ...(e.observed_at ? { [prompt.includes('"observed":') ? "observed" : "observed_at"]: e.observed_at } : {}) };
+      } else if (asks("summary", "key_topics")) {
         const opening = (x: LoadedCase): string => String((JSON.parse((x.texts[x.files[0] as string] as string).split("\n")[0] as string) as { message: { content: unknown } }).message.content).slice(0, 60);
         const e = cases.find((x) => x.process === "session-summary" && prompt.includes(opening(x)))?.expected ?? {};
         reply = { summary: `The session covered ${(e.required ?? []).join(", ")} and ended well, with the canary and the health checks green.`, key_topics: e.topics, tags: ["release"] };
-      } else if (/extracting durable engineering insights/.test(prompt)) reply = { candidates: [], rationale_if_empty: "Nothing durable in this session." };
-      else if (/consolidate assistant/.test(prompt)) {
+      } else if (asks("candidates")) reply = { candidates: [], rationale_if_empty: "Nothing durable in this session." };
+      else if (asks("operations")) {
         const wanted = new Set(cases.filter((c) => c.process === "consolidate-promote").flatMap((c) => c.expected.promote ?? []));
         const shown = [...prompt.matchAll(/^\[\d+\] (memories\/[A-Za-z0-9-]+)/gm)].map((m) => m[1] as string);
         reply = { operations: shown.filter((r) => wanted.has(r)).map((ref) => ({ op: "promote", ref, knowledgeRef: `knowledge/${ref.split("/")[1]}`, reason: "A stable fact.", description: "A durable fact.", confidence: 0.95 })) };
@@ -80,8 +85,8 @@ describe.skipIf(!realVersion)(`with the akm on this machine (${realVersion})`, (
     }
   });
 
-  const run = async (mode: "oracle" | "prose" | "down" | "slow" | "abstain", list: LoadedCase[], more: Partial<Parameters<typeof runCase>[1]> = {}) => {
-    const server = model(mode);
+  const run = async (mode: "oracle" | "prose" | "down" | "slow" | "abstain", list: LoadedCase[], more: Partial<Parameters<typeof runCase>[1]> = {}, prompts: string[] = []) => {
+    const server = model(mode, prompts);
     try {
       const rows = [];
       for (const c of list) rows.push(await runCase(c, { baseUrl: `http://localhost:${server.port}/v1`, model: "scripted-model", hasKey: true, ...more }));
@@ -96,10 +101,22 @@ describe.skipIf(!realVersion)(`with the akm on this machine (${realVersion})`, (
   const one = (id: string) => cases.find((c) => c.id === id) as LoadedCase;
 
   test("every case of the public corpus, answered right, is correct: a child where one is wanted, akm's no-change decision where it is not", async () => {
-    const rows = await run("oracle", cases);
+    const prompts: string[] = [];
+    const rows = await run("oracle", cases, {}, prompts);
     expect(rows.map((r) => [r.id, r.outcome, r.correct])).toEqual(cases.map((c) => [c.id, c.expected.noChange ? "no-change" : "output", true]));
     for (const r of rows.filter((x) => x.outcome === "no-change")) expect(r.inference).toMatchObject({ noChange: 1, skippedNoFacts: 0, writtenFacts: 0 }); // from akm's own result, not from a missing file
     for (const r of rows.filter((x) => x.process === "memory-inference" && x.outcome === "output")) expect(r.inference).toMatchObject({ noChange: 0, writtenFacts: 1 });
+    const contextFor = (id: string) => {
+      const cs = one(id);
+      const prompt = prompts.find((p) => p.includes(bodyOf(cs.texts[cs.files[0] as string] as string).slice(0, 60))) as string;
+      return JSON.parse(prompt.split("Source context:\n")[1]?.split("\n\nBody:\n")[0] ?? "{}");
+    };
+    expect(contextFor("infer-scoped-incident").scope).toEqual(one("infer-scoped-incident").expected.scope);
+    expect(contextFor("infer-flat-scoped-request").scope).toEqual(one("infer-flat-scoped-request").expected.scope);
+    const observed = (context: Record<string, unknown>) => context.observed ?? context.observed_at; // akm drops the `_at` in newer builds
+    expect(contextFor("infer-metadata-observation-date")).toMatchObject({ updated: "2026-10-18" });
+    expect(observed(contextFor("infer-metadata-observation-date"))).toBe("2026-06-12");
+    expect(observed(contextFor("infer-file-date-not-observation"))).toBeUndefined();
   }, 600_000);
 
   test("a model that decides no-change for every note passes the notes that need none and fails every note that needs a child", async () => {

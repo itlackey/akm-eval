@@ -14,13 +14,20 @@ export interface Expected {
   required?: string[];
   /** Terms the output must not hold (memory-inference, session-summary). In memory-inference a mention that a nearby negation rules out ("was not rotated") does not hold the term. */
   forbidden?: string[];
-  /** A date a derived memory must keep (memory-inference). */
+  /** A date a derived memory must keep somewhere in its title, description, tags, hints or content (memory-inference). */
   date?: string;
+  /**
+   * The observation date the parent note carries in its frontmatter (memory-inference). The child's frontmatter must carry it verbatim under
+   * `observed`, or under `observed_at` (the name before akm dropped `_at`). akm copies it, so this checks akm's deterministic copy, not the model.
+   */
+  observed?: string;
   /**
    * The note needs no derived memory, so akm's model should decide no-change (memory-inference). A child for such a note is unjustified,
    * and a no-change on a note without this flag is a false abstention. `required`, `forbidden` and `date` are then optional.
    */
   noChange?: boolean;
+  /** The complete normalized child scope (memory-inference). An empty object expects an unscoped child. */
+  scope?: Partial<Record<"user" | "agent" | "run" | "channel", string>>;
   /** The date an enriched memory must carry, or null when the memory writes none (remember-enrich). */
   observed_at?: string | null;
   /** Terms the metadata must cover (remember-enrich, schema-repair). Any one is enough for schema-repair. */
@@ -80,6 +87,9 @@ const squash = (s: string): string => s.replace(/\s+/g, " ").trim();
 /** Text as the checks compare it: one space between words, in lower case. A value that is not text is its JSON, with the same spacing in each string of it. */
 export const normalize = (value: unknown): string => squash(typeof value === "string" ? value : JSON.stringify(value ?? "", (_key, v) => (typeof v === "string" ? squash(v) : v))).toLowerCase();
 
+/** The observation date of a memory's frontmatter. akm writes `observed` and still reads `observed_at`, so both are accepted, `observed` first. */
+const observedOf = (data: Record<string, unknown> | undefined): unknown => data?.observed ?? data?.observed_at;
+
 /** Does the value hold the term? A term that ends in y also matches y, ies, ied and ying ("retry" finds "retries"), so an inflection costs nothing. */
 export function containsTerm(value: unknown, term: string): boolean {
   const haystack = normalize(value);
@@ -109,7 +119,11 @@ const NEGATION = /\b(?:not|no|never|none|nothing|neither|nor|cannot|without|unab
  */
 export function assertsTerm(text: string, term: string): boolean {
   const needle = normalize(term);
-  for (let at = needle === "" ? -1 : text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + needle.length)) {
+  const word = /\w/;
+  for (let at = needle === "" ? -1 : text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) {
+    // The match is the term and not the end or the start of another word ("this 32 MiB" is not "is 32 MiB").
+    if (word.test(needle[0] as string) && word.test(text[at - 1] ?? "")) continue;
+    if (word.test(needle[needle.length - 1] as string) && word.test(text[at + needle.length] ?? "")) continue;
     const clause = text.slice(0, at).split(/[.;:!?]\s|\s;\s/).pop() ?? "";
     if (!NEGATION.test(clause.trim().split(/\s+/).slice(-4).join(" "))) return true;
   }
@@ -136,7 +150,14 @@ function scoreInference(c: Case, derived: string | undefined, noChange: boolean)
   if (c.expected.noChange) checks["decides no-change"] = noChange;
   else if (noChange) checks["does not abstain"] = false;
   for (const term of c.expected.required ?? []) checks[`retains ${term}`] = !!doc && containsTerm(output, term);
-  if (c.expected.date) checks["retains explicit date"] = !!doc && output.includes(c.expected.date.toLowerCase());
+  if (c.expected.date) checks["retains explicit date"] = !!doc && containsTerm(output, c.expected.date);
+  // akm copies the parent's observation date into the child's frontmatter; this checks that copy, not the model.
+  if (c.expected.observed) checks["carries observation date"] = !!doc && String(observedOf(doc.data)) === c.expected.observed;
+  // akm copies the parent's scope into the child's flat `scope_*` fields; this checks that copy, not the model. YAML reads `run: 77` as a number.
+  if (c.expected.scope) {
+    const scope = c.expected.scope;
+    checks["preserves scope"] = !!doc && doc.data.scope === undefined && (["user", "agent", "run", "channel"] as const).every((key) => (doc.data[`scope_${key}`] === undefined ? scope[key] === undefined : String(doc.data[`scope_${key}`]) === scope[key]));
+  }
   for (const term of c.expected.forbidden ?? []) checks[`does not invent ${term}`] = !doc || !assertsTerm(claims, term);
   return { structure: noChange ? null : structure, checks };
 }
@@ -146,7 +167,7 @@ function scoreEnrich(c: Case, written: string | undefined): Scored {
   const doc = parseDocument(written);
   const tags = strings(doc?.data.tags);
   const description = text(doc?.data.description);
-  const given = doc?.data.observed_at;
+  const given = observedOf(doc?.data);
   const structure = !!doc && !!tags && tags.length >= 1 && tags.length <= 5 && tags.every((t) => t !== "" && t === t.toLowerCase()) && description !== "";
   const output = normalize({ tags: tags ?? [], description, observed_at: given ?? null });
   const checks: Checks = {};

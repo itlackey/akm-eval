@@ -38,12 +38,12 @@ const loadError = (dir: string): string => {
 };
 
 describe("the cases of a corpus folder", () => {
-  test("the public corpus is sound: 51 cases, in 5 processes, with the files they name", () => {
+  test("the public corpus is sound: 55 cases, in 5 processes, with the files they name", () => {
     const cases = loadCases(PUBLIC);
-    expect(cases).toHaveLength(51);
+    expect(cases).toHaveLength(55);
     expect(cases.every((c) => c.files.every((f) => (c.texts[f] ?? "").trim() !== ""))).toBe(true);
     const ids = cases.map((c) => c.id);
-    expect(new Set(ids).size).toBe(51);
+    expect(new Set(ids).size).toBe(55);
   });
 
   test("a folder with no cases.json, or one that is not a list of cases, is refused with the file named", () => {
@@ -80,6 +80,12 @@ describe("the cases of a corpus folder", () => {
     expect(loadError(corpus([{ ...base, expected: { noChange: false } }], files))).toContain("a: required needs a list of terms");
     expect(loadError(corpus([{ ...base, expected: { noChange: "yes" } }], files))).toContain("a: noChange needs true or false");
     expect(loadError(corpus([{ ...base, expected: { noChange: true, required: "x" } }], files))).toContain("a: required needs a list of terms");
+  });
+
+  test("scope labels describe the complete normalized tuple, including an explicitly unscoped child", () => {
+    const files = { "memories/m.md": "text" };
+    for (const scope of [{}, { user: "u", agent: "a", run: "77", channel: "staging" }]) expect(loadError(corpus([{ ...base, expected: { required: ["x"], scope } }], files))).toBe("");
+    for (const scope of [[], "staging", { run: 77 }, { user: " " }, { project: "p" }]) expect(loadError(corpus([{ ...base, expected: { required: ["x"], scope } }], files))).toContain("scope needs an object");
   });
 
   test("the problems of a corpus are counted and listed, one to a line", () => {

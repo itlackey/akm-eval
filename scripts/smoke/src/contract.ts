@@ -218,7 +218,7 @@ export const CONTRACTS: Record<string, Contract> = {
   },
   "evals/bakeoff": {
     canned: [
-      { prompt: "Compress the memory", reply: { title: "Queue checkpoint recovery", description: "Keep the checkpoint manifest and blob before resuming from the prior offset.", tags: ["queue", "checkpoint", "recovery"], searchHints: ["checkpoint manifest", "blob recovery", "prior offset"], content: "On 2026-02-14, recovery used the checkpoint manifest and blob to resume from the prior offset." } },
+      { has: ["title", "description", "tags", "searchHints", "content"], reply: (schema: Schema | undefined) => ({ ...(schema?.properties?.noChange ? { noChange: false } : {}), title: "Queue checkpoint recovery", description: "Keep the checkpoint manifest and blob before resuming from the prior offset.", tags: ["queue", "checkpoint", "recovery"], searchHints: ["checkpoint manifest", "blob recovery", "prior offset"], content: "On 2026-02-14, recovery used the checkpoint manifest and blob to resume from the prior offset." }) },
       { prompt: "memory tagger", reply: { tags: ["queue", "checkpoint", "recovery"], description: "Queue checkpoint recovery from the manifest and blob.", observed_at: "2026-02-14" } },
       { prompt: "Generate the missing frontmatter", reply: { description: "The publisher drains the worker before a deployment and checks its health.", when_to_use: "When you deploy or replace a publisher worker in a release." } },
       { prompt: "summarizing an agent coding session", reply: { summary: "The session deployed relay-worker:7.4 with relay-canary-184, checked the object store and postgresql, and kept worker-stable as the rollback alias.", key_topics: ["relay-worker:7.4", "relay-canary-184", "worker-stable"], tags: ["release"] } },

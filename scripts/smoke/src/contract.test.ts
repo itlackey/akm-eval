@@ -221,6 +221,31 @@ describe("the canned replies, against the requests akm 0.9.26 and 0.9.31 send", 
   });
 });
 
+test("bakeoff inference matches the schema before and after explicit no-change, independent of prompt wording", () => {
+  const canned = (CONTRACTS["evals/bakeoff"] as Contract).canned[0] as Canned;
+  for (const explicit of [false, true]) {
+    const properties: Record<string, Schema> = { title: { type: "string" }, description: { type: "string" }, content: { type: "string" }, tags: { type: "array", items: { type: "string" } }, searchHints: { type: "array", items: { type: "string" } } };
+    if (explicit) properties.noChange = { type: "boolean" };
+    const schema: Schema = { type: "object", properties, required: Object.keys(properties), additionalProperties: false };
+    const req = requestOf({ name: "inference", eval: "bakeoff", prompt: "A revised decision prompt", schema });
+    expect(matches(canned, req)).toBe(true);
+    const answer = answerFrom([canned]);
+    const reply = JSON.parse(answer(req));
+    expect(check(schema, reply)).toEqual([]);
+    expect(reply.noChange).toBe(explicit ? false : undefined);
+    expect(reply.content).toContain("checkpoint manifest");
+    expect(answer.unused()).toEqual([]);
+  }
+  expect(matches(canned, requestOf(fixture("probe")))).toBe(false);
+  expect(matches(canned, requestOf(fixture("extract")))).toBe(false);
+  expect(matches(canned, requestOf(fixture("promotion plan")))).toBe(false); // consolidate
+  // The other bakeoff processes ask for their own keys: enrich (tags, description, the date), repair, and summary. None is an inference request.
+  const asking = (...keys: string[]): Schema => ({ type: "object", properties: Object.fromEntries(keys.map((k) => [k, { type: "string" }])), required: keys, additionalProperties: false });
+  for (const keys of [["tags", "description", "observed_at"], ["tags", "description", "observed"], ["description", "when_to_use"], ["summary", "key_topics", "tags"]]) {
+    expect(matches(canned, requestOf({ name: "other", eval: "bakeoff", prompt: "A prompt", schema: asking(...keys) }))).toBe(false);
+  }
+});
+
 describe("CONTRACTS", () => {
   test("holds a contract for every eval the smoke runs and for no other", () => {
     expect(Object.keys(CONTRACTS).sort()).toEqual(ENTRIES.filter((e) => !e.skip).map((e) => e.dir).sort());
