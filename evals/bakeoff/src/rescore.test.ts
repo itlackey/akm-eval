@@ -179,3 +179,23 @@ describe("memory-inference no-change decisions are scored again from akm's count
     expect(done.rows[0]?.checks).toEqual({ "decides no-change": false });
   });
 });
+
+test("compatible 0.3 outputs rescore both arms for visible dates and full scope without recollection or invented rows", async () => {
+  const cases = [{ id: "infer", process: "memory-inference", files: ["memories/retry.md"], expected: { required: ["retries", "2 seconds"], date: "2026-03-04", scope: { user: "operator-17" } } }];
+  const scoped = DERIVED.replace("inferred: true", "inferred: true\nscope_user: operator-17");
+  const hidden = scoped.replace("Retries wait 2 seconds on 2026-03-04.", "Retries wait 2 seconds.").replace("  - retry delay", "  - 2026-03-04 retry delay");
+  for (const [document, correct] of [[scoped, true], [hidden, false], [DERIVED, false]] as const) {
+    const { summary, folder } = await customRun(outside(), [], { cases, plan: { infer: { retry: { derived: document } } } });
+    const stored = readStored(summary.results_dir);
+    stored.summary.manifest.collector.version = "0.3";
+    stored.summary.manifest.scorer.version = "0.3";
+    const before = JSON.stringify(stored);
+    const done = rescoreRun(stored, { cases: folder });
+    expect(done.rows).toHaveLength(1);
+    expect(done.rows[0]?.correct).toBe(correct);
+    expect(done.rows[0]?.derived).toBe(document);
+    expect(done.summary.manifest.collector.version).toBe("0.3");
+    expect(done.summary.manifest.scorer.version).toBe("0.4");
+    expect(JSON.stringify(stored)).toBe(before);
+  }
+});

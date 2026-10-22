@@ -983,5 +983,97 @@
       ],
       "strict": false
     }
+  },
+  {
+    "id": "infer-scoped-incident",
+    "process": "memory-inference",
+    "files": [
+      "memories/scoped-incident.md"
+    ],
+    "expected": {
+      "required": [
+        "relay-worker",
+        "7.4",
+        "retry budget",
+        "staging"
+      ],
+      "scope": {
+        "user": "operator-17",
+        "agent": "incident-triage",
+        "run": "77",
+        "channel": "staging"
+      },
+      "forbidden": [
+        "production was repaired",
+        "globally fixed"
+      ]
+    }
+  },
+  {
+    "id": "infer-flat-scoped-request",
+    "process": "memory-inference",
+    "files": [
+      "memories/scoped-request.md"
+    ],
+    "expected": {
+      "required": [
+        "Mira",
+        "request",
+        "pool.limit",
+        "staging"
+      ],
+      "scope": {
+        "user": "operator-24",
+        "run": "rollout-42",
+        "channel": "staging"
+      },
+      "forbidden": [
+        "was applied",
+        "has been applied",
+        "production was updated"
+      ]
+    }
+  },
+  {
+    "id": "infer-metadata-observation-date",
+    "process": "memory-inference",
+    "files": [
+      "memories/metadata-observation-date.md"
+    ],
+    "expected": {
+      "required": [
+        "trial-gateway",
+        "32 MiB",
+        "snapshot"
+      ],
+      "date": "2026-06-12",
+      "scope": {},
+      "forbidden": [
+        "is 32 MiB",
+        "still 32 MiB",
+        "verified today",
+        "current limit remains 32 MiB"
+      ]
+    }
+  },
+  {
+    "id": "infer-file-date-not-observation",
+    "process": "memory-inference",
+    "files": [
+      "memories/file-date-not-observation.md"
+    ],
+    "expected": {
+      "required": [
+        "bridge-worker",
+        "idle timeout",
+        "no observation date"
+      ],
+      "scope": {},
+      "forbidden": [
+        "observed on 2026-10-18",
+        "verified on 2026-10-18",
+        "as of 2026-10-18"
+      ]
+    }
   }
 ]

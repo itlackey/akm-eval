@@ -21,6 +21,8 @@ export interface Expected {
    * and a no-change on a note without this flag is a false abstention. `required`, `forbidden` and `date` are then optional.
    */
   noChange?: boolean;
+  /** The complete normalized child scope (memory-inference). An empty object expects an unscoped child. */
+  scope?: Partial<Record<"user" | "agent" | "run" | "channel", string>>;
   /** The date an enriched memory must carry, or null when the memory writes none (remember-enrich). */
   observed_at?: string | null;
   /** Terms the metadata must cover (remember-enrich, schema-repair). Any one is enough for schema-repair. */
@@ -136,7 +138,9 @@ function scoreInference(c: Case, derived: string | undefined, noChange: boolean)
   if (c.expected.noChange) checks["decides no-change"] = noChange;
   else if (noChange) checks["does not abstain"] = false;
   for (const term of c.expected.required ?? []) checks[`retains ${term}`] = !!doc && containsTerm(output, term);
-  if (c.expected.date) checks["retains explicit date"] = !!doc && output.includes(c.expected.date.toLowerCase());
+  // A date hidden in a tag or hint does not preserve the visible historical claim.
+  if (c.expected.date) checks["retains explicit date"] = !!doc && containsTerm([description, content].join(" ; "), c.expected.date);
+  if (c.expected.scope) checks["preserves scope"] = !!doc && doc.data.scope === undefined && (["user", "agent", "run", "channel"] as const).every((key) => doc.data[`scope_${key}`] === c.expected.scope?.[key]);
   for (const term of c.expected.forbidden ?? []) checks[`does not invent ${term}`] = !doc || !assertsTerm(claims, term);
   return { structure: noChange ? null : structure, checks };
 }
