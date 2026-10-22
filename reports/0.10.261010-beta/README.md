@@ -25,9 +25,11 @@ unchanged.
 ## Next to 0.10.261009-beta
 
 `scripts/compare/run` shows each pair in full. The 0.9.32 column repeats the
-[2026-10-15 runs](../0.9.32/) already used in the 0.10.261009-beta report, for
+2026-10-15 runs already used in the 0.10.261009-beta report, for
 the evals whose version has not changed since (agent-ab there was one attempt
-per arm, 6 trials a side). Several settings differ (akm, collector commit,
+per arm, 6 trials a side). Those runs were replaced on 2026-10-22 by a new
+0.9.32 set ([`../0.9.32/`](../0.9.32/)) and are in git history; the column
+below keeps the numbers as they were published. Several settings differ (akm, collector commit,
 date), so no difference below isolates one cause, and one run per side is one
 observation.
 
