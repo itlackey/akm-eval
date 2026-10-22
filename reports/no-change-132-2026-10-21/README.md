@@ -64,3 +64,29 @@ What this shows about the harness:
 - The installed-path check on `akm-cli@0.10.261010-beta` is open until that beta is published.
 - Saved 0.2 runs keep their scores; those with unusable memory-inference rows must be collected again to be scored by 0.3, and 0.2 and 0.3
   totals are not comparable (the corpus gained 11 cases).
+
+## October 22 grounding follow-up
+
+The 0.4 follow-up adds the four scope/metadata-date controls deferred above. Compact new evidence is in
+[`grounding-calibration-2026-10-22.jsonl.gz`](grounding-calibration-2026-10-22.jsonl.gz): six exact AKM requests,
+genuine native Codex/Luna responses, saved derived files/counters, both scorers' rows, and native usage.
+AKM is freshly fetched `release/0.10.0` at `43851d11e1bfeecaf6c1536be98a6a2f6e6bd43c`; evaluator code is
+`fcc1cbf4466b380f46a8ac09a035f63ba358f32c`. The original October 21 observations above keep their earlier identities.
+
+The review's Flash model is unavailable here. This calibration requested `gpt-6-luna` through Codex CLI 0.163.0
+(reasoning medium), then replayed the separately captured responses using the existing smoke stub into actual AKM
+requests. Native system instructions and schema transport differ from a plain API; the provider's served identity is
+not independently exposed. The evaluator row's `served` value is the stub's echo, not independent model identification.
+AKM requests temperature 0/thinking off; native temperature is not controlled by that request.
+
+All four new public controls and two reserved actor/date perturbations produced grounded children: 6/6 pass under both
+the old and final scorers, 0 false abstentions, 0 grounding failures, 0 errors/timeouts/tool uses. No new no-change
+quality rate or stochastic improvement is measured: none of these six expects restraint, and there are no identical-input
+repeats. Native usage totals 59,080 input and 1,035 output tokens across six calls, about 26.8 seconds inside those calls;
+this includes native instruction overhead. Dollar cost is unavailable. Synthetic smoke-envelope usage is excluded.
+
+The six saved raw outputs were replayed through the final scorer after the final deterministic nested-scope rejection;
+all rows and checks were unchanged. Inputs, model requests and product build did not change. Finite unsafe fixtures
+and saved-result tests establish the scoring corrections; the model calibration establishes usable grounded controls,
+not an AKM quality gain. Deterministic generation provenance remains separate in akm#1210. The new PR is the current
+acceptance/check/rollout record; this artifact is raw supporting evidence.
