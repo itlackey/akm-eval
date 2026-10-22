@@ -55,10 +55,11 @@ need new judgments. Compare only the same frozen inputs and label digests.
 
 ## Bounded build comparison and tooling checks
 
-[Build validation](../0.9.31/README.md) publishes both clean source commits,
-the four expanded-label rescores and saved comparisons. Quality deltas are zero
-for corresponding build runs. Each collection has one observation per build: timings validate
-measurement/reporting and do not establish a performance improvement.
+A build validation of two clean 0.9.31 source builds (12 library queries each, expanded-label rescores, saved comparisons)
+was published here earlier as `reports/0.9.31/`; it was removed on 2026-10-22 so that one set of 0.9.x runs per model remains
+(see [`../0.9.32/README.md`](../0.9.32/README.md)), and is in git history. Its quality deltas were zero for corresponding
+build runs; each collection had one observation per build, so its timings validated measurement/reporting and did not
+establish a performance improvement.
 
 ## Reproduction provenance
 

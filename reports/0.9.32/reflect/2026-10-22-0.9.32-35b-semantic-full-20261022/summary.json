@@ -1,0 +1,891 @@
+{
+  "eval": "reflect",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "0.9.32-35b-semantic-full-20261022",
+  "date": "2026-10-22T08:30:10.699Z",
+  "git_commit": "307e636",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.9.32",
+  "akm_bin": "/tmp/akm-0.9.32-prefix/node_modules/.bin/akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "limit": null,
+  "strategy": "reflect-only",
+  "config_patch": {
+    "path": "--semantic",
+    "sha256": "591a6213cec2890f9c7e4cd52a35c9e2eab91bf5db0879f27aa6efd178555ef5"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "reflect": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "reflect",
+      "improveStrategy": "reflect-only"
+    },
+    "improve": {
+      "strategies": {
+        "reflect-only": {
+          "engine": "reflect",
+          "processes": {
+            "reflect": {
+              "enabled": true,
+              "qualityGate": {
+                "enabled": false
+              }
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        }
+      }
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    }
+  },
+  "engine": {
+    "engine": "reflect",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "<MODEL_BASE_URL>",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "reflect": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "64829626f5501e46100179971ab0856ef3eb9eca0881cd9cb8edddda810af563",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 80,
+  "n_run": 80,
+  "n_scored": 80,
+  "n_errored": 0,
+  "timeouts": 0,
+  "served": {
+    "qwen3.6-35b-a3b": 80
+  },
+  "metrics": {
+    "defects": {
+      "n": 40,
+      "correct": 36,
+      "rate": 0.9
+    },
+    "controls": {
+      "n": 40,
+      "correct": 32,
+      "rate": 0.8
+    },
+    "classes": {
+      "description-period": {
+        "n": 7,
+        "correct": 7,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 7,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "description-quote": {
+        "n": 7,
+        "correct": 7,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 7,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "description-truncated": {
+        "n": 7,
+        "correct": 4,
+        "rate": 0.5714,
+        "outcomes": {
+          "proposal": 5,
+          "none": 2,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "defect_fixed": 3
+        }
+      },
+      "description-missing": {
+        "n": 7,
+        "correct": 7,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 7,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "when-to-use-missing": {
+        "n": 6,
+        "correct": 6,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 6,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "title-missing": {
+        "n": 6,
+        "correct": 5,
+        "rate": 0.8333,
+        "outcomes": {
+          "proposal": 6,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "no_extra_change": 1
+        }
+      },
+      "retrieval-miss": {
+        "n": 10,
+        "correct": 9,
+        "rate": 0.9,
+        "outcomes": {
+          "proposal": 1,
+          "none": 9,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "no_extra_change": 1
+        }
+      },
+      "unsupported-ask": {
+        "n": 10,
+        "correct": 7,
+        "rate": 0.7,
+        "outcomes": {
+          "proposal": 3,
+          "none": 7,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "no_extra_change": 3,
+          "no_invented": 2
+        }
+      },
+      "historical": {
+        "n": 10,
+        "correct": 7,
+        "rate": 0.7,
+        "outcomes": {
+          "proposal": 3,
+          "none": 7,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "no_extra_change": 3
+        }
+      },
+      "body-defect": {
+        "n": 10,
+        "correct": 9,
+        "rate": 0.9,
+        "outcomes": {
+          "proposal": 1,
+          "none": 9,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "no_extra_change": 1
+        }
+      }
+    },
+    "proposals": {
+      "n": 46,
+      "touched_body": 0
+    },
+    "refused": {
+      "filter": 0,
+      "judge": 0,
+      "retrieval": 0,
+      "other": 0
+    }
+  },
+  "retrieval_queries": null,
+  "model_calls": {
+    "calls": 80,
+    "errors": 0,
+    "prompt_tokens": 2402.3,
+    "completion_tokens": 61.9,
+    "seconds": 1.93,
+    "output_tokens_per_second": 32.1
+  },
+  "semantic_verification": {
+    "index_checks": 80,
+    "indexed_entries": 80,
+    "embedded_entries": 80,
+    "searches": {
+      "semantic": 0,
+      "non_semantic": 0,
+      "unknown": 0
+    },
+    "telemetry_errors": 0,
+    "failures": 0
+  },
+  "concurrency": 1,
+  "timeout_ms": 900000,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "reflect",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.4"
+    },
+    "scorer": {
+      "version": "0.4"
+    },
+    "cases": {
+      "description-period-01": {
+        "input_sha256": "7a689e1aa23ff541f5fdbdf6abfdb67e34a23e1e856f40764b5327700a90404e",
+        "label_sha256": "c142a1a4c27a86609d9ae0fe2b0ee8a7c62011bf987e2a55823800efba06ff0b"
+      },
+      "retrieval-miss-01": {
+        "input_sha256": "40af64532f7783af2b69934524e9d74e49e367c638b658e21f8a2c177a8276dc",
+        "label_sha256": "8c82143c513b27dabb399708859896f056095d549dec7aea257cc4a8e5667d83"
+      },
+      "when-to-use-missing-01": {
+        "input_sha256": "7ac6235af9ee9c338c97e39825fa0a51c610653881c1b136021b85444d83f3f7",
+        "label_sha256": "15bab1cc01aa4f86e55b6e5a1de312b84550352ca6ba18215757b343281bc1f3"
+      },
+      "historical-01": {
+        "input_sha256": "70e7879c4c47325d8ff6cee67e9e1af2e485eba54290b977d79b1257f834aaac",
+        "label_sha256": "1a77cfe60b2e121743472cefbe3081b670fcf7ae5aa4de9c9036743b8e5ee0e9"
+      },
+      "title-missing-01": {
+        "input_sha256": "ed0923337bc200d27593fb2c94f8119d3bd6f74cdefabb0b8507dd31da1c54ce",
+        "label_sha256": "a2c39a8a2d81025f288ed1d448c62c0cfc0fd35c2936fcdfbfe4bd195e27bf68"
+      },
+      "description-truncated-01": {
+        "input_sha256": "63a0cd6ba37addbd74e98abebf3b2ae9690bbca27ef7daaae14fca08f1cf62e9",
+        "label_sha256": "0d931822cfd7f8fa0afb2f7f54bb93ac3126c5b1395e7ea3c7ef95ffa354f4d0"
+      },
+      "unsupported-ask-01": {
+        "input_sha256": "fe26863e2ed54a99745fde0acbd593a58f3c7607af0f82cd220918aa1c63b1de",
+        "label_sha256": "11bbbc7a7272e7cba0e65df452a7dfd87978d1ebcf90d88c970a622390dcad87"
+      },
+      "description-missing-01": {
+        "input_sha256": "bd0025302a1dd2ee4419744c42f42c7359b39aed3dc41e06a519b9232f300021",
+        "label_sha256": "316458fe4dd24ed2941ed4aa9c42fe8d8d71b89eb1e036d37b8bacbc856914b7"
+      },
+      "description-quote-01": {
+        "input_sha256": "7573607ad83173932566ec5fa36bd2eb09f2df1c06418560da30872112256240",
+        "label_sha256": "8294808e185198b278f21678c0cc501a264d46e6e84840d74ba102be9908acb6"
+      },
+      "body-defect-01": {
+        "input_sha256": "f84a95b3c85850321812d09671cda9c72985b589bd9985fd22ec0462bd8093d0",
+        "label_sha256": "2a7db574115e0871ee722bad367a57a8880b1522ca7c6cd7f601937668a79ca9"
+      },
+      "description-period-02": {
+        "input_sha256": "35ec96d1a1089c173698118bb178296bc39950d93fa828b5d3f8476e493a1679",
+        "label_sha256": "04c17e302a86199bce938bd9d8bdf0f3149d22d2c2c07fdd6bbd2d16eaa19dd6"
+      },
+      "retrieval-miss-02": {
+        "input_sha256": "63c0d46bac630fffe0abcc807902193c7b4556bfd46ae1c1f63e6d051d4c9f95",
+        "label_sha256": "4b09022230970559a858fe70bb84b70b535dc28c1fbf15fc049b13b5c2be6aa8"
+      },
+      "when-to-use-missing-02": {
+        "input_sha256": "3557e32b00a6701a2cd981413e1e6dc49d94b56ede5a708932c87fe2ef880190",
+        "label_sha256": "53f6e0f957d4ec2feb7846ba4cf7ab62077e00d96c803d7a17257704ff22fbd1"
+      },
+      "historical-02": {
+        "input_sha256": "053c44dde141fc1903bdbe80dc935b8a1911a95fcae3f9883e88808b34af13e4",
+        "label_sha256": "fa9e19ed90afe0165329a8e6eff549e5d3abb4493896973b4a0756efef50a782"
+      },
+      "title-missing-02": {
+        "input_sha256": "028c09ffb1369d8b069c17aff85223af5bd3d2b74e0bb29017986b1ad09639c1",
+        "label_sha256": "c780ec68053ffd054e1ef43b5eea16c252301db01e91d2536336c77169d0e5c9"
+      },
+      "description-truncated-02": {
+        "input_sha256": "ebdb959620b6cae96c785fc54eb18f811c938e188a5229f00ac845214be51881",
+        "label_sha256": "26e501b08ab9b728da0a1000036fbcb79eda8b9657f154bcfe9e5e4306705ca0"
+      },
+      "unsupported-ask-02": {
+        "input_sha256": "12f781dc5d6323eec82156fcf9cc82bf237a405fa8cbd408c2329e6b2ae35f4f",
+        "label_sha256": "e5c105e7cc3f79108ad23c54bcd9b2963fb7aae577198254fd2944bde4693b4f"
+      },
+      "description-missing-02": {
+        "input_sha256": "973138e2b50e2f0a25e94f0d3adfe3835f7fb089906d9ab78ffa8adf067afb05",
+        "label_sha256": "8fb3a10c4869b5fc0292827a9a219d0ff68cf2bdc15eac71810d8a94cb52525e"
+      },
+      "description-quote-02": {
+        "input_sha256": "579c5cd162b79e3937be1f906f20d2ffa821e4d865dde2185643622a73c4e081",
+        "label_sha256": "e70cc7f658919009445a92fd877e1410bf59dd44bd40d0ded6d97980b6c2b4ae"
+      },
+      "body-defect-02": {
+        "input_sha256": "22e491ecffb07ef14a8496a297aac7f2ec7e43c02dd8d2173d746c19ae40c488",
+        "label_sha256": "27b645aa23efc34efec5fc8e3acd0fab611929c007e3f3404c78ae1ad993087e"
+      },
+      "description-period-03": {
+        "input_sha256": "f72b5cfaba3a3bdc4d2704dd026b3bbca5dcf159fc44408e8b0f3e3e825a60bc",
+        "label_sha256": "81a358522fcae0107b8a5c2dbec4dbd4753f6b0c639026eb83ec62cb86ed400f"
+      },
+      "retrieval-miss-03": {
+        "input_sha256": "6a033e13955cb407d051a86e4e6d6e8afefd953d7472e738c2d0493888759da4",
+        "label_sha256": "caf4fad8bf31a929d7fc6a477e24ccd74b494fbb32e3428b0b4238050bd88a5d"
+      },
+      "when-to-use-missing-03": {
+        "input_sha256": "bceae4142aa17da6de565c8fbf8181243ea12d48a42096cf4ad4b556266efb17",
+        "label_sha256": "3a3fd708becfaa19f4c76b7414ac48b594c31380c5b442929311e12037258ff9"
+      },
+      "historical-03": {
+        "input_sha256": "1dbc45f4b364807403c7f1b8582f26d3624ac2cc3a31958cea85e2f9cad8119b",
+        "label_sha256": "fa42f34d2bb97975851b68cc133286f756453ea68693ce8aa180efcd375dee4d"
+      },
+      "title-missing-03": {
+        "input_sha256": "5a9c70a5b3bdcd8e4b540c83bfb491754c3f88d098dbb37f1590fea09fa775cf",
+        "label_sha256": "66e6bebe7780d3a0ae6047134b46d4988fa2bcbea83a35d9b8094cd94967da3c"
+      },
+      "description-truncated-03": {
+        "input_sha256": "77f35b6fa7c3c94bb997836831d82c4b093ad39b4f4c7d04e52b8f9e0c40db28",
+        "label_sha256": "1665aaec9fd5b9a3c14d9e1b448de688d0515628ac6b327256793c27182cb822"
+      },
+      "unsupported-ask-03": {
+        "input_sha256": "c63c8d78d413d04be75e8c8b14be87f50baff04033e9b3ac4470a4735e0c2cfa",
+        "label_sha256": "d87ccdfb672556048de25e910608f126cc910801ee47d20bb4a8491717cf946d"
+      },
+      "description-missing-03": {
+        "input_sha256": "d8c12a83d31d2941c32fdeb177e1e8d87cd3ec48895c58ef527ffed2285d4f3d",
+        "label_sha256": "1a34c1449d168aee9ee3ad6642fe34c373ca979042e7597d4b752adc12653fc1"
+      },
+      "description-quote-03": {
+        "input_sha256": "9a18ebd6bdc53663ea6726df46e2dff5d49e90c2892d402cdf3b9633daeab53d",
+        "label_sha256": "b25ca3dc1ad1f3d65d1000aa56317c8cafb516af1fe8fef25aa0068bb5cb1f2c"
+      },
+      "body-defect-03": {
+        "input_sha256": "2c1a0aa5ed0a3bcc26a969b970fe03342707d8d8a26ff7a11bff6b98b66bb4f9",
+        "label_sha256": "4e3f67d57f85dfa69aa94d8f5f1a1f7a0f23b972ee73eb9cb9b9499a75c4a07a"
+      },
+      "description-period-04": {
+        "input_sha256": "e87ad8f131d25541503c1f57896ec7d55b27013841fb04fdd40c06d2824872ad",
+        "label_sha256": "341aba54a02f609842b8d4728acaa02fb54ef035153307bb64cda82f0c642524"
+      },
+      "retrieval-miss-04": {
+        "input_sha256": "c7e630c8b9ca4e6f62a991f28ffd4a74066f0d5fac6ddfd2de1941e491d3d128",
+        "label_sha256": "2b6bf79b211c3833722dbbb6ec9b8f025d446cf2c060aa66a0381207de37b478"
+      },
+      "when-to-use-missing-04": {
+        "input_sha256": "2e5202e0676ee9452bd3cc606fa864f950b6001f33163b1a3957e86ee06fcb64",
+        "label_sha256": "0ff7d35de1374ac842656ec3488465e35f26b069dc64fdca5e104a084090b799"
+      },
+      "historical-04": {
+        "input_sha256": "5099354cb3c6ebf54068a6deab3e00076f4aa4a198abffd1028f76e60fcc1460",
+        "label_sha256": "cb865df73905b077288d33d8a8e1a0e8b5e7ccf5d0bf161ca0079875b747e9d9"
+      },
+      "title-missing-04": {
+        "input_sha256": "7022bf87fd0c2c68452b6337c0f3540c413bc9b6e3cea590b606568f11b68816",
+        "label_sha256": "b5f5bee9a54d377132dea41d8b1443bf020a003afcfbf3a594e9f33d55690e9b"
+      },
+      "description-truncated-04": {
+        "input_sha256": "f60303343aa269cedfc0cdc60bee7912b2c0f908798e730a260fc800929ed15b",
+        "label_sha256": "3b55bdeb8aeb717cd55eb9f58a8579175943c710dce52fd38c2116217436c9c3"
+      },
+      "unsupported-ask-04": {
+        "input_sha256": "7293427a895526242d1dadb735a65a47bdd5c840afb4d873e30e418f0e4ade02",
+        "label_sha256": "d8bab74570cae14a862a6a08317af6f05a5c4f2e94b03dbcfc526459fbef1cfa"
+      },
+      "description-missing-04": {
+        "input_sha256": "d52634ff0d0323dd578c4554e8256d2e1fb1ecc54956bcc2307391f785eeb269",
+        "label_sha256": "9cd45dedf1f7075461a938479b6e74edeac135963f9872139a7ce34b6dc68132"
+      },
+      "description-quote-04": {
+        "input_sha256": "dbc70bd2114a584d5d98d308677c01a44900a4f01c634d373f0f04a30716f3c7",
+        "label_sha256": "2ee1d5638a317bb296b3018d96bed83591e8da4ded7bbae9f650639c8f62509b"
+      },
+      "description-period-05": {
+        "input_sha256": "3c4a62b689fcc1003a75ec95182db464b5da7cfec32599f46bcf751387db715e",
+        "label_sha256": "65ebaf2c30e4a7eef541362a1aa8ffd5fa65d856a4c94db76d937f5216453561"
+      },
+      "retrieval-miss-05": {
+        "input_sha256": "df94d6049d4a746f27e13156456d973a8f1c52db61eb731295eaa8c795c905d3",
+        "label_sha256": "a76ea51bc5ef4c286b0175ff9457813924fb2881f09a33d1d472b2d7562dca32"
+      },
+      "when-to-use-missing-05": {
+        "input_sha256": "78dbd1d882487fd585fd1c1901885146d1dcdfe0a31b56073ae13ca181e1c3e1",
+        "label_sha256": "1d8d708c0f2ac9a77fa7065b90f4ecef7d0cc7c6f6b82eb54f06512182187359"
+      },
+      "historical-05": {
+        "input_sha256": "84e11188a1442d5f7229d1b19cbde90975927060a823149147e89660f40ec8fa",
+        "label_sha256": "ae1f9fff76a30bfb94e8518a599a051116c3121614fc9af9221de499e135dd7d"
+      },
+      "title-missing-05": {
+        "input_sha256": "6e6396e6d93020d132ebdb146c8cd5d1c501cc1736adf248d9d0ed46fb6c9511",
+        "label_sha256": "29d9d4b9c96de9797deea92ae3a909bebd20dfc6142283676bda2785d8b3f12c"
+      },
+      "description-truncated-05": {
+        "input_sha256": "8f4d978cc27d884472815f3980cc1e726fe9b0f540e1f88a5b0f47d2d26ed8d6",
+        "label_sha256": "099e4570a5e4acd519d9a96a6f3a634167fa6e93d8ade6a30d7c79e05e582821"
+      },
+      "unsupported-ask-05": {
+        "input_sha256": "c22f25709eb2c0048c5ff592f7136a7e4d20fbee5c948565e5765d3938a8c880",
+        "label_sha256": "f69cda90d629ea3e6acbdf896cf8ab132bc3ab33fd4a9af6164513fbcdf0c7d5"
+      },
+      "description-missing-05": {
+        "input_sha256": "616a97eaec4ca09b3e0b497c1550720b1bace9e3889561706c9a2758e067eafb",
+        "label_sha256": "dad0d1b466d1cea6d3cd8f28ca896628456eaf061d0975f1937916badfc07f03"
+      },
+      "description-quote-05": {
+        "input_sha256": "88018e7b89817f0e2673b4b58070cef31bb6a817f16b90e9519f48a051eaabe6",
+        "label_sha256": "98f4a6670e4de400a2f82fb60beb45b1f1ecf90d81d50d769175e378527f95b2"
+      },
+      "description-period-06": {
+        "input_sha256": "a8e83cfca313cfa51f80cdc31c6059a435d97545c459c0ad0bd9705bc5260403",
+        "label_sha256": "9d0dba73baa10f494cd7965ea6c107992c1a4509a89190a3e29dac60c9e9a5a1"
+      },
+      "when-to-use-missing-06": {
+        "input_sha256": "ebefa84bf7f8e0432d260952d59d7df01b9f7f4414b88d4af046c6b69da3cde8",
+        "label_sha256": "b6ff3b10b1a1ac427815f5c9d4c037a48f841378af8054a8a3e1936f193921c3"
+      },
+      "description-period-07": {
+        "input_sha256": "1fe7ead80b154df1616796490a87edc7558a57fcbceb117a9cc39aa31199cd54",
+        "label_sha256": "dc42644a36b030e6a081b4a68e9f98c358dc1ef1c7c5240c5ba021ca63fda553"
+      },
+      "retrieval-miss-06": {
+        "input_sha256": "6919ad30f53bb3944f26b99ec553c13373cd67b34b0cfd482ebed1a69969e6f6",
+        "label_sha256": "94be50f7592e623d902d9b983c751b0ae6a82e8d8cf046d9b2b845b619ad79ef"
+      },
+      "historical-06": {
+        "input_sha256": "56167951d4ab17431aa7dbc49782d1c3386940be5f636a419047387d93c661df",
+        "label_sha256": "c24686e14b66e33a87e9cdf90662f2885a0c9336d6e2bd6efd5e0411bad48a1d"
+      },
+      "title-missing-06": {
+        "input_sha256": "862eaa61c078f29384445930a2a76d3e1fc6ef46c3eb93e294f02d592347257b",
+        "label_sha256": "f28ba9bb143da8a71bf8af605b2ff425d196aa95f7829064c80ca3bcb4cdfceb"
+      },
+      "description-truncated-06": {
+        "input_sha256": "29fae92928ecf00bae0b275382d7883b678a79aa79a268ceb52f5f53b6a7630f",
+        "label_sha256": "1ea60543e33eef0ac73920fa729759c1c2de633aa684df54b382d0c16c2cb83a"
+      },
+      "unsupported-ask-06": {
+        "input_sha256": "79cdc0477e1a07204b9025c77dc7c0e69367d8bd47cb685e6563830a784049c3",
+        "label_sha256": "7f60a1092e9d8f772a44a7e72c0de591a6c86ac7ece4f4f620f8cc81022d0a30"
+      },
+      "description-missing-06": {
+        "input_sha256": "81767f4eb6ee9e4de9ba4385bf11ab75bc69f31c14f65f99c0b0ae6c9d268421",
+        "label_sha256": "1a862e4d466e11f042a35a01911f798793aee500dd2e839320bb556bb4244ca8"
+      },
+      "description-quote-06": {
+        "input_sha256": "4adf5ef13317f346fe80df432000f2aa036354b2812fd4d416aa6935bad79d05",
+        "label_sha256": "7eb3a1e6b961eb6ad0791145a80a4ca5f2a2a672f633c8fbf891f722d9b73151"
+      },
+      "body-defect-04": {
+        "input_sha256": "69a3509dca1c9528572a713a188eb55270e7e780f68470411c3a6e446280dc84",
+        "label_sha256": "f4f29f4335a865ad1b8917a3218d7b683fc93c8c5992f1f9fa79f0b458c5aa9f"
+      },
+      "retrieval-miss-07": {
+        "input_sha256": "7f7fc4bb53181361cbe2216d6c40dfadcd09e5f71d99b775659cd01e31195f10",
+        "label_sha256": "45f5ebac696d0e41633963d928baef95f2c3b1e409c30e20d0a13f32242f26f6"
+      },
+      "historical-07": {
+        "input_sha256": "19b74861961c2c4aca2a44aa9fc66b490f509c3e1b9b8adc7574cd637eb8d67a",
+        "label_sha256": "4c884a1a173ddd90cc2eac01555fae5600026a24860a8f9a9acd10f48d74cb7c"
+      },
+      "description-truncated-07": {
+        "input_sha256": "3ec3be6978a5919dd72ff558b4425122b2a502facbe897ef29120f4e6ad0c00a",
+        "label_sha256": "f293397b93eed86c4e0d813040e01b0cacbba119e50990895653a9d47ff629b6"
+      },
+      "unsupported-ask-07": {
+        "input_sha256": "7e25a36555b055ad21b95ed2ee9a8bc6c2340a14483f7b5af89ca843abb2c7f6",
+        "label_sha256": "b353aa91f616d889242f087bfeefe5e5af10424b11aed68175db64a93200688d"
+      },
+      "description-missing-07": {
+        "input_sha256": "d0409d3bd65621e347db929fe9dc1eff30972879492d0aaeaebf3bb532335bae",
+        "label_sha256": "7f818239ab79e92d282b360727d951c9554d064f5097bc41f6ee3cb252eb680e"
+      },
+      "description-quote-07": {
+        "input_sha256": "3af0b2aaf8bf3dcd59f8431c0de13f744e61879736270c65e747fdacd59f515d",
+        "label_sha256": "a390520c9924ef0e58b6f89bdcdb57963b653f39575c0d7f459eec94cfdf7a57"
+      },
+      "body-defect-05": {
+        "input_sha256": "32193f1f6d8570124eeaa401cd9f9762bf65f91a5a1735b8dee1f5373c6d6b3d",
+        "label_sha256": "35ee62dc80abb1a7c8d70f84ffdf17e5cad017915286b35c17aa7f721f3685bb"
+      },
+      "retrieval-miss-08": {
+        "input_sha256": "e4ecb97f1634f65d3f6e85cbe738f9435835efad177919088be81234e4c5f4dc",
+        "label_sha256": "41e8baf5b88a8179b7fe5e1c3f4a3fa240e02705c47371770ce03cd2d34ffbce"
+      },
+      "historical-08": {
+        "input_sha256": "26b597721d34f034a801132d09b13511b946646c45e8d58b79e394af070b917d",
+        "label_sha256": "e40e3669d09b8a42f9da79a38fb5df2a4c176b6f326257ce4d958a773bdf36eb"
+      },
+      "unsupported-ask-08": {
+        "input_sha256": "5b5c25952aecf868d0851d12c611887fe88b4a4aff173c86ec39f0f02545b482",
+        "label_sha256": "0564455323dbcf115a6e82ecad7792bdc83285b61626edf41f3a828f461450fd"
+      },
+      "body-defect-06": {
+        "input_sha256": "1918ab321364c03ea0ad5533fc37b2e3a13fdb0357fb9a1fcc5644e2b25fa547",
+        "label_sha256": "c67ceea113aeae42ac89f5b46ed9934e7a3f6a2bb8620ac39883b5da57939e38"
+      },
+      "retrieval-miss-09": {
+        "input_sha256": "b072fc520fab79398b2f432a3166057e84ed1bd16707213ce427f5f200a99dd6",
+        "label_sha256": "7f3efd88a3ccef80b5f2f88e91f822f7217d6e6eae081039e7001158b29aebdd"
+      },
+      "historical-09": {
+        "input_sha256": "68012907c52827f0f18599a477c7477051c8c58114d76d687df86f86f98c2d68",
+        "label_sha256": "471ad1b9a8d104c18a1c5455cfa485ae4333c99a34ae11fe6b9a98d377f6a78d"
+      },
+      "unsupported-ask-09": {
+        "input_sha256": "3e8dc151118764cead65cd2d99ba53e42e5fb40623541a9a71b98003a93eced3",
+        "label_sha256": "a3b65d7bdf2b45ce316ad4b4a8d5c29f6b4dae8585196a43a6abd098d3f363f2"
+      },
+      "body-defect-07": {
+        "input_sha256": "568e2c7ace64dde6236999c1c42e2512c8d5df36082cb4b6299b216e15514d2b",
+        "label_sha256": "f7d2dff83ee6192ed49a2ecde0335c54dc36eb1637107f33909130a6019018fb"
+      },
+      "retrieval-miss-10": {
+        "input_sha256": "9015860765d593b3cd0636ace151eabca3b1f49062a5781e5e60329136bd246a",
+        "label_sha256": "447ad0b36dc8c4b66adb9f0bf17389233586888813e5435ecfef429f95835aee"
+      },
+      "historical-10": {
+        "input_sha256": "f4f048f85786a820ddd7f245c241122d458080034bd14aef32953d72b10f67ea",
+        "label_sha256": "2936dd3aaee57e03bde09b90bf500bf752cccbade3dd5b563db1c2decf5305a3"
+      },
+      "unsupported-ask-10": {
+        "input_sha256": "0266b54bb55f6bd0e0f4a3880824bcdcd7e1e6cbc761dd3f594a3f9d87d84267",
+        "label_sha256": "18ec736bbbe61f6b6500078115b5c25c98f5c6b3dcb6c012ba57b53a5a85ea97"
+      },
+      "body-defect-08": {
+        "input_sha256": "84b377023e835310eeadca1e2627299b3f706d277d6942918993b7e02266525a",
+        "label_sha256": "f4f231eafc79c6eab9f64d6f7e4cd90561f4dfb81990502c274efbc3532bab0b"
+      },
+      "body-defect-09": {
+        "input_sha256": "e639e6235480a8ff3c2aa0c8ee53c54c9b8e14725df16cb286ad82333ffcc27d",
+        "label_sha256": "8d1fac7c63608fef87eaea5dff095c23519f8d8526a4a5151110033701a043ec"
+      },
+      "body-defect-10": {
+        "input_sha256": "fba9e8d57f7b5e9968bc9f1ccbe76b1bbe76c1606dd75440f462a3bcf98c1bd3",
+        "label_sha256": "f1331aca3e967a3e061dc99aadfbd6ebd826107737ff2de1ffa01ec8031d2c85"
+      }
+    },
+    "akm": {
+      "version": "0.9.32",
+      "bin": "/tmp/akm-0.9.32-prefix/node_modules/.bin/akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "reflect": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "reflect",
+          "improveStrategy": "reflect-only"
+        },
+        "improve": {
+          "strategies": {
+            "reflect-only": {
+              "engine": "reflect",
+              "processes": {
+                "reflect": {
+                  "enabled": true,
+                  "qualityGate": {
+                    "enabled": false
+                  }
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            }
+          }
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": "reflect-only",
+      "config_patch_sha256": "591a6213cec2890f9c7e4cd52a35c9e2eab91bf5db0879f27aa6efd178555ef5",
+      "timeout_ms": 900000,
+      "seed": null
+    },
+    "engines": {
+      "reflect": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "description-period-01",
+        "retrieval-miss-01",
+        "when-to-use-missing-01",
+        "historical-01",
+        "title-missing-01",
+        "description-truncated-01",
+        "unsupported-ask-01",
+        "description-missing-01",
+        "description-quote-01",
+        "body-defect-01",
+        "description-period-02",
+        "retrieval-miss-02",
+        "when-to-use-missing-02",
+        "historical-02",
+        "title-missing-02",
+        "description-truncated-02",
+        "unsupported-ask-02",
+        "description-missing-02",
+        "description-quote-02",
+        "body-defect-02",
+        "description-period-03",
+        "retrieval-miss-03",
+        "when-to-use-missing-03",
+        "historical-03",
+        "title-missing-03",
+        "description-truncated-03",
+        "unsupported-ask-03",
+        "description-missing-03",
+        "description-quote-03",
+        "body-defect-03",
+        "description-period-04",
+        "retrieval-miss-04",
+        "when-to-use-missing-04",
+        "historical-04",
+        "title-missing-04",
+        "description-truncated-04",
+        "unsupported-ask-04",
+        "description-missing-04",
+        "description-quote-04",
+        "description-period-05",
+        "retrieval-miss-05",
+        "when-to-use-missing-05",
+        "historical-05",
+        "title-missing-05",
+        "description-truncated-05",
+        "unsupported-ask-05",
+        "description-missing-05",
+        "description-quote-05",
+        "description-period-06",
+        "when-to-use-missing-06",
+        "description-period-07",
+        "retrieval-miss-06",
+        "historical-06",
+        "title-missing-06",
+        "description-truncated-06",
+        "unsupported-ask-06",
+        "description-missing-06",
+        "description-quote-06",
+        "body-defect-04",
+        "retrieval-miss-07",
+        "historical-07",
+        "description-truncated-07",
+        "unsupported-ask-07",
+        "description-missing-07",
+        "description-quote-07",
+        "body-defect-05",
+        "retrieval-miss-08",
+        "historical-08",
+        "unsupported-ask-08",
+        "body-defect-06",
+        "retrieval-miss-09",
+        "historical-09",
+        "unsupported-ask-09",
+        "body-defect-07",
+        "retrieval-miss-10",
+        "historical-10",
+        "unsupported-ask-10",
+        "body-defect-08",
+        "body-defect-09",
+        "body-defect-10"
+      ],
+      "scored": [
+        "description-period-01",
+        "retrieval-miss-01",
+        "when-to-use-missing-01",
+        "historical-01",
+        "title-missing-01",
+        "description-truncated-01",
+        "unsupported-ask-01",
+        "description-missing-01",
+        "description-quote-01",
+        "body-defect-01",
+        "description-period-02",
+        "retrieval-miss-02",
+        "when-to-use-missing-02",
+        "historical-02",
+        "title-missing-02",
+        "description-truncated-02",
+        "unsupported-ask-02",
+        "description-missing-02",
+        "description-quote-02",
+        "body-defect-02",
+        "description-period-03",
+        "retrieval-miss-03",
+        "when-to-use-missing-03",
+        "historical-03",
+        "title-missing-03",
+        "description-truncated-03",
+        "unsupported-ask-03",
+        "description-missing-03",
+        "description-quote-03",
+        "body-defect-03",
+        "description-period-04",
+        "retrieval-miss-04",
+        "when-to-use-missing-04",
+        "historical-04",
+        "title-missing-04",
+        "description-truncated-04",
+        "unsupported-ask-04",
+        "description-missing-04",
+        "description-quote-04",
+        "description-period-05",
+        "retrieval-miss-05",
+        "when-to-use-missing-05",
+        "historical-05",
+        "title-missing-05",
+        "description-truncated-05",
+        "unsupported-ask-05",
+        "description-missing-05",
+        "description-quote-05",
+        "description-period-06",
+        "when-to-use-missing-06",
+        "description-period-07",
+        "retrieval-miss-06",
+        "historical-06",
+        "title-missing-06",
+        "description-truncated-06",
+        "unsupported-ask-06",
+        "description-missing-06",
+        "description-quote-06",
+        "body-defect-04",
+        "retrieval-miss-07",
+        "historical-07",
+        "description-truncated-07",
+        "unsupported-ask-07",
+        "description-missing-07",
+        "description-quote-07",
+        "body-defect-05",
+        "retrieval-miss-08",
+        "historical-08",
+        "unsupported-ask-08",
+        "body-defect-06",
+        "retrieval-miss-09",
+        "historical-09",
+        "unsupported-ask-09",
+        "body-defect-07",
+        "retrieval-miss-10",
+        "historical-10",
+        "unsupported-ask-10",
+        "body-defect-08",
+        "body-defect-09",
+        "body-defect-10"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 290.847
+}

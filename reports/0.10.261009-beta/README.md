@@ -13,8 +13,10 @@ summaries are `complete`, with no errored case.
 ## Next to 0.9.32 and 0.10.261006-beta
 
 `scripts/compare/run` shows each pair in full. The 0.9.32 runs are those of
-[2026-10-15](../0.9.32/) (the agent-ab run there was one attempt per arm,
-6 trials a side). Several settings differ between the three columns (akm, the
+2026-10-15 (the agent-ab run there was one attempt per arm,
+6 trials a side); they were replaced on 2026-10-22 by a new 0.9.32 set
+([`../0.9.32/`](../0.9.32/)) and are in git history, and the column below keeps
+the numbers as they were published. Several settings differ between the three columns (akm, the
 collector commit, dates, the model's route name), so no difference below
 isolates one cause, and one run per side is one observation.
 
