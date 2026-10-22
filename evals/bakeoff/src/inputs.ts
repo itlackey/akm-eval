@@ -24,6 +24,7 @@ const EXPECTS: Record<Process, (e: Record<string, unknown>) => string[]> = {
     ...(e.noChange === true ? (e.required === undefined || isStrings(e.required) ? [] : ["required needs a list of terms"]) : isStrings(e.required) && e.required.length > 0 ? [] : ["required needs a list of terms"]),
     ...(e.forbidden === undefined || isStrings(e.forbidden) ? [] : ["forbidden needs a list of terms"]),
     ...(e.date === undefined || typeof e.date === "string" ? [] : ["date needs a string"]),
+    ...(e.observed === undefined || (typeof e.observed === "string" && e.observed !== "") ? [] : ["observed needs a date"]),
     ...(e.scope === undefined || (isObject(e.scope) && Object.entries(e.scope).every(([k, v]) => ["user", "agent", "run", "channel"].includes(k) && typeof v === "string" && v.trim() !== "")) ? [] : ["scope needs an object of user, agent, run and channel strings"]),
   ],
   "remember-enrich": (e) => [...(e.observed_at === null || (typeof e.observed_at === "string" && e.observed_at !== "") ? [] : ["observed_at needs a date, or null for a memory that writes none"]), ...(isStrings(e.keywords) && e.keywords.length > 0 ? [] : ["keywords needs a list of terms"])],
@@ -39,7 +40,7 @@ const EXTENSION: Record<Process, string> = { "memory-inference": ".md", "remembe
 const REF_KEYS = ["promote", "protected"] as const;
 
 /** What a case expects that is a term: it is looked for in the output, or kept out of it. generate keeps each term matching the files the way it did in the public assets. */
-const TERM_KEYS = ["required", "forbidden", "keywords", "topics", "trigger", "date", "observed_at", "scope"] as const;
+const TERM_KEYS = ["required", "forbidden", "keywords", "topics", "trigger", "date", "observed", "observed_at", "scope"] as const;
 
 /** What is wrong with the cases of a corpus, as messages; empty when they are sound. `cases` come with the text of their files. */
 export function caseProblems(cases: LoadedCase[]): string[] {

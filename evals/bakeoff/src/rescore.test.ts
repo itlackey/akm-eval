@@ -180,11 +180,16 @@ describe("memory-inference no-change decisions are scored again from akm's count
   });
 });
 
-test("compatible 0.3 outputs rescore both arms for visible dates and full scope without recollection or invented rows", async () => {
-  const cases = [{ id: "infer", process: "memory-inference", files: ["memories/retry.md"], expected: { required: ["retries", "2 seconds"], date: "2026-03-04", scope: { user: "operator-17" } } }];
+test("compatible 0.3 outputs rescore for the observation date and full scope without recollection or invented rows", async () => {
+  const cases = [{ id: "infer", process: "memory-inference", files: ["memories/retry.md"], expected: { required: ["retries", "2 seconds"], observed: "2026-03-04", scope: { user: "operator-17" } } }];
   const scoped = DERIVED.replace("inferred: true", "inferred: true\nscope_user: operator-17");
-  const hidden = scoped.replace("Retries wait 2 seconds on 2026-03-04.", "Retries wait 2 seconds.").replace("  - retry delay", "  - 2026-03-04 retry delay");
-  for (const [document, correct] of [[scoped, true], [hidden, false], [DERIVED, false]] as const) {
+  const arms = [
+    [scoped.replace("inferred: true", "inferred: true\nobserved_at: 2026-03-04"), true],
+    [scoped.replace("inferred: true", "inferred: true\nobserved: 2026-03-04"), true],
+    [scoped, false],
+    [DERIVED.replace("inferred: true", "inferred: true\nobserved: 2026-03-04"), false],
+  ] as const;
+  for (const [document, correct] of arms) {
     const { summary, folder } = await customRun(outside(), [], { cases, plan: { infer: { retry: { derived: document } } } });
     const stored = readStored(summary.results_dir);
     stored.summary.manifest.collector.version = "0.3";

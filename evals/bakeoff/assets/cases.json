@@ -1046,7 +1046,7 @@
         "32 MiB",
         "snapshot"
       ],
-      "date": "2026-06-12",
+      "observed": "2026-06-12",
       "scope": {},
       "forbidden": [
         "is 32 MiB",
@@ -1065,8 +1065,7 @@
     "expected": {
       "required": [
         "bridge-worker",
-        "idle timeout",
-        "no observation date"
+        "idle timeout"
       ],
       "scope": {},
       "forbidden": [

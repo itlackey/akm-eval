@@ -54,11 +54,9 @@ describe("memory-inference", () => {
     expect(makeRow(inference, ok({ derived: derived({ title: "" }) }))).toMatchObject({ structure: false });
   });
 
-  test("terms may occur in any field, but a historical date must be visible in the description or content", () => {
+  test("a term can be found in the title, the description, a tag, a hint or the content, and the date in any of them", () => {
     expect(makeRow(inference, ok({ derived: derived({ content: "Nothing here.", title: "Renames and the checkpoint" }) })).checks).toMatchObject({ "retains checkpoint": true, "retains renames": true, "retains explicit date": false });
-    const hiddenDate = derived({ content: "The checkpoint follows the renames.", searchHints: ["2026-02-14 order", "b", "c"] });
-    expect(makeRow(inference, ok({ derived: hiddenDate })).checks).toMatchObject({ "retains explicit date": false });
-    expect(makeRow(inference, ok({ derived: derived({ content: "The checkpoint follows the renames.", description: "The checkpoint observation was on 2026-02-14." }) })).checks).toMatchObject({ "retains explicit date": true });
+    expect(makeRow(inference, ok({ derived: derived({ searchHints: ["2026-02-14 order", "b", "c"] }) })).checks).toMatchObject({ "retains explicit date": true });
   });
 
   test("a forbidden term is found as the text, with its spacing squashed", () => {
@@ -104,7 +102,11 @@ const noChange = (over: Partial<Raw> = {}): Raw => ({ outcome: "no-change", reas
 describe("memory-inference: an explicit no-change decision", () => {
   const restraint = publicCase("infer-tool-tally-noise");
   const positive = publicCase("infer-regex-size-limit");
-  const good = (cs: Case) => derived({ title: "Notes", content: [...(cs.expected.required ?? []), cs.expected.date ?? ""].join(". ") }).replace("inferred: true\n", `inferred: true\n${Object.entries(cs.expected.scope ?? {}).map(([k, v]) => `scope_${k}: ${JSON.stringify(v)}\n`).join("")}`);
+  const good = (cs: Case) =>
+    derived({ title: "Notes", content: [...(cs.expected.required ?? []), cs.expected.date ?? ""].join(". ") }).replace(
+      "inferred: true\n",
+      `inferred: true\n${Object.entries(cs.expected.scope ?? {}).map(([k, v]) => `scope_${k}: ${JSON.stringify(v)}\n`).join("")}${cs.expected.observed ? `observed_at: ${cs.expected.observed}\n` : ""}`,
+    );
 
   test("a no-change on a note that needs no child is correct: a decision with no document, and every check held", () => {
     expect(makeRow(restraint, noChange())).toMatchObject({ outcome: "no-change", structure: null, correct: true, checks: { "decides no-change": true } });
@@ -185,13 +187,40 @@ describe("memory-inference: an explicit no-change decision", () => {
     const history = publicCase("infer-metadata-observation-date");
     const dated = good(history);
     expect(makeRow(history, ok({ derived: `${dated}\nThe trial-gateway limit is not 32 MiB today; the snapshot is historical.` })).correct).toBe(true);
-    expect(makeRow(history, ok({ derived: `${dated}\nThe trial-gateway limit is 32 MiB today.` })).checks).toMatchObject({ "retains explicit date": true, "does not invent is 32 MiB": false });
+    expect(makeRow(history, ok({ derived: `${dated}\nThe trial-gateway limit is 32 MiB today.` })).checks).toMatchObject({ "carries observation date": true, "does not invent is 32 MiB": false });
+    expect(makeRow(history, ok({ derived: `${dated}\nThis 32 MiB ceiling is a snapshot from June.` })).correct).toBe(true); // "this 32 MiB" is not "is 32 MiB"
     const undated = publicCase("infer-file-date-not-observation");
     expect(makeRow(undated, ok({ derived: `${good(undated)}\nIt was not observed on 2026-10-18.` })).correct).toBe(true);
     expect(makeRow(undated, ok({ derived: `${good(undated)}\nThe timeout was observed on 2026-10-18.` })).correct).toBe(false);
     const request = publicCase("infer-flat-scoped-request");
     expect(makeRow(request, ok({ derived: `${good(request)}\nThe change has not been applied.` })).correct).toBe(true);
     expect(makeRow(request, ok({ derived: `${good(request)}\nThe change has been applied.` })).correct).toBe(false);
+  });
+
+  test("the observation date is checked in the child's frontmatter, verbatim, under observed or observed_at; the date in prose does not count", () => {
+    const history = publicCase("infer-metadata-observation-date");
+    const dated = good(history);
+    expect(history.expected.date).toBeUndefined();
+    for (const key of ["observed_at", "observed"]) expect(makeRow(history, ok({ derived: dated.replace("observed_at:", `${key}:`) })).checks).toMatchObject({ "carries observation date": true });
+    // observed is read first
+    expect(makeRow(history, ok({ derived: dated.replace("observed_at:", "observed: 2026-01-01\nobserved_at:") })).checks).toMatchObject({ "carries observation date": false });
+    expect(makeRow(history, ok({ derived: dated.replace("observed_at: 2026-06-12\n", "") })).checks).toMatchObject({ "carries observation date": false });
+    expect(makeRow(history, ok({ derived: dated.replace("observed_at: 2026-06-12", "observed_at: 2026-06-13") })).checks).toMatchObject({ "carries observation date": false });
+    expect(makeRow(history, ok({ derived: dated.replace("observed_at: 2026-06-12\n", "").replace("snapshot", "snapshot of 2026-06-12") })).checks).toMatchObject({ "carries observation date": false });
+  });
+
+  test("a forbidden term matches whole words: 'is 32 MiB' is not 'this 32 MiB'", () => {
+    expect(assertsTerm("the limit is 32 mib today", "is 32 MiB")).toBe(true);
+    expect(assertsTerm("this 32 mib ceiling", "is 32 MiB")).toBe(false);
+    expect(assertsTerm("it is 32 mibs", "is 32 MiB")).toBe(false);
+    expect(assertsTerm("this 32 mib ceiling. the limit is 32 mib", "is 32 MiB")).toBe(true); // a later whole-word match still counts
+    expect(assertsTerm("the limit is not 32 mib", "is 32 MiB")).toBe(false);
+  });
+
+  test("an unquoted numeric scope value is compared as the text it expects", () => {
+    const cs = publicCase("infer-scoped-incident");
+    expect(makeRow(cs, ok({ derived: good(cs).replace('scope_run: "77"', "scope_run: 77") })).checks?.["preserves scope"]).toBe(true);
+    expect(makeRow(cs, ok({ derived: good(cs).replace('scope_run: "77"', "scope_run: 78") })).checks?.["preserves scope"]).toBe(false);
   });
 
   test("the metrics keep their denominators: a no-change is scored and in the count, and is not a document", () => {
@@ -214,6 +243,13 @@ describe("remember-enrich", () => {
     expect(makeRow(undated, ok({ written: memory(["queue"]) })).checks).toMatchObject({ "does not invent an observation date": true });
     expect(makeRow(undated, ok({ written: memory(["queue"], "observed_at: ''\n") })).checks).toMatchObject({ "does not invent an observation date": true });
     expect(makeRow(undated, ok({ written: memory(["queue"], "observed_at: 2026-02-14\n") })).checks).toMatchObject({ "does not invent an observation date": false });
+  });
+
+  test("the date is read under observed (newer akm) or observed_at (older akm)", () => {
+    expect(makeRow(dated, ok({ written: memory(["queue", "retry"], "observed: 2026-02-14\n") }))).toMatchObject({ structure: true, correct: true });
+    expect(makeRow(dated, ok({ written: memory(["queue", "retry"], "observed: 2026-03-01\n") })).checks).toMatchObject({ "preserves explicit date": false });
+    expect(makeRow(undated, ok({ written: memory(["queue"], "observed: 2026-02-14\n") })).checks).toMatchObject({ "does not invent an observation date": false });
+    expect(makeRow(undated, ok({ written: memory(["queue"], "observed: ''\n") })).checks).toMatchObject({ "does not invent an observation date": true });
   });
 
   test("one to five lowercase tags and a description are the shape", () => {

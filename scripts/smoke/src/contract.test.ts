@@ -238,6 +238,12 @@ test("bakeoff inference matches the schema before and after explicit no-change, 
   }
   expect(matches(canned, requestOf(fixture("probe")))).toBe(false);
   expect(matches(canned, requestOf(fixture("extract")))).toBe(false);
+  expect(matches(canned, requestOf(fixture("promotion plan")))).toBe(false); // consolidate
+  // The other bakeoff processes ask for their own keys: enrich (tags, description, the date), repair, and summary. None is an inference request.
+  const asking = (...keys: string[]): Schema => ({ type: "object", properties: Object.fromEntries(keys.map((k) => [k, { type: "string" }])), required: keys, additionalProperties: false });
+  for (const keys of [["tags", "description", "observed_at"], ["tags", "description", "observed"], ["description", "when_to_use"], ["summary", "key_topics", "tags"]]) {
+    expect(matches(canned, requestOf({ name: "other", eval: "bakeoff", prompt: "A prompt", schema: asking(...keys) }))).toBe(false);
+  }
 });
 
 describe("CONTRACTS", () => {
