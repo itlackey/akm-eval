@@ -352,7 +352,7 @@ test('small touch screens show complete run cards with native scrolling, sorting
 
 test('Latest only follows scope, version, model, collection, search and column filters', async ({ page, request }) => {
   const data = await request.get('./data.json').then(response => response.json());
-  const source = data.runs.find(row => row.suite === 'reflect' && row.role === 'Full suite');
+  const source = data.runs.find(row => row.suite === 'reflect' && row.role === 'Full suite' && /qwen3\.6-35b-a3b/i.test(row.model));
   const make = (id, version, date, score, extra = {}) => ({ ...structuredClone(source), id, label: id, akm_version: version,
     date, collection: 'core', ...extra, comparison: { ...source.comparison, quality_percent: score } });
   const runs = [
