@@ -1,0 +1,60 @@
+{
+  "host": "Don",
+  "hardware": { "chip": "Apple M4 Pro", "cpu_cores": 14, "gpu_cores": 20, "unified_memory_bytes": 68719476736 },
+  "release": {
+    "version": "0.1.0",
+    "source_commit": "e53663b262af4cb1ca498e596ca8b1a2d79e0800",
+    "binary_bytes": 276603858,
+    "binary_sha256": "22f08e8505e5ace84475c23eefffd116b4b201ad7e796aaea76d223f0e3862de",
+    "published_size_and_sha256_verified": true,
+    "runtime_archive_sha256": "09063110dfe90c36bc40a518a64c3e9110387d449adf000be85023cfc8d46de1"
+  },
+  "model": {
+    "repository": "RecursiveSI/flint-int4",
+    "revision": "3b93f9053b530488405ae9fca51d4900d6ce21f0",
+    "release_model_descriptor_sha256": "fdc85248ad77a0fa9fbf0abda8b1525bea8ee74c11ada2ec95eb66113353d677",
+    "downloaded_file_checksums_verified_by_rec": true,
+    "weight_format": "mlx-affine-int4",
+    "kv_format": "bf16",
+    "served_identifier": "flint"
+  },
+  "stock_launcher_check": { "ready": true, "context": 32768, "max_context": 262144, "stopped_before_instrumented_engine": true },
+  "instrumented_engine_startup": {
+    "context_limit": 32768,
+    "grammar": "flint",
+    "enforce_tool_schemas": false,
+    "fast_sync": true,
+    "sampling_defaults": { "temperature": 1, "top_p": 0.95, "top_k": 20, "max_tokens": 1024, "seed": 0, "presence_penalty": 0 },
+    "http_output_budget_note": "Without an explicit HTTP limit the server uses the remaining context, not the CLI chat default of 1024. AKM enrichment overrides this with its own 256-token limit.",
+    "chat_template_sha256": "44fd1b0f94b78d9cf554c5a207945e48fef698b279d65863a33a77d787ca411b",
+    "allocation_cache_limit_bytes": 2147483648,
+    "load_seconds": 29.677848333027214,
+    "load_peak_mlx_bytes": 24595229328,
+    "process_peak_rss_bytes_at_startup": 23102554112,
+    "routed_fast_exp_guard": { "scored": false, "product_errors": 0, "boundary_errors": 0, "finite_gate_boundary_errors": 0, "raw_tail_bit_differences": 0 },
+    "only_launch_change_from_stock": "Invoke the same bundled rec-mlx executable with its standard --metrics argument, using the same model, context, port, key file, and launcher environment. No engine code or weights modified."
+  },
+  "isolation": {
+    "prebuilt_binary_downloaded_without_installer": true,
+    "absolute_task_specific_XDG_DATA_HOME": true,
+    "new_clients_installed": false,
+    "global_packages_installed": false,
+    "shell_profiles_modified": false,
+    "startup_services_added": false,
+    "api_binding": "loopback only; evaluator uses SSH local forwarding",
+    "production_routes_modified": false,
+    "existing_GGUF_files_preserved": true
+  },
+  "post_test": {
+    "original_LM_Studio_model_restored": "flint-q4-k-m",
+    "restored_context_length": 32768,
+    "restored_parallel": 1,
+    "model_status": "idle",
+    "queued_requests": 0,
+    "rec_listener_running": false,
+    "SSH_forward_stopped": true,
+    "evaluation_containers_remaining": 0,
+    "isolated_files_retained_for_retesting": true,
+    "isolated_directory_du_h": "22G"
+  }
+}

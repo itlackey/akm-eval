@@ -1,0 +1,68 @@
+{
+  "source": "LM Studio native print_timing entries for the six matched diagnostic requests",
+  "note": "Normalized figures use (generated_tokens-1)/decode_seconds, matching rec telemetry and the observed llama.cpp reported rates within rounding. Warmup excluded from medians. Not a quality evaluation.",
+  "median_reported_decode_tokens_per_second": 71.92,
+  "median_normalized_decode_tokens_per_second": 71.91806823710044,
+  "rows": [
+    {
+      "run": 0,
+      "warmup": true,
+      "prompt_tokens": 955,
+      "prefill_seconds": 3.82299,
+      "generated_tokens": 1024,
+      "decode_seconds": 14.1492,
+      "reported_decode_tokens_per_second": 72.3,
+      "normalized_decode_tokens_per_second": 72.30090747180053
+    },
+    {
+      "run": 1,
+      "warmup": false,
+      "prompt_tokens": 955,
+      "prefill_seconds": 1.11157,
+      "generated_tokens": 1024,
+      "decode_seconds": 14.22452,
+      "reported_decode_tokens_per_second": 71.92,
+      "normalized_decode_tokens_per_second": 71.91806823710044
+    },
+    {
+      "run": 2,
+      "warmup": false,
+      "prompt_tokens": 955,
+      "prefill_seconds": 1.11227,
+      "generated_tokens": 1024,
+      "decode_seconds": 14.13325,
+      "reported_decode_tokens_per_second": 72.38,
+      "normalized_decode_tokens_per_second": 72.3825022553199
+    },
+    {
+      "run": 3,
+      "warmup": false,
+      "prompt_tokens": 955,
+      "prefill_seconds": 1.11166,
+      "generated_tokens": 1024,
+      "decode_seconds": 14.27665,
+      "reported_decode_tokens_per_second": 71.66,
+      "normalized_decode_tokens_per_second": 71.65546539279173
+    },
+    {
+      "run": 4,
+      "warmup": false,
+      "prompt_tokens": 955,
+      "prefill_seconds": 1.12452,
+      "generated_tokens": 1024,
+      "decode_seconds": 14.12678,
+      "reported_decode_tokens_per_second": 72.42,
+      "normalized_decode_tokens_per_second": 72.41565310707747
+    },
+    {
+      "run": 5,
+      "warmup": false,
+      "prompt_tokens": 955,
+      "prefill_seconds": 1.18786,
+      "generated_tokens": 1024,
+      "decode_seconds": 14.23241,
+      "reported_decode_tokens_per_second": 71.88,
+      "normalized_decode_tokens_per_second": 71.87819912439285
+    }
+  ]
+}

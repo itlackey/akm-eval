@@ -2,7 +2,7 @@
 
 Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
-- [`flint-don-2026-10-25/README.md`](flint-don-2026-10-25/README.md): Flint Q4_K_M on Apple M4 Pro with AKM 0.10.261011-beta; full 55-case bakeoff at recommended sampling (40/55), stock/recommended pilots, native timing evidence, and explicit reasoning/budget compatibility limits.
+- [`flint-don-2026-10-25/README.md`](flint-don-2026-10-25/README.md): Flint on Apple M4 Pro with AKM 0.10.261011-beta; full GGUF bakeoff (40/55), pilots, and an isolated official rec INT4 follow-up: 1.73× matched decode speed, with preserved AKM preflight/budget failures rather than a misleading completed-job speedup.
 - [`no-change-132-2026-10-21/README.md`](no-change-132-2026-10-21/README.md): bakeoff 0.3 scores memory inference's explicit no-change decision; a paired 19-case Flash-Next pilot of the 0.2 and 0.3 harnesses on one akm `release/0.10.0` build (no model-quality claim), with the remaining scope and date cases.
 - [`memory-lifecycle-125/README.md`](memory-lifecycle-125/README.md): manual, opt-in real-akm checks that memory claims, evidence and scopes survive extraction, acceptance, improvement and recall; all 12 pass on akm `release/0.10.0` at `d2369845a`.
 - [`flash-json-fix-2026-10-21/README.md`](flash-json-fix-2026-10-21/README.md): follow-up to the comparison below; the observed Flash-Next JSON failure fixed in the model server, and two full reruns at 35/40 and 36/40 with no failed model calls, with the replay evidence and limits.

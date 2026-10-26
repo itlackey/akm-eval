@@ -4,6 +4,17 @@ Flint Q4_K_M on an Apple M4 Pro, evaluated with the 55 public cases of bakeoff
 0.4 and AKM **0.10.261011-beta**. The source revision is
 `b4725addaed4bed0f12c9659f72da3125f5c4b7c`.
 
+## Official optimized-runtime follow-up
+
+[Rec 0.1.0 with official INT4 weights](rec/README.md) reaches **124.22 native
+decode tokens/sec**, versus **71.92** for a matched new LM Studio diagnostic
+on Don (**1.73×**). The same five-case AKM pilot instead exposed three
+preflight integration errors: one case passed, one failed and three errored.
+A direct control confirms a 16-token reasoning-only probe and a reasoning-field
+convention mismatch, not an unavailable model. No full rec run or workaround
+was substituted for the original GGUF results below. The follow-up includes
+raw timings, all pilot rows, reproductions and isolation details.
+
 ## Full 55-case result
 
 **40/55 passed (72.73%)**, with all 55 cases scored, no case errors and no
