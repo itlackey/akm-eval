@@ -1,0 +1,11 @@
+{
+  "engines": {
+    "bakeoff": {
+      "temperature": 1,
+      "extraParams": {
+        "top_p": 0.95,
+        "top_k": 20
+      }
+    }
+  }
+}

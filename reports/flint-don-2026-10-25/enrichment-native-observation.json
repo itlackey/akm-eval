@@ -1,0 +1,27 @@
+{
+  "operation": "remember --enrich",
+  "akm_version": "0.10.261011-beta",
+  "code_observation": "runLlmEnrich in dist/commands/remember.js explicitly requests maxTokens 256 and temperature 0.1, with a 10000 ms local timeout, overriding the corresponding engine defaults.",
+  "source": "https://unpkg.com/akm-cli@0.10.261011-beta/dist/commands/remember.js",
+  "pilot_responses": [
+    {
+      "profile": "stock engine sampling",
+      "observed_local_time": "2026-10-25T17:35:47-05:00",
+      "prompt_tokens": 166,
+      "completion_tokens": 256,
+      "reasoning_tokens": 255,
+      "final_answer_characters": 0,
+      "finish_reason": "length"
+    },
+    {
+      "profile": "recommended engine sampling",
+      "observed_local_time": "2026-10-25T17:46:37-05:00",
+      "prompt_tokens": 166,
+      "completion_tokens": 256,
+      "reasoning_tokens": 255,
+      "final_answer_characters": 0,
+      "finish_reason": "length"
+    }
+  ],
+  "interpretation": "The 256-token operation budget was consumed by reasoning, leaving no final metadata answer. These are integration/workload failures, not an isolated measure of Flint's ability to produce tags or dates with an adequate budget."
+}

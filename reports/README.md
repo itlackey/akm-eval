@@ -2,6 +2,7 @@
 
 Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
+- [`flint-don-2026-10-25/README.md`](flint-don-2026-10-25/README.md): Flint on Apple M4 Pro with AKM 0.10.261011-beta; full GGUF bakeoff, pilots, official rec INT4 diagnostics, and a [full 55-case rec capture](flint-don-2026-10-25/rec/budget-run.md) with explicit completion budgets, raw outputs and native timing counters. Earlier preflight/budget failures remain preserved.
 - [`no-change-132-2026-10-21/README.md`](no-change-132-2026-10-21/README.md): bakeoff 0.3 scores memory inference's explicit no-change decision; a paired 19-case Flash-Next pilot of the 0.2 and 0.3 harnesses on one akm `release/0.10.0` build (no model-quality claim), with the remaining scope and date cases.
 - [`memory-lifecycle-125/README.md`](memory-lifecycle-125/README.md): manual, opt-in real-akm checks that memory claims, evidence and scopes survive extraction, acceptance, improvement and recall; all 12 pass on akm `release/0.10.0` at `d2369845a`.
 - [`flash-json-fix-2026-10-21/README.md`](flash-json-fix-2026-10-21/README.md): follow-up to the comparison below; the observed Flash-Next JSON failure fixed in the model server, and two full reruns at 35/40 and 36/40 with no failed model calls, with the replay evidence and limits.
@@ -31,6 +32,11 @@ scripts/compare/run reports/<version>/<eval>/<run-A> reports/<version>/<eval>/<r
 
 | akm | eval | label | corpus | model | what it is |
 |---|---|---|---|---|---|
+| 0.10.261011-beta | bakeoff | [flint-don-rec-int4-budget-full-20261025](flint-don-2026-10-25/rec/budget-full) | public | flint | full 55-case rec capture; explicit completion budget, remote Qwen3 embeddings; raw metrics, analysis deferred |
+| 0.10.261011-beta | bakeoff | [flint-don-rec-int4-budget-pilot-20261025](flint-don-2026-10-25/rec/budget-pilot) | public | flint | 5-case configuration-validation capture |
+| 0.10.261011-beta | bakeoff | [flint-don-q4-recommended-full-20261025](flint-don-2026-10-25/recommended-full) | public | flint-q4-k-m | full 55-case run; recommended sampling, remote Qwen3 embeddings; see comparison limits |
+| 0.10.261011-beta | bakeoff | [flint-don-q4-pilot-20261025](flint-don-2026-10-25/stock-pilot) | public | flint-q4-k-m | 5-case stock-temperature diagnostic pilot |
+| 0.10.261011-beta | bakeoff | [flint-don-q4-recommended-pilot-20261025](flint-don-2026-10-25/recommended-pilot) | public | flint-q4-k-m | 5-case recommended-sampling diagnostic pilot |
 | 0.10.261003-beta | longmemeval | [akm-0.10-public](0.10.261003-beta/longmemeval/akm-0.10-public) | public | none | full retrieval-only run |
 | 0.10.261003-beta | retrieval | [akm-0.10-keyword-r1-books](0.10.261003-beta/retrieval/akm-0.10-keyword-r1-books) | public | none | full public run |
 | 0.10.261003-beta | retrieval | [akm-0.10-keyword-r1-library](0.10.261003-beta/retrieval/akm-0.10-keyword-r1-library) | public | none | full public run |

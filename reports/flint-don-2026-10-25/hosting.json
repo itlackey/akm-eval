@@ -1,0 +1,78 @@
+{
+  "host": "Don",
+  "hardware": {
+    "model": "Mac mini (Mac16,11)",
+    "chip": "Apple M4 Pro",
+    "cpu_cores": 14,
+    "unified_memory_gb": 64,
+    "os": "macOS 27.0.1 (26A434)"
+  },
+  "server": {
+    "application": "LM Studio",
+    "version": "0.4.20+1",
+    "runtime": "llama.cpp-mac-arm64-apple-metal-advsimd@2.64.0",
+    "previous_runtime_retained": "llama.cpp-mac-arm64-apple-metal-advsimd@2.52.0",
+    "model_identifier": "flint-q4-k-m",
+    "context_length": 32768,
+    "gpu_offload_requested": "max",
+    "parallel": 1,
+    "flash_attention": true,
+    "eval_batch_size": 2048,
+    "physical_batch_size": 512,
+    "num_experts": 6,
+    "offload_kv_cache_to_gpu": true,
+    "speculative_draft_mtp": false,
+    "speculative_draft_simple": false,
+    "cli_reported_model_memory_gib": 22.51,
+    "cli_reported_load_seconds": 44.38
+  },
+  "weights": {
+    "source": "https://huggingface.co/lmstudio-community/flint-GGUF",
+    "revision": "a14b4396552988f5bf1427c2ab23f3ade4b683a8",
+    "file": "flint-Q4_K_M.gguf",
+    "bytes": 24166841184,
+    "sha256": "20c89707f762af73f0840f7b2c2911193617e60cac2ae30a96cb2cda7c15927e",
+    "local_sha256_verified": true
+  },
+  "runner": {
+    "evaluator_revision": "b4725addaed4bed0f12c9659f72da3125f5c4b7c",
+    "image_id": "sha256:7f223cb131ddd53fdfa6dd149225e4371ed4e44724d94b05ef9f7ac2cb5ba07f",
+    "akm_version": "0.10.261011-beta",
+    "bun_version": "1.4.2",
+    "private_profile_changes": [
+      "Use the operator-selected OpenAI-compatible remote Qwen3 embedding service rather than native bge-small.",
+      "Activate the existing embedding-coverage and semantic-event checks for that remote profile as well."
+    ],
+    "prompts_and_scoring_unchanged": true,
+    "upstream_unit_tests_passed": 74,
+    "full_upstream_mocked_suite": { "passed": 2961, "skipped": 29, "failed": 0 },
+    "ledger_tests_passed": 32,
+    "scripted_endpoint_real_akm_tests_passed": 8,
+    "private_embedding_profile_check_passed": true
+  },
+  "recommended_sampling_request_verified_in_server_log": {
+    "temperature": 1,
+    "top_p": 0.95,
+    "top_k": 20,
+    "operation_override": "remember-enrich requests temperature 0.1 and max_tokens 256; AKM capability probes request temperature 0 and max_tokens 16."
+  },
+  "post_collection_observation": {
+    "model_status": "idle",
+    "queued_requests": 0,
+    "loaded_identifier": "flint-q4-k-m",
+    "system_memory_free_percentage": 60,
+    "note": "Point-in-time observation after collection, not peak whole-system memory usage."
+  },
+  "readiness_probe": {
+    "http_status": 200,
+    "content_json_valid": true,
+    "prompt_tokens": 30,
+    "completion_tokens": 91,
+    "reasoning_tokens": 78,
+    "seconds": 13.288,
+    "temperature": 0,
+    "enable_thinking_requested": false,
+    "reasoning_still_observed": true,
+    "included_in_bakeoff_metrics": false
+  }
+}

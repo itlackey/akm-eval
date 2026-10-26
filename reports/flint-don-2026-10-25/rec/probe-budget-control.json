@@ -1,0 +1,99 @@
+{
+  "source": "Two direct API controls after the completed pilot, not included in pilot counters",
+  "purpose": "Reproduce pinned AKM probe text/temperature/limit, then change only the output budget to 512. No AKM or engine patch applied.",
+  "rows": [
+    {
+      "request": {
+        "model": "flint",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Respond with just the word: ok"
+          }
+        ],
+        "temperature": 0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "max_tokens": 16,
+        "enable_thinking": false,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
+      },
+      "http_status": 200,
+      "seconds": 0.42242124400000003,
+      "response": {
+        "id": "chatcmpl-b3715430-e379-4c27-86c3-643345673214",
+        "system_fingerprint": "flint-int4",
+        "object": "chat.completion",
+        "model": "flint",
+        "created": 1792977459,
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "length",
+            "message": {
+              "role": "assistant",
+              "reasoning": "We need answer user. Need respond with just word: ok. Must comply"
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 9,
+          "completion_tokens": 16,
+          "total_tokens": 25,
+          "prompt_tokens_details": {
+            "cached_tokens": 9
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "model": "flint",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Respond with just the word: ok"
+          }
+        ],
+        "temperature": 0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "max_tokens": 512,
+        "enable_thinking": false,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
+      },
+      "http_status": 200,
+      "seconds": 0.1687068700000001,
+      "response": {
+        "id": "chatcmpl-fdaeffc7-76b4-4a13-be83-d017fc7fd4d6",
+        "system_fingerprint": "flint-int4",
+        "object": "chat.completion",
+        "model": "flint",
+        "created": 1792977460,
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "ok",
+              "reasoning": "We need answer user. Need respond with just word: ok. Must comply. No extra."
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 9,
+          "completion_tokens": 23,
+          "total_tokens": 32,
+          "prompt_tokens_details": {
+            "cached_tokens": 9
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "label": "rec-int4",
+  "started": "2026-10-26T01:14:37.135Z",
+  "finished": "2026-10-26T01:15:34.187Z",
+  "method": "One warmup excluded, five sequential HTTP requests; inclusive timing includes prefill, transport and response parsing. Not decode-only throughput. Each user prompt starts with a different run number to limit prefix-cache reuse.",
+  "settings": {
+    "temperature": 1,
+    "top_p": 0.95,
+    "top_k": 20,
+    "seed": 42,
+    "max_tokens": 1024
+  },
+  "all_measured_replies_reached_limit": true,
+  "median_inclusive_tokens_per_second": 109.80669472257313,
+  "rows": [
+    {
+      "run": 0,
+      "warmup": true,
+      "prompt_sha256": "6d563c51c0375538f670ddce42e176a2f419d31bf5834263bd40ec6689c6258f",
+      "prompt_tokens": 955,
+      "completion_tokens": 1024,
+      "reasoning_tokens": null,
+      "finish_reason": "length",
+      "request_seconds": 10.396752098,
+      "inclusive_tokens_per_second": 98.49229743556015
+    },
+    {
+      "run": 1,
+      "warmup": false,
+      "prompt_sha256": "621785d66425133e79407098fed5665c4731bd349ed3569c7ec4b0a7d60d04f3",
+      "prompt_tokens": 955,
+      "completion_tokens": 1024,
+      "reasoning_tokens": null,
+      "finish_reason": "length",
+      "request_seconds": 9.302720943999999,
+      "inclusive_tokens_per_second": 110.07532163591901
+    },
+    {
+      "run": 2,
+      "warmup": false,
+      "prompt_sha256": "f2615c4cfc9a6b773894066bff12595be576739b1db6042faca5c235b6f2442e",
+      "prompt_tokens": 955,
+      "completion_tokens": 1024,
+      "reasoning_tokens": null,
+      "finish_reason": "length",
+      "request_seconds": 9.325478766,
+      "inclusive_tokens_per_second": 109.80669472257313
+    },
+    {
+      "run": 3,
+      "warmup": false,
+      "prompt_sha256": "8be482ab7c39e7be87f44f2df3a5452648791792d154b40f99a67980f7ded123",
+      "prompt_tokens": 955,
+      "completion_tokens": 1024,
+      "reasoning_tokens": null,
+      "finish_reason": "length",
+      "request_seconds": 9.313428179999999,
+      "inclusive_tokens_per_second": 109.94877291253242
+    },
+    {
+      "run": 4,
+      "warmup": false,
+      "prompt_sha256": "dd09b0df68c42ee68e9bb418be880daaa44b9cbf912bba31115eb17ee510847e",
+      "prompt_tokens": 955,
+      "completion_tokens": 1024,
+      "reasoning_tokens": null,
+      "finish_reason": "length",
+      "request_seconds": 9.332663349000002,
+      "inclusive_tokens_per_second": 109.72216201388234
+    },
+    {
+      "run": 5,
+      "warmup": false,
+      "prompt_sha256": "b2716eff2a3d7200b97913c3a4526e8e58cd7d031c910f7202734f089e256246",
+      "prompt_tokens": 955,
+      "completion_tokens": 1024,
+      "reasoning_tokens": null,
+      "finish_reason": "length",
+      "request_seconds": 9.380541815999997,
+      "inclusive_tokens_per_second": 109.16213797516536
+    }
+  ]
+}
