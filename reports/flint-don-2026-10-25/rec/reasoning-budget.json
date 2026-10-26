@@ -1,0 +1,13 @@
+{
+  "engines": {
+    "bakeoff": {
+      "temperature": 1,
+      "enableThinking": true,
+      "extraParams": {
+        "top_p": 0.95,
+        "top_k": 20,
+        "max_completion_tokens": 32768
+      }
+    }
+  }
+}

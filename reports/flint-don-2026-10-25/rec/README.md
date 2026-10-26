@@ -5,6 +5,16 @@ Silicon runtime. The original GGUF results remain unchanged. This compares
 **runtime plus quantization**, not an isolated kernel change or a general
 model-quality ranking.
 
+## Later full collection with an explicit budget
+
+The subsequent [55-case collection](budget-run.md) completed with **55/55
+recorded and scored, zero case errors and zero command timeouts**. Collector
+wall time was **1,608.405 seconds**; native timings cover **111/111 requests**.
+It uses existing AKM configuration to send `max_completion_tokens: 32768`;
+rec gives that field precedence over AKM's smaller `max_tokens` limits.
+This is an explicit effective-budget change, not the unchanged setup below.
+Raw measurements are preserved; comparisons and answer analysis are deferred.
+
 ## Results
 
 **The optimized runtime is substantially faster, but it is not a drop-in
@@ -97,11 +107,10 @@ temperature 0.1 and produced no usable metadata. Increasing runtime speed
 does not increase that token budget.
 
 No shim, probe bypass, model patch or altered scorer was added to make the
-pilot pass. **No full 55-case rec run was started**, because these integration
-failures would make that comparison incomplete. A follow-up belongs in
-AKM's endpoint-probe/response handling and operation budgets, not a custom
-lab inference proxy. It should distinguish protocol reachability from a
-complete final answer and never treat reasoning as valid task JSON.
+pilot pass. No full 55-case rec run was started **with this unchanged-budget
+profile**. The later [explicit-budget collection](budget-run.md) uses existing
+configuration rather than an API proxy or AKM source patch. The original
+pilot failures remain recorded here.
 
 ## Setup
 

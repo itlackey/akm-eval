@@ -11,9 +11,13 @@ decode tokens/sec**, versus **71.92** for a matched new LM Studio diagnostic
 on Don (**1.73×**). The same five-case AKM pilot instead exposed three
 preflight integration errors: one case passed, one failed and three errored.
 A direct control confirms a 16-token reasoning-only probe and a reasoning-field
-convention mismatch, not an unavailable model. No full rec run or workaround
-was substituted for the original GGUF results below. The follow-up includes
-raw timings, all pilot rows, reproductions and isolation details.
+convention mismatch, not an unavailable model. A later
+[full rec collection with an explicit completion budget](rec/budget-run.md)
+recorded all 55 cases with zero errors/timeouts in **1,608.405 seconds**.
+Its raw outputs and native counters are retained without new outcome analysis.
+The effective-budget change is documented; it does not replace the original
+GGUF results or unchanged-budget pilot. The follow-up includes raw timings,
+all case rows, reproductions and isolation details.
 
 ## Full 55-case result
 
