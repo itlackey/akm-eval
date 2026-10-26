@@ -1,0 +1,1378 @@
+{
+  "eval": "bakeoff",
+  "eval_version": "0.4",
+  "scoring_version": "0.4",
+  "corpus": "public",
+  "collection": null,
+  "mode": null,
+  "a": {
+    "dir": "reports/0.10.261011-beta-flash/bakeoff/2026-10-23-0.10.261011-beta-flash-semantic-full-20261023",
+    "label": "0.10.261011-beta-flash-semantic-full-20261023"
+  },
+  "b": {
+    "dir": "reports/flint-don-2026-10-25/recommended-full",
+    "label": "flint-don-q4-recommended-full-20261025"
+  },
+  "changes": [
+    {
+      "field": "model",
+      "a": "moe/qwen3.8-flash-next-iq2_xs",
+      "b": "flint-q4-k-m"
+    },
+    {
+      "field": "akm",
+      "a": {
+        "version": "0.10.261011-beta",
+        "bin": "installed akm-cli 0.10.261011-beta",
+        "build": null,
+        "build_fingerprint": null
+      },
+      "b": {
+        "version": "0.10.261011-beta",
+        "bin": "akm",
+        "build": null,
+        "build_fingerprint": null
+      }
+    },
+    {
+      "field": "config",
+      "a": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "bakeoff": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "bakeoff"
+        },
+        "experimental": {
+          "improveAutonomy": true
+        },
+        "improve": {
+          "strategies": {
+            "bakeoff-memory-inference": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": true
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-schema-repair": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": true
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-session-summary": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": true,
+                  "indexSessions": true,
+                  "minSessionDuration": 0,
+                  "triage": {
+                    "enabled": false
+                  }
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-consolidate-promote": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": true,
+                  "minPoolSize": 0
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            }
+          }
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      },
+      "b": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "bakeoff": {
+            "kind": "llm",
+            "provider": "openai",
+            "extraParams": {
+              "top_p": 0.95,
+              "top_k": 20
+            }
+          }
+        },
+        "defaults": {
+          "llmEngine": "bakeoff"
+        },
+        "experimental": {
+          "improveAutonomy": true
+        },
+        "improve": {
+          "strategies": {
+            "bakeoff-memory-inference": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": true
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-schema-repair": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": true
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-session-summary": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": true,
+                  "indexSessions": true,
+                  "minSessionDuration": 0,
+                  "triage": {
+                    "enabled": false
+                  }
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-consolidate-promote": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": true,
+                  "minPoolSize": 0
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            }
+          }
+        },
+        "embedding": {
+          "provider": "openai",
+          "endpoint": "<MODEL_BASE_URL>/v1/embeddings",
+          "model": "embed/qwen3-embedding-0.6b",
+          "apiKey": "$LAB_API_KEY",
+          "dimension": 1024,
+          "queryTimeoutMs": 600000,
+          "timeoutMs": 600000
+        }
+      }
+    },
+    {
+      "field": "settings",
+      "a": {
+        "strategy": null,
+        "config_patch_sha256": "591a6213cec2890f9c7e4cd52a35c9e2eab91bf5db0879f27aa6efd178555ef5",
+        "timeout_ms": 900000,
+        "seed": null
+      },
+      "b": {
+        "strategy": null,
+        "config_patch_sha256": "d4370eed832283cf2e8058997b4a892409265c5f40859f32e2cb17edb23d1874",
+        "timeout_ms": 900000,
+        "seed": null
+      }
+    },
+    {
+      "field": "engines",
+      "a": {
+        "bakeoff": {
+          "model": "moe/qwen3.8-flash-next-iq2_xs",
+          "endpoint": "<MODEL_BASE_URL>",
+          "temperature": 0,
+          "enableThinking": false,
+          "timeoutMs": 600000
+        }
+      },
+      "b": {
+        "bakeoff": {
+          "model": "flint-q4-k-m",
+          "endpoint": "<MODEL_BASE_URL>",
+          "temperature": 1,
+          "enableThinking": false,
+          "timeoutMs": 600000
+        }
+      }
+    }
+  ],
+  "warnings": [
+    "Several settings changed; these differences do not isolate the effect of any one change."
+  ],
+  "rows": [
+    {
+      "key": "model",
+      "label": "Model / route",
+      "group": "Run",
+      "unit": "",
+      "a": "moe/qwen3.8-flash-next-iq2_xs",
+      "b": "flint-q4-k-m",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "label",
+      "label": "Run",
+      "group": "Run",
+      "unit": "",
+      "a": "0.10.261011-beta-flash-semantic-full-20261023",
+      "b": "flint-don-q4-recommended-full-20261025",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "suite",
+      "label": "Test",
+      "group": "Run",
+      "unit": "",
+      "a": "bakeoff",
+      "b": "bakeoff",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "date",
+      "label": "Collected (UTC)",
+      "group": "Run",
+      "unit": "",
+      "a": "2026-10-23T08:52:12.053Z",
+      "b": "2026-10-25T23:52:03.849Z",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "quality_percent",
+      "label": "Quality %",
+      "group": "Quality",
+      "unit": "%",
+      "a": 94.55,
+      "b": 72.72999999999999,
+      "delta": -21.820000000000007,
+      "note": ""
+    },
+    {
+      "key": "quality_metric",
+      "label": "Quality metric",
+      "group": "Quality",
+      "unit": "",
+      "a": "Cases passed",
+      "b": "Cases passed",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "quality_passed",
+      "label": "Quality passed",
+      "group": "Quality",
+      "unit": "",
+      "a": 52,
+      "b": 40,
+      "delta": -12,
+      "note": ""
+    },
+    {
+      "key": "quality_cases",
+      "label": "Quality cases",
+      "group": "Quality",
+      "unit": "",
+      "a": 55,
+      "b": 55,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "recorded",
+      "label": "Cases recorded",
+      "group": "Quality",
+      "unit": "",
+      "a": 55,
+      "b": 55,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "scored",
+      "label": "Cases scored",
+      "group": "Quality",
+      "unit": "",
+      "a": 55,
+      "b": 55,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "errors",
+      "label": "Errors",
+      "group": "Quality",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "timeouts",
+      "label": "Timeouts",
+      "group": "Quality",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "case_mean_s",
+      "label": "Case mean (s)",
+      "group": "Performance",
+      "unit": "",
+      "a": 5.43090909090909,
+      "b": 60.58545454545455,
+      "delta": 55.15454545454546,
+      "note": ""
+    },
+    {
+      "key": "case_p50_s",
+      "label": "Case p50 (s)",
+      "group": "Performance",
+      "unit": "",
+      "a": 4.1,
+      "b": 28.4,
+      "delta": 24.299999999999997,
+      "note": ""
+    },
+    {
+      "key": "case_p95_s",
+      "label": "Case p95 (s)",
+      "group": "Performance",
+      "unit": "",
+      "a": 13.539999999999985,
+      "b": 173.94999999999976,
+      "delta": 160.40999999999977,
+      "note": ""
+    },
+    {
+      "key": "timed_cases",
+      "label": "Cases timed",
+      "group": "Performance",
+      "unit": "",
+      "a": 55,
+      "b": 55,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "case_work_s",
+      "label": "Case time sum (s)",
+      "group": "Performance",
+      "unit": "",
+      "a": 298.69999999999993,
+      "b": 3332.2000000000003,
+      "delta": 3033.5000000000005,
+      "note": ""
+    },
+    {
+      "key": "run_wall_s",
+      "label": "Run wall time (s)",
+      "group": "Performance",
+      "unit": "",
+      "a": 298.659,
+      "b": 3332.389,
+      "delta": 3033.73,
+      "note": ""
+    },
+    {
+      "key": "run_wall_basis",
+      "label": "Run wall time basis",
+      "group": "Performance",
+      "unit": "",
+      "a": "Runner elapsed",
+      "b": "Runner elapsed",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "calls",
+      "label": "Model calls",
+      "group": "Usage",
+      "unit": "",
+      "a": 113,
+      "b": 110,
+      "delta": -3,
+      "note": ""
+    },
+    {
+      "key": "call_failures",
+      "label": "Failed model calls",
+      "group": "Usage",
+      "unit": "",
+      "a": 2,
+      "b": 1,
+      "delta": -1,
+      "note": ""
+    },
+    {
+      "key": "model_mean_input_tokens",
+      "label": "Mean input tokens / call",
+      "group": "Usage",
+      "unit": "",
+      "a": 623.9,
+      "b": 424.6,
+      "delta": -199.29999999999995,
+      "note": ""
+    },
+    {
+      "key": "model_mean_output_tokens",
+      "label": "Mean output tokens / call",
+      "group": "Usage",
+      "unit": "",
+      "a": 101.2,
+      "b": 1822.3,
+      "delta": 1721.1,
+      "note": ""
+    },
+    {
+      "key": "model_mean_request_s",
+      "label": "Mean model request (s)",
+      "group": "Performance",
+      "unit": "",
+      "a": 2.17,
+      "b": 27.36,
+      "delta": 25.189999999999998,
+      "note": ""
+    },
+    {
+      "key": "model_output_tokens_per_s",
+      "label": "Model output tokens / s",
+      "group": "Performance",
+      "unit": "",
+      "a": 46.6,
+      "b": 66.6,
+      "delta": 19.999999999999993,
+      "note": ""
+    },
+    {
+      "key": "akm_version",
+      "label": "AKM version",
+      "group": "Settings",
+      "unit": "",
+      "a": "0.10.261011-beta",
+      "b": "0.10.261011-beta",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "measurement",
+      "label": "Eval version",
+      "group": "Settings",
+      "unit": "",
+      "a": "0.4",
+      "b": "0.4",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "scoring_version",
+      "label": "Scoring version",
+      "group": "Settings",
+      "unit": "",
+      "a": "0.4",
+      "b": "0.4",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "search_method",
+      "label": "Search methods",
+      "group": "Settings",
+      "unit": "",
+      "a": "semantic (configured)",
+      "b": "semantic (configured)",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "temperature",
+      "label": "Temperature",
+      "group": "Settings",
+      "unit": "",
+      "a": 0,
+      "b": 1,
+      "delta": 1,
+      "note": ""
+    },
+    {
+      "key": "thinking",
+      "label": "Thinking",
+      "group": "Settings",
+      "unit": "",
+      "a": "Off",
+      "b": "Off",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "source_commit",
+      "label": "Collector commit",
+      "group": "Provenance",
+      "unit": "",
+      "a": "307e636",
+      "b": "b4725addaed4bed0f12c9659f72da3125f5c4b7c",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "score:Cases passed",
+      "label": "Cases passed %",
+      "group": "Test metrics",
+      "unit": "%",
+      "a": 94.55,
+      "b": 72.72999999999999,
+      "delta": -21.820000000000007,
+      "note": ""
+    },
+    {
+      "key": "score:Checks passed",
+      "label": "Checks passed %",
+      "group": "Test metrics",
+      "unit": "%",
+      "a": 98.45,
+      "b": 78.3,
+      "delta": -20.150000000000006,
+      "note": ""
+    },
+    {
+      "key": "score:Usable outputs",
+      "label": "Usable outputs %",
+      "group": "Test metrics",
+      "unit": "%",
+      "a": 90.91,
+      "b": 81.82000000000001,
+      "delta": -9.08999999999999,
+      "note": ""
+    },
+    {
+      "key": "metrics.valid_output.n",
+      "label": "metrics.valid_output.n",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 55,
+      "b": 55,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.valid_output.passed",
+      "label": "metrics.valid_output.passed",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 50,
+      "b": 45,
+      "delta": -5,
+      "note": ""
+    },
+    {
+      "key": "metrics.valid_output.rate",
+      "label": "metrics.valid_output.rate",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0.9091,
+      "b": 0.8182,
+      "delta": -0.09089999999999998,
+      "note": ""
+    },
+    {
+      "key": "metrics.case_pass.n",
+      "label": "metrics.case_pass.n",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 55,
+      "b": 55,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.case_pass.passed",
+      "label": "metrics.case_pass.passed",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 52,
+      "b": 40,
+      "delta": -12,
+      "note": ""
+    },
+    {
+      "key": "metrics.case_pass.rate",
+      "label": "metrics.case_pass.rate",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0.9455,
+      "b": 0.7273,
+      "delta": -0.21820000000000006,
+      "note": ""
+    },
+    {
+      "key": "metrics.checks.n",
+      "label": "metrics.checks.n",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 55,
+      "b": 55,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.checks.rate",
+      "label": "metrics.checks.rate",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0.9845,
+      "b": 0.783,
+      "delta": -0.2015,
+      "note": ""
+    },
+    {
+      "key": "metrics.median_seconds",
+      "label": "metrics.median_seconds",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 4.1,
+      "b": 28.4,
+      "delta": 24.299999999999997,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.memory-inference.n",
+      "label": "metrics.by_process.memory-inference.n",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 23,
+      "b": 23,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.memory-inference.valid_output",
+      "label": "metrics.by_process.memory-inference.valid_output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 18,
+      "b": 20,
+      "delta": 2,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.memory-inference.passed",
+      "label": "metrics.by_process.memory-inference.passed",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 23,
+      "b": 21,
+      "delta": -2,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.memory-inference.checks",
+      "label": "metrics.by_process.memory-inference.checks",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 1,
+      "b": 0.913,
+      "delta": -0.08699999999999997,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.memory-inference.outcomes.output",
+      "label": "metrics.by_process.memory-inference.outcomes.output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 18,
+      "b": 20,
+      "delta": 2,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.memory-inference.outcomes.no-change",
+      "label": "metrics.by_process.memory-inference.outcomes.no-change",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 5,
+      "b": 3,
+      "delta": -2,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.memory-inference.outcomes.unusable",
+      "label": "metrics.by_process.memory-inference.outcomes.unusable",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.memory-inference.outcomes.error",
+      "label": "metrics.by_process.memory-inference.outcomes.error",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.remember-enrich.n",
+      "label": "metrics.by_process.remember-enrich.n",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.remember-enrich.valid_output",
+      "label": "metrics.by_process.remember-enrich.valid_output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 1,
+      "delta": -7,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.remember-enrich.passed",
+      "label": "metrics.by_process.remember-enrich.passed",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 1,
+      "delta": -7,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.remember-enrich.checks",
+      "label": "metrics.by_process.remember-enrich.checks",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 1,
+      "b": 0.125,
+      "delta": -0.875,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.remember-enrich.outcomes.output",
+      "label": "metrics.by_process.remember-enrich.outcomes.output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.remember-enrich.outcomes.no-change",
+      "label": "metrics.by_process.remember-enrich.outcomes.no-change",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.remember-enrich.outcomes.unusable",
+      "label": "metrics.by_process.remember-enrich.outcomes.unusable",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.remember-enrich.outcomes.error",
+      "label": "metrics.by_process.remember-enrich.outcomes.error",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.n",
+      "label": "metrics.by_process.schema-repair.n",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.valid_output",
+      "label": "metrics.by_process.schema-repair.valid_output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.passed",
+      "label": "metrics.by_process.schema-repair.passed",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 6,
+      "delta": -2,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.checks",
+      "label": "metrics.by_process.schema-repair.checks",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 1,
+      "b": 0.8125,
+      "delta": -0.1875,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.outcomes.output",
+      "label": "metrics.by_process.schema-repair.outcomes.output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.outcomes.no-change",
+      "label": "metrics.by_process.schema-repair.outcomes.no-change",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.outcomes.unusable",
+      "label": "metrics.by_process.schema-repair.outcomes.unusable",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.outcomes.error",
+      "label": "metrics.by_process.schema-repair.outcomes.error",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.n",
+      "label": "metrics.by_process.session-summary.n",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.valid_output",
+      "label": "metrics.by_process.session-summary.valid_output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.passed",
+      "label": "metrics.by_process.session-summary.passed",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 6,
+      "b": 6,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.checks",
+      "label": "metrics.by_process.session-summary.checks",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0.925,
+      "b": 0.925,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.outcomes.output",
+      "label": "metrics.by_process.session-summary.outcomes.output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.outcomes.no-change",
+      "label": "metrics.by_process.session-summary.outcomes.no-change",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.outcomes.unusable",
+      "label": "metrics.by_process.session-summary.outcomes.unusable",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.outcomes.error",
+      "label": "metrics.by_process.session-summary.outcomes.error",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.failed.topics include webhooks.md",
+      "label": "metrics.by_process.session-summary.failed.topics include webhooks.md",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 1,
+      "b": 1,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.failed.topics include v3/subscriptions",
+      "label": "metrics.by_process.session-summary.failed.topics include v3/subscriptions",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 1,
+      "b": 1,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.failed.topics include android.yml",
+      "label": "metrics.by_process.session-summary.failed.topics include android.yml",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 1,
+      "b": null,
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.n",
+      "label": "metrics.by_process.consolidate-promote.n",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.valid_output",
+      "label": "metrics.by_process.consolidate-promote.valid_output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.passed",
+      "label": "metrics.by_process.consolidate-promote.passed",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 7,
+      "b": 6,
+      "delta": -1,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.checks",
+      "label": "metrics.by_process.consolidate-promote.checks",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0.9688,
+      "b": 0.8958,
+      "delta": -0.07299999999999995,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.outcomes.output",
+      "label": "metrics.by_process.consolidate-promote.outcomes.output",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 8,
+      "b": 8,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.outcomes.no-change",
+      "label": "metrics.by_process.consolidate-promote.outcomes.no-change",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.outcomes.unusable",
+      "label": "metrics.by_process.consolidate-promote.outcomes.unusable",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.outcomes.error",
+      "label": "metrics.by_process.consolidate-promote.outcomes.error",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 0,
+      "b": 0,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.failed.no extra or missing promotions",
+      "label": "metrics.by_process.consolidate-promote.failed.no extra or missing promotions",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": 1,
+      "b": 1,
+      "delta": 0,
+      "note": ""
+    },
+    {
+      "key": "status",
+      "label": "status",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": "complete",
+      "b": "complete",
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.memory-inference.failed.decides no-change",
+      "label": "metrics.by_process.memory-inference.failed.decides no-change",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": null,
+      "b": 2,
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.remember-enrich.failed.preserves explicit date",
+      "label": "metrics.by_process.remember-enrich.failed.preserves explicit date",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": null,
+      "b": 3,
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.failed.trigger is concrete",
+      "label": "metrics.by_process.schema-repair.failed.trigger is concrete",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": null,
+      "b": 2,
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.schema-repair.failed.generated fields are grounded in the body",
+      "label": "metrics.by_process.schema-repair.failed.generated fields are grounded in the body",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": null,
+      "b": 1,
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.session-summary.failed.topics include due_dates.py",
+      "label": "metrics.by_process.session-summary.failed.topics include due_dates.py",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": null,
+      "b": 1,
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.failed.leaves protected memories/operator-preference untouched",
+      "label": "metrics.by_process.consolidate-promote.failed.leaves protected memories/operator-preference untouched",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": null,
+      "b": 1,
+      "delta": null,
+      "note": ""
+    },
+    {
+      "key": "metrics.by_process.consolidate-promote.failed.promotes memories/artifact-signing-observation",
+      "label": "metrics.by_process.consolidate-promote.failed.promotes memories/artifact-signing-observation",
+      "group": "Stored metrics",
+      "unit": "",
+      "a": null,
+      "b": 1,
+      "delta": null,
+      "note": ""
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "source": "LM Studio server log, completed prediction timings and OpenAI-compatible response usage",
+  "scope": "One completed internal consolidation call in the stock-temperature pilot; not a full-run average",
+  "observed_local_time": "2026-10-25T17:40:06-05:00",
+  "runtime_task_id": 4343,
+  "prompt_eval_tokens": 931,
+  "prompt_eval_seconds": 1.33741,
+  "prompt_eval_tokens_per_second": 696.12,
+  "generated_tokens": 13916,
+  "reasoning_tokens": 13875,
+  "non_reasoning_tokens": 41,
+  "decode_seconds": 213.05324,
+  "decode_tokens_per_second": 65.31,
+  "total_eval_seconds": 214.39066,
+  "finish_reason": "stop",
+  "thinking_requested": false,
+  "reasoning_observed": true
+}
