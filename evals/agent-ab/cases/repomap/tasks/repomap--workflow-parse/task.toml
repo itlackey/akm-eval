@@ -1,0 +1,32 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/repomap--workflow-parse"
+version = "1.0.0"
+description = "Find the workflow markdown parser in a pinned checkout of itlackey/akm"
+authors = []
+keywords = []
+
+# --- provenance (free-form; not read by Harbor itself) ---
+[metadata]
+domain = "repomap"
+tools = "real"
+slice = "repomap"
+difficulty = "medium"
+stash = "repomap"
+gold_ref = "knowledge/akm-map/src/workflows"
+library_tokens = ["src/workflows/parser.ts", "parseWorkflow"]
+task_family = "repomap/localize"
+source_repo = "git:itlackey/akm@f8f97704672ae657e9590d1240150df3a88b18ee"
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/app"
+
+[environment.env]
+AKM_TASK_STASH = "repomap"

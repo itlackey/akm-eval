@@ -17,6 +17,11 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- No eval changed version. agent-ab and terminal-bench summaries add `input_tokens`, `output_tokens` and `tool_calls` to each arm's
+  metrics and to `report.<arm>.per_trial`: their means per scored trial, over the trials that record them. The trials already held these
+  figures (`samples.jsonl`); older summaries lack the fields. agent-ab gains a task set run with `--cases`, `cases/repomap` (akm#1260);
+  the public tasks are unchanged.
+
 - No eval changed version. `evals/retrieval/label --cases DIR` lists a set whose `library/` is copied whole (no `bundles.json`) as it lists
   the public library, so the pool of such a set also holds the BM25 and the expected assets, and `--from` grades every result of a run,
   semantic ones included. It used to list no own library: a query with `expected` stopped the run, and `--from` left out every result

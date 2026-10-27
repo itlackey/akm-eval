@@ -1,0 +1,32 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/repomap--markdown-fragments"
+version = "1.0.0"
+description = "Find where markdown bodies are split into fragments in a pinned checkout of itlackey/akm"
+authors = []
+keywords = []
+
+# --- provenance (free-form; not read by Harbor itself) ---
+[metadata]
+domain = "repomap"
+tools = "real"
+slice = "repomap"
+difficulty = "medium"
+stash = "repomap"
+gold_ref = "knowledge/akm-map/src/core"
+library_tokens = ["src/core/asset/markdown-fragments.ts", "splitMarkdownFragments"]
+task_family = "repomap/localize"
+source_repo = "git:itlackey/akm@f8f97704672ae657e9590d1240150df3a88b18ee"
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/app"
+
+[environment.env]
+AKM_TASK_STASH = "repomap"
