@@ -1,0 +1,286 @@
+{
+  "eval": "retrieval",
+  "corpus": "custom",
+  "corpus_folder": "evals/retrieval/assets/repomap",
+  "collection": "own",
+  "label": "b1-sem-repomap-rescored",
+  "date": "2026-10-27T14:49:15.770Z",
+  "git_commit": "902b662",
+  "akm_version": "0.10.261015",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/spike-b1/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-2897-gd57a3f796",
+  "akm_build_fingerprint": null,
+  "search_mode": {
+    "keyword": "keyword",
+    "semantic": "semantic"
+  },
+  "semantic_model": "Xenova/bge-small-en-v1.5",
+  "semantic_index": "cold",
+  "semantic_index_built_by": {
+    "version": "0.10.261015",
+    "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/spike-b1/src/cli.ts",
+    "akm_build": "v0.9.0-beta.60-2897-gd57a3f796",
+    "builtAt": "2026-10-27T14:48:42.575Z"
+  },
+  "semantic_flag": "on",
+  "depth": 10,
+  "relevant_from_grade": 2,
+  "limit": null,
+  "n_assets": 15,
+  "index_seconds": {
+    "keyword": 0.3,
+    "semantic": 4.2
+  },
+  "status": "complete",
+  "aborted_reason": null,
+  "n_queries": 20,
+  "n_scored": 19,
+  "n_errored": 0,
+  "errored": {
+    "search": 0,
+    "curate": 0,
+    "semantic_search": 0,
+    "semantic_curate": 0
+  },
+  "timeouts": 0,
+  "metrics": {
+    "search": {
+      "n": 19,
+      "ndcg_10": 0.6704,
+      "ndcg_10_condensed": 0.6704,
+      "p_5": 0.3053,
+      "success_5": 0.8421,
+      "mrr": 0.7313,
+      "recall_10": 0.7939,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "curate": {
+      "n": 19,
+      "ndcg_10": 0.6704,
+      "ndcg_10_condensed": 0.6704,
+      "p_5": 0.3053,
+      "success_5": 0.8421,
+      "mrr": 0.7313,
+      "recall_10": 0.7939,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "semantic_search": {
+      "n": 19,
+      "ndcg_10": 0.7851,
+      "ndcg_10_condensed": 0.7851,
+      "p_5": 0.3684,
+      "success_5": 0.9474,
+      "mrr": 0.7903,
+      "recall_10": 0.9868,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "semantic_curate": {
+      "n": 19,
+      "ndcg_10": 0.7851,
+      "ndcg_10_condensed": 0.7851,
+      "p_5": 0.3684,
+      "success_5": 0.9474,
+      "mrr": 0.7903,
+      "recall_10": 0.9868,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    }
+  },
+  "abstention": {
+    "non_task": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    },
+    "no_answer": {
+      "search": {
+        "n": 1,
+        "abstained": 0,
+        "rate": 0
+      },
+      "curate": {
+        "n": 1,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_search": {
+        "n": 1,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_curate": {
+        "n": 1,
+        "abstained": 0,
+        "rate": 0
+      }
+    }
+  },
+  "config": {
+    "keyword": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "off",
+      "registries": []
+    },
+    "semantic": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "auto",
+      "registries": [],
+      "embedding": {
+        "localModel": "Xenova/bge-small-en-v1.5",
+        "queryTimeoutMs": 600000
+      }
+    }
+  },
+  "engine": {
+    "engine": null,
+    "model": null,
+    "endpoint": null,
+    "temperature": null,
+    "enableThinking": null,
+    "timeoutMs": null,
+    "engines": {}
+  },
+  "assets_sha256": "9af3c4cb38422e77d8d2c0b27ad57648674c56bac40e91314104d785537e4e09",
+  "assets": {
+    "library_sha256": "42aa2a9b8b08b736803b074d65de9a728544538ac726fbb42ff10a83f696f94e",
+    "bundles_sha256": null,
+    "queries_sha256": "32ad70026215357ccb9338b5d0a07f7ff253f75ce5994f176947ccc7e22335cb",
+    "qrels_sha256": "fa2fac4692ea8b3d8250beb5d3fba4f10770409d72f89310316e9c82be73c17e"
+  },
+  "seed": null,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "retrieval",
+    "corpus": "custom",
+    "collection": "own",
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.4"
+    },
+    "akm": {
+      "version": "0.10.261015",
+      "bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/spike-b1/src/cli.ts",
+      "build": "v0.9.0-beta.60-2897-gd57a3f796",
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "keyword": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "off",
+          "registries": []
+        },
+        "semantic": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "auto",
+          "registries": [],
+          "embedding": {
+            "localModel": "Xenova/bge-small-en-v1.5",
+            "queryTimeoutMs": 600000
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 120000,
+      "seed": null
+    },
+    "engines": {},
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "r01",
+        "r02",
+        "r03",
+        "r04",
+        "r05",
+        "r06",
+        "r07",
+        "r08",
+        "r09",
+        "r10",
+        "r11",
+        "r12",
+        "r13",
+        "r14",
+        "r15",
+        "r16",
+        "r17",
+        "r18",
+        "r19",
+        "r20"
+      ],
+      "scored": [
+        "r01",
+        "r02",
+        "r03",
+        "r04",
+        "r05",
+        "r06",
+        "r07",
+        "r08",
+        "r09",
+        "r10",
+        "r11",
+        "r12",
+        "r13",
+        "r14",
+        "r15",
+        "r16",
+        "r17",
+        "r18",
+        "r19",
+        "r20"
+      ],
+      "errored": []
+    },
+    "rescored_from": {
+      "results": "2026-10-27-b1-sem-repomap-own",
+      "scorer": {
+        "version": "0.3"
+      },
+      "at": "2026-10-27T15:50:25.169Z",
+      "dropped": []
+    }
+  },
+  "wall_seconds": 37.604,
+  "scoring_version": "0.4",
+  "rescored_from": {
+    "results": "2026-10-27-b1-sem-repomap-own",
+    "scorer": {
+      "version": "0.3"
+    },
+    "at": "2026-10-27T15:50:25.169Z",
+    "dropped": []
+  }
+}

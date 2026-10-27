@@ -1,0 +1,306 @@
+{
+  "eval": "retrieval",
+  "corpus": "custom",
+  "corpus_folder": "evals/retrieval/assets/code",
+  "collection": "own",
+  "label": "b0-sem-code-rescored",
+  "date": "2026-10-27T14:40:30.386Z",
+  "git_commit": "902b662",
+  "akm_version": "0.10.261015",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/spike-b0/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-2896-gf8f977046",
+  "akm_build_fingerprint": null,
+  "search_mode": {
+    "keyword": "keyword",
+    "semantic": "semantic"
+  },
+  "semantic_model": "Xenova/bge-small-en-v1.5",
+  "semantic_index": "cold",
+  "semantic_index_built_by": {
+    "version": "0.10.261015",
+    "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/spike-b0/src/cli.ts",
+    "akm_build": "v0.9.0-beta.60-2896-gf8f977046",
+    "builtAt": "2026-10-27T14:39:22.571Z"
+  },
+  "semantic_flag": "on",
+  "depth": 10,
+  "relevant_from_grade": 2,
+  "limit": null,
+  "n_assets": 251,
+  "index_seconds": {
+    "keyword": 0.9,
+    "semantic": 32.5
+  },
+  "status": "complete",
+  "aborted_reason": null,
+  "n_queries": 30,
+  "n_scored": 28,
+  "n_errored": 0,
+  "errored": {
+    "search": 0,
+    "curate": 0,
+    "semantic_search": 0,
+    "semantic_curate": 0
+  },
+  "timeouts": 0,
+  "metrics": {
+    "search": {
+      "n": 28,
+      "ndcg_10": 0.5303,
+      "ndcg_10_condensed": 0.5303,
+      "p_5": 0.3357,
+      "success_5": 0.75,
+      "mrr": 0.6382,
+      "recall_10": 0.5906,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "curate": {
+      "n": 28,
+      "ndcg_10": 0.5303,
+      "ndcg_10_condensed": 0.5303,
+      "p_5": 0.3357,
+      "success_5": 0.75,
+      "mrr": 0.6382,
+      "recall_10": 0.5906,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "semantic_search": {
+      "n": 28,
+      "ndcg_10": 0.4941,
+      "ndcg_10_condensed": 0.4941,
+      "p_5": 0.3214,
+      "success_5": 0.6786,
+      "mrr": 0.6177,
+      "recall_10": 0.5807,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "semantic_curate": {
+      "n": 28,
+      "ndcg_10": 0.4941,
+      "ndcg_10_condensed": 0.4941,
+      "p_5": 0.3214,
+      "success_5": 0.6786,
+      "mrr": 0.6177,
+      "recall_10": 0.5807,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    }
+  },
+  "abstention": {
+    "non_task": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    },
+    "no_answer": {
+      "search": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      },
+      "curate": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_search": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_curate": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      }
+    }
+  },
+  "config": {
+    "keyword": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "off",
+      "registries": []
+    },
+    "semantic": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "auto",
+      "registries": [],
+      "embedding": {
+        "localModel": "Xenova/bge-small-en-v1.5",
+        "queryTimeoutMs": 600000
+      }
+    }
+  },
+  "engine": {
+    "engine": null,
+    "model": null,
+    "endpoint": null,
+    "temperature": null,
+    "enableThinking": null,
+    "timeoutMs": null,
+    "engines": {}
+  },
+  "assets_sha256": "a832b97acc16f8172dd0b9b92e193a0ccbee4ece0ac1893e996dcac6ba769655",
+  "assets": {
+    "library_sha256": "8813ba794a3d327c4d58927ef75edf8c080e8b5814c8e523e620774b5980a227",
+    "bundles_sha256": null,
+    "queries_sha256": "5bb1cd8045cae701254f9043683d94fddd1cb0cb3838e24b495f8931bba46c6a",
+    "qrels_sha256": "57dfe0ef8b4a50ddf11e024962f7ff606a90fd3f63117ba012dbbea53db81a5f"
+  },
+  "seed": null,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "retrieval",
+    "corpus": "custom",
+    "collection": "own",
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.4"
+    },
+    "akm": {
+      "version": "0.10.261015",
+      "bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/spike-b0/src/cli.ts",
+      "build": "v0.9.0-beta.60-2896-gf8f977046",
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "keyword": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "off",
+          "registries": []
+        },
+        "semantic": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "auto",
+          "registries": [],
+          "embedding": {
+            "localModel": "Xenova/bge-small-en-v1.5",
+            "queryTimeoutMs": 600000
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 120000,
+      "seed": null
+    },
+    "engines": {},
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "c01",
+        "c02",
+        "c03",
+        "c04",
+        "c05",
+        "c06",
+        "c07",
+        "c08",
+        "c09",
+        "c10",
+        "c11",
+        "c12",
+        "c13",
+        "c14",
+        "c15",
+        "c16",
+        "c17",
+        "c18",
+        "c19",
+        "c20",
+        "c21",
+        "c22",
+        "c23",
+        "c24",
+        "c25",
+        "c26",
+        "c27",
+        "c28",
+        "c29",
+        "c30"
+      ],
+      "scored": [
+        "c01",
+        "c02",
+        "c03",
+        "c04",
+        "c05",
+        "c06",
+        "c07",
+        "c08",
+        "c09",
+        "c10",
+        "c11",
+        "c12",
+        "c13",
+        "c14",
+        "c15",
+        "c16",
+        "c17",
+        "c18",
+        "c19",
+        "c20",
+        "c21",
+        "c22",
+        "c23",
+        "c24",
+        "c25",
+        "c26",
+        "c27",
+        "c28",
+        "c29",
+        "c30"
+      ],
+      "errored": []
+    },
+    "rescored_from": {
+      "results": "2026-10-27-b0-sem-code-own",
+      "scorer": {
+        "version": "0.3"
+      },
+      "at": "2026-10-27T15:50:24.772Z",
+      "dropped": []
+    }
+  },
+  "wall_seconds": 101.228,
+  "scoring_version": "0.4",
+  "rescored_from": {
+    "results": "2026-10-27-b0-sem-code-own",
+    "scorer": {
+      "version": "0.3"
+    },
+    "at": "2026-10-27T15:50:24.772Z",
+    "dropped": []
+  }
+}

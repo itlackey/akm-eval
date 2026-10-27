@@ -2,7 +2,7 @@ schema_version = "1.4"
 
 [task]
 name = "akm-eval/repomap--npm-integrity"
-version = "1.0.0"
+version = "1.1.0"
 description = "Find the integrity check of npm package downloads in a pinned checkout of itlackey/akm"
 authors = []
 keywords = []

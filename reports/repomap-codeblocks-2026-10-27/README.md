@@ -1,5 +1,7 @@
 # Repo-map assets and fenced code in search (work in progress, phases 1–2)
 
+**Phase 3, the full-system runs, is in [`full-system.md`](full-system.md):** semantic retrieval of every build, real-judge grades, the `library` label expansion and the agent-ab repomap tasks. It supersedes the provisional numbers below; read the verdicts there.
+
 **Work in progress.** These runs were collected on October 27, 2026 UTC for [akm#1260](https://github.com/itlackey/akm/issues/1260). Every run is keyword-only, and the grades of the new sets are provisional. The semantic, real-judge and agent-ab runs that finish the spike are in [`finish-on-full-system.md`](finish-on-full-system.md). This report is not in the ledger table of [`../README.md`](../README.md).
 
 ## Findings

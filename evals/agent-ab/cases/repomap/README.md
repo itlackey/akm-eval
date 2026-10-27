@@ -13,14 +13,14 @@ Seven localization tasks over [itlackey/akm](https://github.com/itlackey/akm) at
 | Task | File | Function |
 |---|---|---|
 | `repomap--robots-check` | `src/sources/snapshot-fetchers/robots.ts` | `isPathAllowedByRobots` |
-| `repomap--npm-integrity` | `src/core/npm-package.ts` | `verifyIntegrity` |
+| `repomap--npm-integrity` | `src/core/npm-package.ts`, or `src/sources/providers/tar-utils.ts` | `verifyIntegrity`, or `verifyArchiveIntegrity` (the npm source's check of the downloaded tarball against its SRI hash) |
 | `repomap--unknown-flags` | `src/cli/unknown-flags.ts` | `assertKnownFlags` |
 | `repomap--workflow-parse` | `src/workflows/parser.ts` | `parseWorkflow` |
 | `repomap--non-task-input` | `src/core/non-task-input.ts` | `nonTaskInput` |
-| `repomap--markdown-fragments` | `src/core/asset/markdown-fragments.ts` | `splitMarkdownFragments` |
+| `repomap--markdown-fragments` | `src/core/asset/markdown-fragments.ts` | `splitMarkdownFragments`, or `splitMarkdownFragmentStats` (which does the split; the first wraps it) |
 | `repomap--search-projection` | `src/indexer/passes/metadata.ts` | `projectMarkdownContent` (or `projectMarkdownFragmentContent`, the fragment projection in the same file, which drops fenced code too) |
 
-Each answer was checked against the akm source at that commit. The questions were written from the source and the map before any model ran them. `tests/verify.sh` passes a task when `answer.txt` has exactly one non-empty line, that line names the expected file as its only `.ts` path (a leading `./` or `/app/repo/` and a `:line` suffix are accepted), and it names an accepted function as a whole word. `task.toml` sets `task_family = "repomap/localize"`, names the library as `AKM_TASK_STASH = "repomap"`, and lists the file and the function in `library_tokens`; `src/lib.test.ts` checks that the gold ref (the map asset of the file's top-level directory) holds both, and that no instruction points the agent at akm.
+Each answer was checked against the akm source at that commit. Version 1.1.0 of `repomap--npm-integrity` and `repomap--markdown-fragments` also accepts the second function that does what the instruction describes; 1.0.0, which the first run used, accepted one (see `reports/repomap-codeblocks-2026-10-27/full-system.md`). The questions were written from the source and the map before any model ran them. `tests/verify.sh` passes a task when `answer.txt` has exactly one non-empty line, that line names the expected file as its only `.ts` path (a leading `./` or `/app/repo/` and a `:line` suffix are accepted), and it names an accepted function as a whole word. `task.toml` sets `task_family = "repomap/localize"`, names the library as `AKM_TASK_STASH = "repomap"`, and lists the file and the function in `library_tokens`; `src/lib.test.ts` checks that the gold ref (the map asset of the file's top-level directory) holds both, and that no instruction points the agent at akm.
 
 ## The library
 
@@ -35,6 +35,7 @@ uv run --no-project --python 3.12 --with "harbor==$(bun lib/harbor/pin.ts harbor
 
 ## Limits
 
+- At the 35B's 32,768-token window, 24 of the first run's 42 trials (15 of 21 akm, 9 of 21 control) hit the model server's context limit, and no akm-arm agent called akm: that run does not measure the map. See the report for the options.
 - Seven tasks: one task moves a pass rate by about 0.14.
 - The control can search the repository with grep, and the function names are in the source, so the question is how much effort the map saves (tokens, time and tool calls per trial), as much as whether the task passes.
 - The map is of akm itself, so its words come from the same source as the questions.

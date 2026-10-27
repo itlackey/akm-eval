@@ -1,0 +1,286 @@
+{
+  "eval": "retrieval",
+  "corpus": "custom",
+  "corpus_folder": "evals/retrieval/assets/repomap/fenced",
+  "collection": "own",
+  "label": "b1b-sem-repomap-fenced-rescored",
+  "date": "2026-10-27T14:58:28.721Z",
+  "git_commit": "902b662",
+  "akm_version": "0.10.261015",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/spike-b1b/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-2898-g55ce53f68",
+  "akm_build_fingerprint": null,
+  "search_mode": {
+    "keyword": "keyword",
+    "semantic": "semantic"
+  },
+  "semantic_model": "Xenova/bge-small-en-v1.5",
+  "semantic_index": "cold",
+  "semantic_index_built_by": {
+    "version": "0.10.261015",
+    "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/spike-b1b/src/cli.ts",
+    "akm_build": "v0.9.0-beta.60-2898-g55ce53f68",
+    "builtAt": "2026-10-27T14:57:52.831Z"
+  },
+  "semantic_flag": "on",
+  "depth": 10,
+  "relevant_from_grade": 2,
+  "limit": null,
+  "n_assets": 15,
+  "index_seconds": {
+    "keyword": 0.4,
+    "semantic": 4.4
+  },
+  "status": "complete",
+  "aborted_reason": null,
+  "n_queries": 20,
+  "n_scored": 19,
+  "n_errored": 0,
+  "errored": {
+    "search": 0,
+    "curate": 0,
+    "semantic_search": 0,
+    "semantic_curate": 0
+  },
+  "timeouts": 0,
+  "metrics": {
+    "search": {
+      "n": 19,
+      "ndcg_10": 0.6968,
+      "ndcg_10_condensed": 0.6968,
+      "p_5": 0.4316,
+      "success_5": 1,
+      "mrr": 0.8596,
+      "recall_10": 0.7456,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "curate": {
+      "n": 19,
+      "ndcg_10": 0.6968,
+      "ndcg_10_condensed": 0.6968,
+      "p_5": 0.4316,
+      "success_5": 1,
+      "mrr": 0.8596,
+      "recall_10": 0.7456,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "semantic_search": {
+      "n": 19,
+      "ndcg_10": 0.7744,
+      "ndcg_10_condensed": 0.7744,
+      "p_5": 0.4842,
+      "success_5": 1,
+      "mrr": 0.8289,
+      "recall_10": 0.9,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "semantic_curate": {
+      "n": 19,
+      "ndcg_10": 0.7744,
+      "ndcg_10_condensed": 0.7744,
+      "p_5": 0.4842,
+      "success_5": 1,
+      "mrr": 0.8289,
+      "recall_10": 0.9,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    }
+  },
+  "abstention": {
+    "non_task": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    },
+    "no_answer": {
+      "search": {
+        "n": 1,
+        "abstained": 0,
+        "rate": 0
+      },
+      "curate": {
+        "n": 1,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_search": {
+        "n": 1,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_curate": {
+        "n": 1,
+        "abstained": 0,
+        "rate": 0
+      }
+    }
+  },
+  "config": {
+    "keyword": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "off",
+      "registries": []
+    },
+    "semantic": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "auto",
+      "registries": [],
+      "embedding": {
+        "localModel": "Xenova/bge-small-en-v1.5",
+        "queryTimeoutMs": 600000
+      }
+    }
+  },
+  "engine": {
+    "engine": null,
+    "model": null,
+    "endpoint": null,
+    "temperature": null,
+    "enableThinking": null,
+    "timeoutMs": null,
+    "engines": {}
+  },
+  "assets_sha256": "56384b23a8a3875054092284593b0d7996476bb426d851f61537d7e54a81be75",
+  "assets": {
+    "library_sha256": "0bb2e697a938e75bea9e590b470e92dbfedbd6f3c881069a5768399b3d46f4a4",
+    "bundles_sha256": null,
+    "queries_sha256": "32ad70026215357ccb9338b5d0a07f7ff253f75ce5994f176947ccc7e22335cb",
+    "qrels_sha256": "8953de3ff9ad7a0f070d6206ae159705d1303cc02a8ff5e3d3bb030552a81756"
+  },
+  "seed": null,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "retrieval",
+    "corpus": "custom",
+    "collection": "own",
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.4"
+    },
+    "akm": {
+      "version": "0.10.261015",
+      "bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/spike-b1b/src/cli.ts",
+      "build": "v0.9.0-beta.60-2898-g55ce53f68",
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "keyword": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "off",
+          "registries": []
+        },
+        "semantic": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "auto",
+          "registries": [],
+          "embedding": {
+            "localModel": "Xenova/bge-small-en-v1.5",
+            "queryTimeoutMs": 600000
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 120000,
+      "seed": null
+    },
+    "engines": {},
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "r01",
+        "r02",
+        "r03",
+        "r04",
+        "r05",
+        "r06",
+        "r07",
+        "r08",
+        "r09",
+        "r10",
+        "r11",
+        "r12",
+        "r13",
+        "r14",
+        "r15",
+        "r16",
+        "r17",
+        "r18",
+        "r19",
+        "r20"
+      ],
+      "scored": [
+        "r01",
+        "r02",
+        "r03",
+        "r04",
+        "r05",
+        "r06",
+        "r07",
+        "r08",
+        "r09",
+        "r10",
+        "r11",
+        "r12",
+        "r13",
+        "r14",
+        "r15",
+        "r16",
+        "r17",
+        "r18",
+        "r19",
+        "r20"
+      ],
+      "errored": []
+    },
+    "rescored_from": {
+      "results": "2026-10-27-b1b-sem-repomap-fenced-own",
+      "scorer": {
+        "version": "0.3"
+      },
+      "at": "2026-10-27T15:50:25.445Z",
+      "dropped": []
+    }
+  },
+  "wall_seconds": 40.556,
+  "scoring_version": "0.4",
+  "rescored_from": {
+    "results": "2026-10-27-b1b-sem-repomap-fenced-own",
+    "scorer": {
+      "version": "0.3"
+    },
+    "at": "2026-10-27T15:50:25.445Z",
+    "dropped": []
+  }
+}

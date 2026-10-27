@@ -17,6 +17,13 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- retrieval scoring 0.4 (was 0.3), a label-only change: the [2026-10-27 expansion](evals/retrieval/assets/judgment-expansion-20261027.md)
+  appends 138 judge-endpoint grades (`fast/qwen3.6-35b-a3b`) of unjudged top-ten `library` pairs from four akm#1260 semantic runs. Inputs
+  and collection version 0.3 are unchanged; books are unchanged. Rescore both sides of a comparison (`scripts/rescore/run`) before reading
+  it; a 0.3 score and a 0.4 score of one run differ where the new grades fall. The `--cases` sets `code`, `repomap` and `repomap/fenced`
+  were graded again by the same judge (their provisional grades are kept as `qrels.claude-review.jsonl`); they are not public collections
+  and need no version.
+
 - No eval changed version. agent-ab and terminal-bench summaries add `input_tokens`, `output_tokens` and `tool_calls` to each arm's
   metrics and to `report.<arm>.per_trial`: their means per scored trial, over the trials that record them. The trials already held these
   figures (`samples.jsonl`); older summaries lack the fields. agent-ab gains a task set run with `--cases`, `cases/repomap` (akm#1260);

@@ -37,7 +37,7 @@ Results go to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (`priva
 - `library/`: the folder akm indexes, or a link to it. The refs in `qrels.jsonl` are the refs `akm search` prints for it.
 - `bundles.json`, only when `library/` is a folder of bundles: `{ "notes": "akm", "site": "website-snapshot" }`, each bundle's folder and adapter. Each bundle is indexed in place, read only, and its refs are `<folder>//<path>`.
 
-Three such sets are committed, for akm#1260, with provisional grades: `--cases evals/retrieval/assets/code` (code-shaped lookups over the public library), and `--cases evals/retrieval/assets/repomap` and `--cases evals/retrieval/assets/repomap/fenced` (a repo map of akm's `src/` with inline or fenced symbols). See "code/ and repomap/" in `assets/README.md`.
+Three such sets are committed, for akm#1260, graded by a judge endpoint (`fast/qwen3.6-35b-a3b`) since 2026-10-27, with the earlier provisional review kept beside each as `qrels.claude-review.jsonl`: `--cases evals/retrieval/assets/code` (code-shaped lookups over the public library), and `--cases evals/retrieval/assets/repomap` and `--cases evals/retrieval/assets/repomap/fenced` (a repo map of akm's `src/` with inline or fenced symbols). See "code/ and repomap/" in `assets/README.md`.
 
 ## How a query is scored
 
@@ -71,31 +71,31 @@ evals/retrieval/label --from evals/retrieval/results/<UTC date>-<label>-library
 evals/retrieval/label --cases ~/notes/retrieval
 ```
 
-`label` pools the top 10 of `akm search`, `akm curate` and a plain BM25 for each task query, with the assets the author expected, asks a judge model to grade each unjudged pair 0 to 3, and appends the grade to `assets/qrels.jsonl` with the judge, a digest of the prompt, the date and a digest of the asset. Stop and rerun it at will; a pair whose asset changed is graded again. `--from RESULTS_DIR` pools a run's results instead, semantic columns included. `--cases DIR` grades your own set, reports which judge gets your notes and proceeds without a confirmation prompt. A set whose `library/` is copied whole is listed as the public library is, so its pool has the BM25 and the expected assets too; a library of bundles is not listed, so its pool is akm's results alone and a query with `expected` stops the run. The judge is `--judge-model ID` or `JUDGE_MODEL`, at `JUDGE_BASE_URL`. A judge that is a line of `models.json` takes that line's `chat` settings, as LongMemEval does: `temperature`, `max_tokens` or `max_completion_tokens`, and `reasoning_effort` replace the defaults of 0, `max_tokens` 2000 and `none`. Use one judge for a set: `label` and `run` warn when the qrels mix judges. The library's original grades are stamped judge `legacy`. The [2026-10-15 expansion](assets/judgment-expansion-20261015.md) fills the missing top-ten task-query pairs from saved keyword/semantic runs in both public collections; it uses explicit Codex review, preserves existing judgments, and does not run the collector or a judge endpoint.
+`label` pools the top 10 of `akm search`, `akm curate` and a plain BM25 for each task query, with the assets the author expected, asks a judge model to grade each unjudged pair 0 to 3, and appends the grade to `assets/qrels.jsonl` with the judge, a digest of the prompt, the date and a digest of the asset. Stop and rerun it at will; a pair whose asset changed is graded again. `--from RESULTS_DIR` pools a run's results instead, semantic columns included. `--cases DIR` grades your own set, reports which judge gets your notes and proceeds without a confirmation prompt. A set whose `library/` is copied whole is listed as the public library is, so its pool has the BM25 and the expected assets too; a library of bundles is not listed, so its pool is akm's results alone and a query with `expected` stops the run. The judge is `--judge-model ID` or `JUDGE_MODEL`, at `JUDGE_BASE_URL`. A judge that is a line of `models.json` takes that line's `chat` settings, as LongMemEval does: `temperature`, `max_tokens` or `max_completion_tokens`, and `reasoning_effort` replace the defaults of 0, `max_tokens` 2000 and `none`. Use one judge for a set: `label` and `run` warn when the qrels mix judges. The library's original grades are stamped judge `legacy`. The [2026-10-15 expansion](assets/judgment-expansion-20261015.md) fills the missing top-ten task-query pairs from saved keyword/semantic runs in both public collections; it uses explicit Codex review, preserves existing judgments, and does not run the collector or a judge endpoint. The [2026-10-27 expansion](assets/judgment-expansion-20261027.md) grades, with `label --from` and the judge endpoint, the unjudged top-ten pairs of four akm#1260 builds' semantic runs (138 pairs; scoring 0.4).
 
 ## Domain mix
 
-The public library has 251 assets and 1,876 judgment rows (1,846 query/asset identities after alias normalization), by top-level group:
+The public library has 251 assets and 2,014 judgment rows (1,982 query/asset identities after alias normalization), by top-level group:
 
 | Group | Assets | Graded rows | Share of rows | Relevant rows |
 |---|---:|---:|---:|---:|
-| ai-skills | 87 | 601 | 32.6% | 173 |
-| print | 45 | 494 | 26.8% | 180 |
-| coding | 60 | 271 | 14.7% | 89 |
-| e2e-testing | 13 | 159 | 8.6% | 44 |
-| administrative | 20 | 131 | 7.1% | 45 |
-| dev-workflow | 5 | 53 | 2.9% | 9 |
-| reports | 5 | 43 | 2.3% | 14 |
-| gws-setup | 6 | 33 | 1.8% | 7 |
-| notify | 3 | 16 | 0.9% | 6 |
-| writing | 3 | 16 | 0.9% | 7 |
+| ai-skills | 87 | 678 | 34.2% | 182 |
+| print | 45 | 527 | 26.6% | 188 |
+| coding | 60 | 285 | 14.4% | 91 |
+| e2e-testing | 13 | 162 | 8.2% | 44 |
+| administrative | 20 | 137 | 6.9% | 47 |
+| dev-workflow | 5 | 53 | 2.7% | 9 |
+| reports | 5 | 43 | 2.2% | 14 |
+| gws-setup | 6 | 34 | 1.7% | 7 |
+| notify | 3 | 18 | 0.9% | 6 |
+| writing | 3 | 16 | 0.8% | 7 |
 | akm-migrate | 1 | 10 | 0.5% | 1 |
 | cmyk-image-converter | 1 | 8 | 0.4% | 4 |
 | development | 1 | 8 | 0.4% | 2 |
 | other | 1 | 3 | 0.2% | 2 |
-| all | 251 | 1846 | 100.0% | 583 |
+| all | 251 | 1982 | 100.0% | 604 |
 
-`bun evals/retrieval/src/mix.ts` prints it, and a test fails when this one differs. Two groups hold 59% of the rows, so a score here says how akm ranks a library of a few tool and print domains. Check a change on the books and on a set of your own before calling it general.
+`bun evals/retrieval/src/mix.ts` prints it, and a test fails when this one differs. Two groups hold 61% of the rows, so a score here says how akm ranks a library of a few tool and print domains. Check a change on the books and on a set of your own before calling it general.
 
 ## Licence
 

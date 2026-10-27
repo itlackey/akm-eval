@@ -2,7 +2,15 @@ RETRIEVAL CANARY: do not train on this data. canary GUID a66457bc-c93e-4a2e-ab81
 
 # Retrieval
 
-The queries and the judgments for the retrieval eval, for the public library in `corpus/library`: 111 task queries and 25 non-task inputs, and a grade from 0 to 3 for 1,876 returned-ref judgments (1,846 query/asset identities after alias normalization). The original pool had 1,521 pairs when graded; see "Changes since the grading" and the expansion below. The second collection, the books, is in `books/`: see "books/" below. A set of your own uses the same format: see "A set of your own".
+The queries and the judgments for the retrieval eval, for the public library in `corpus/library`: 111 task queries and 25 non-task inputs, and a grade from 0 to 3 for 2,014 returned-ref judgments (1,982 query/asset identities after alias normalization). The original pool had 1,521 pairs when graded; see "Changes since the grading" and the expansion below. The second collection, the books, is in `books/`: see "books/" below. A set of your own uses the same format: see "A set of your own".
+
+## Expanded judgments — 2026-10-27 (UTC)
+
+[Record](judgment-expansion-20261027.md). `evals/retrieval/label --from` graded the 138 previously unjudged task-query/asset pairs in
+the top tens (all four columns) of the semantic `library` runs of akm `release/0.10.0` `f8f97704` and three akm#1260 prototypes, with
+the judge endpoint `fast/qwen3.6-35b-a3b` (`judge` on each row). 69 queries; 103 of grade 0, 14 of 1, 10 of 2, 11 of 3. No query,
+asset or earlier grade changed. The library has 2,014 rows (1,982 canonical pairs, 604 relevant); retrieval scoring 0.4. Books were not
+expanded.
 
 ## Expanded judgments — 2026-10-15 (UTC)
 
@@ -203,7 +211,7 @@ Three workflows were written in a workflow format that akm 0.9.26 refuses to rea
 
 ## code/ and repomap/
 
-Two more sets in the format of "A set of your own" below, added for [akm#1260](https://github.com/itlackey/akm/issues/1260) (repo-map assets and fenced code in search). They are not collections of a default run: run each with `--cases`. They leave the inputs of `library` and `books` as they are, `./generate-assets` does not rewrite them, and their grades are provisional, by the [2026-10-27 review](judgment-review-20261027.md) and not by a judge endpoint, until a real judge grades them again.
+Two more sets in the format of "A set of your own" below, added for [akm#1260](https://github.com/itlackey/akm/issues/1260) (repo-map assets and fenced code in search). They are not collections of a default run: run each with `--cases`. They leave the inputs of `library` and `books` as they are, `./generate-assets` does not rewrite them, and since 2026-10-27 they are graded by the judge endpoint `fast/qwen3.6-35b-a3b` (`label --cases`, then `label --from` the semantic runs of four akm builds). The earlier provisional grades of the [2026-10-27 review](judgment-review-20261027.md) are kept beside each set's qrels as `qrels.claude-review.jsonl`.
 
 - [`code/`](code/README.md): 30 code-shaped lookups (flags, identifiers, config keys, environment variables, error strings, snippets) whose answers sit inside fenced code of `corpus/library`. `code/library` is a link to that library. Written from the library under the provenance rules of "How they were written" above.
 - [`repomap/`](repomap/README.md): 20 "where is X implemented" lookups over a static repo map of akm's `src/` at `f8f97704`, one asset per top-level directory, in two variants: inline code in list items (`repomap/library`, run with `--cases evals/retrieval/assets/repomap`) and raw fenced repomix output (`repomap/fenced`, run with `--cases evals/retrieval/assets/repomap/fenced`). Its README gives the exact commands that made the map.

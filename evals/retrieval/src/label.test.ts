@@ -876,10 +876,10 @@ describe("stampLegacy (#49)", () => {
 
   test("the library's own qrels all record the digest of their asset and a judge, and the digests are those of asset files", () => {
     const rows = parseQrels(readFileSync(join(import.meta.dir, "..", "assets", "qrels.jsonl"), "utf8"));
-    expect(rows.length).toBe(1876);
+    expect(rows.length).toBe(2014);
     expect(rows.filter((r) => !/^[0-9a-f]{64}$/.test(r.asset_sha256 ?? "")).length).toBe(0);
     expect(rows.filter((r) => r.judge === undefined).length).toBe(0);
-    expect(new Set(rows.map((r) => r.judge))).toEqual(new Set([LEGACY_JUDGE, "chat/qwen3.8-27b", "codex-review"])); // original grades plus the documented coverage expansion
+    expect(new Set(rows.map((r) => r.judge))).toEqual(new Set([LEGACY_JUDGE, "chat/qwen3.8-27b", "codex-review", "fast/qwen3.6-35b-a3b"])); // original grades plus the documented coverage expansions (2026-10-15, 2026-10-27)
   });
 
   test("the command: --stamp-legacy is for the public library, and says so for a set of your own", () => {

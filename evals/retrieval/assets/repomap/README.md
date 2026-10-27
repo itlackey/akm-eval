@@ -14,7 +14,7 @@ evals/retrieval/run --cases evals/retrieval/assets/repomap/fenced   # the fenced
 
 Add `--semantic` to score semantic search too. The results go to `private/retrieval/results/<UTC date>-<label>-own/`.
 
-**The grades are provisional.** No judge endpoint was reachable when the set was made, so the grades are a model review in the maintenance session under the [2026-10-27 review protocol](../judgment-review-20261027.md). Grade the set again with a real judge before trusting a difference.
+**The grades are a judge endpoint's** (since 2026-10-27): `fast/qwen3.6-35b-a3b` through `label --cases`, then `label --from` the semantic runs of akm `f8f97704` and the akm#1260 prototypes. Each variant is graded on its own text: `qrels.jsonl` 228 pairs (158 / 16 / 22 / 32 of grades 0 to 3), `fenced/qrels.jsonl` 258 (151 / 31 / 40 / 36). `r15` has no relevant asset in either, so both score 19 queries. The first, provisional grades (below) are kept as `qrels.claude-review.jsonl` in each folder; the judge agrees with them on relevant against not for 80.7% (κ 0.34) of the inline pairs and 76.0% (κ 0.28) of the fenced ones, and calls far more pairs relevant.
 
 ## The fixture
 
@@ -53,13 +53,13 @@ The format of `../README.md`; `fenced/queries.jsonl` is a link to this file. `id
 
 Claude wrote them in the maintenance session on 2026-10-27 from the akm source at `f8f97704`, reading the files that implement each behaviour, before the map was indexed or akm had seen them. They were committed (`c4df419`) before the fixture, and none was changed after.
 
-## qrels.jsonl
+## qrels.claude-review.jsonl (the provisional grades)
 
-The library has 15 assets, so every query/asset pair is graded: 300 rows, 265 of grade 0, 11 of grade 1, 5 of grade 2 and 19 of grade 3, with `judge: claude-review` and the provenance fields of `../README.md`. `fenced/qrels.jsonl` gives every pair the same grade, with the digest of the fenced asset. An asset is a 3 when it lists the file and symbol that implement what the query asks, checked against the akm source; a 2 when it lists a closely related implementation, or the right file without the symbol; a 1 when it holds related code, such as a caller or a helper, but not the implementation. Two queries (`r05` `CANONICAL_INDEX_DB_VERSION`, `r17` `EXECUTION_MAX_TIMEOUT_MS`) have no 3: compress dropped the constant, so the best asset names the file only.
+The library has 15 assets, so every query/asset pair is graded: 300 rows, 265 of grade 0, 11 of grade 1, 5 of grade 2 and 19 of grade 3, with `judge: claude-review` and the provenance fields of `../README.md`. `fenced/qrels.claude-review.jsonl` gives every pair the same grade, with the digest of the fenced asset. An asset is a 3 when it lists the file and symbol that implement what the query asks, checked against the akm source; a 2 when it lists a closely related implementation, or the right file without the symbol; a 1 when it holds related code, such as a caller or a helper, but not the implementation. Two queries (`r05` `CANONICAL_INDEX_DB_VERSION`, `r17` `EXECUTION_MAX_TIMEOUT_MS`) have no 3: compress dropped the constant, so the best asset names the file only.
 
 ## Limits
 
-- One model wrote and graded the set; its grades have not been checked against a person or a second judge.
+- One model wrote the set and a second (the judge) grades it; neither has been checked against a person. Since the judge grades the two variants separately, their qrels differ and their absolute scores compare less cleanly than under the provisional grades, which gave both the same grade.
 - 20 queries over 15 assets: one query moves a mean by 0.05, and a random ranking already puts a relevant asset in the first 10 of most queries, so `recall_10` and `success_5` say little here. Read `mrr` and `ndcg_10`.
 - The set measures finding the right directory's map, not the right file or symbol inside it. That needs the fragment-level metric that akm#1260 lists as an optional extension, which this set does not use.
 - The map is of akm itself. The queries' words come from akm's source, which the map's file and symbol names also come from.

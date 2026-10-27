@@ -6,7 +6,7 @@ set -uo pipefail
 
 FILE=answer.txt
 EXPECTED_PATH=src/core/asset/markdown-fragments.ts
-SYMBOLS=(splitMarkdownFragments)
+SYMBOLS=(splitMarkdownFragments splitMarkdownFragmentStats)
 
 if [[ ! -f "$FILE" ]]; then echo "$FILE missing"; exit 1; fi
 mapfile -t lines < <(grep -v '^[[:space:]]*$' "$FILE")
