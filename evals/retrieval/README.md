@@ -37,6 +37,8 @@ Results go to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (`priva
 - `library/`: the folder akm indexes, or a link to it. The refs in `qrels.jsonl` are the refs `akm search` prints for it.
 - `bundles.json`, only when `library/` is a folder of bundles: `{ "notes": "akm", "site": "website-snapshot" }`, each bundle's folder and adapter. Each bundle is indexed in place, read only, and its refs are `<folder>//<path>`.
 
+Three such sets are committed, for akm#1260, with provisional grades: `--cases evals/retrieval/assets/code` (code-shaped lookups over the public library), and `--cases evals/retrieval/assets/repomap` and `--cases evals/retrieval/assets/repomap/fenced` (a repo map of akm's `src/` with inline or fenced symbols). See "code/ and repomap/" in `assets/README.md`.
+
 ## How a query is scored
 
 Each judgment grades an asset 0 to 3 for a query: 3 is exactly the asset to load, 2 relevant and useful, 1 same topic but no help, 0 unrelated. Grade 2 or 3 is relevant. A task query with no relevant asset is not scored, and is counted with the abstentions. A result naming a section (`ref#section`) counts as the asset.
