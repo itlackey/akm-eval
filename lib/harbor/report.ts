@@ -76,8 +76,8 @@ export interface ArmSummary {
   exceptions: Record<string, number>;
   /** Trials whose agent, or its setup, ran out of time (`timedOut`). */
   timeouts: number;
-  /** The mean per scored trial, over those that have the figure: minutes in all, minutes of the agent's own run, and dollars. An errored trial stopped in the setup and says nothing of what a run takes. */
-  per_trial: { minutes: number | null; agent_minutes: number | null; cost_usd: number | null };
+  /** The mean per scored trial, over those that have the figure: minutes in all, minutes of the agent's own run, dollars, input and output tokens, and tool calls (akm's included). An errored trial stopped in the setup and says nothing of what a run takes. Summaries written before the last three were added lack them. */
+  per_trial: { minutes: number | null; agent_minutes: number | null; cost_usd: number | null; input_tokens: number | null; output_tokens: number | null; tool_calls: number | null };
   tokens: { input: number; cache: number; output: number; cost_usd: number | null };
 }
 
@@ -288,6 +288,9 @@ function summarize(trials: Trial[]): ArmSummary {
       minutes: average(ok.map((t) => (t.seconds === null ? null : t.seconds / 60)), 1),
       agent_minutes: average(ok.map((t) => (t.agentSeconds == null ? null : t.agentSeconds / 60)), 1),
       cost_usd: average(ok.map((t) => t.costUsd), 4),
+      input_tokens: average(ok.map((t) => t.tokens?.input), 0),
+      output_tokens: average(ok.map((t) => t.tokens?.output), 0),
+      tool_calls: average(ok.map((t) => t.tools), 1),
     },
     tokens: {
       input: sum(withTokens.map((t) => t.tokens?.input ?? 0)),
@@ -367,7 +370,8 @@ export function formatReport(r: Report): string[] {
   const per = (name: string, a: ArmSummary) => {
     const p = a.per_trial;
     const minutes = (x: number | null) => (x === null ? "n/a" : x.toFixed(1));
-    return `  ${name.padEnd(8)} per scored trial: ${minutes(p.minutes)} minutes, ${minutes(p.agent_minutes)} of them the agent's own run${p.cost_usd === null ? "" : `, ${p.cost_usd} USD`}`;
+    const count = (x: number | null, what: string) => (x === null ? "" : `, ${n(x)} ${what}`);
+    return `  ${name.padEnd(8)} per scored trial: ${minutes(p.minutes)} minutes, ${minutes(p.agent_minutes)} of them the agent's own run${p.cost_usd === null ? "" : `, ${p.cost_usd} USD`}${count(p.input_tokens, "input tokens")}${count(p.output_tokens, "output tokens")}${count(p.tool_calls, "tool calls")}`;
   };
   const split = (name: string, s: Split) => `    ${name.padEnd(11)} ${s.passed}/${s.trials} trials passed, difference from the control ${ci(s.delta, true)}`;
   const b = r.better;

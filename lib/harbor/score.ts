@@ -94,6 +94,9 @@ export function metricsOf(report: Report, trials: RunTrial[]) {
     minutes: a.per_trial.minutes,
     agent_minutes: a.per_trial.agent_minutes,
     cost_usd: a.per_trial.cost_usd,
+    input_tokens: a.per_trial.input_tokens,
+    output_tokens: a.per_trial.output_tokens,
+    tool_calls: a.per_trial.tool_calls,
   });
   const d = report.delta;
   const e = report.engagement;
