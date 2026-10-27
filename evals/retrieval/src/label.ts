@@ -334,9 +334,12 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
     const byRef = new Map(listing.map((a) => [a.ref, a]));
     const texts = new Map(listing.map((a) => [a.ref, readFileSync(join(folders.library, a.path), "utf8")]));
     const bm25 = new Bm25(listing.map((a) => ({ ref: a.ref, text: `${a.ref}\n${texts.get(a.ref)}` })));
+    // An expected asset that akm does not index stops the run, as a ref the author mistyped would: unless the qrels grade it for that
+    // query already, as they do a ref an older akm printed for the same file (a command akm now reads as knowledge). It has nothing to grade.
+    const graded = new Set(existing.map((r) => `${r.id}\t${r.ref}`));
     for (const q of queries) {
       for (const ref of q.expected ?? []) {
-        if (byRef.has(ref)) continue;
+        if (byRef.has(ref) || graded.has(`${q.id}\t${ref}`)) continue;
         console.error(`retrieval label: ${q.id} expects ${ref}, which is not an asset akm indexes in the library${listed ? "" : " (a library of bundles is not listed, so expected assets cannot be looked up)"}`);
         return 2;
       }

@@ -27,6 +27,9 @@ Add a release entry here when a version changes.
   semantic ones included. It used to list no own library: a query with `expected` stopped the run, and `--from` left out every result
   that akm's keyword search did not return for the query at labelling time. A library of bundles is pooled as before. Only how pairs are
   chosen for grading changed; no grade, query or score did.
+  label also no longer stops on an expected ref that akm does not index when the qrels already grade that pair: the public q092
+  expects `commands/skills/ai-skills/opencode-extensions/references/commands`, which akm 0.10 prints as a knowledge ref, so label of
+  the public library stopped on every 0.10 build. A mistyped expected ref with no grade still stops the run.
 
 - bakeoff collection and scoring 0.4 (was 0.3). Four new memory-inference inputs bring the corpus to 55 cases (23 memory
   inference): nested and flat scope, an observation date only in metadata, and an undated observation with a file `updated` date.

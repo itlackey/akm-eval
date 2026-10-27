@@ -499,6 +499,17 @@ describe("labelCollection", () => {
     expect(parseQrels(set.qrels()).find((r) => r.ref === "knowledge/c")?.grade).toBe(3);
   });
 
+  test("an expected ref akm no longer indexes stops the run only when the qrels do not grade it for that query", async () => {
+    const queries = [{ id: "q1", query: "alpha", kind: "task", expected: ["commands/old-a"] }];
+    const graded = setup(OWN_FILES_PLAIN, queries, [{ id: "q1", ref: "commands/old-a", grade: 3, reason: "an older akm's ref" }], { alpha: { search: ["a"], curate: ["a"] } });
+    const ok = await printed(() => labelCollection("own", graded.ctx(stubJudge({}).judge), graded.folders));
+    expect(ok.result).toBe(0);
+    const ungraded = setup(OWN_FILES_PLAIN, queries, [], { alpha: { search: ["a"], curate: ["a"] } });
+    const stopped = await printed(() => labelCollection("own", ungraded.ctx(stubJudge({}).judge), ungraded.folders));
+    expect(stopped.result).toBe(2);
+    expect(stopped.err.join("\n")).toContain("q1 expects commands/old-a, which is not an asset akm indexes in the library");
+  });
+
   test("own: says where the set goes when its folder holds none, and creates nothing", async () => {
     const root = tmp();
     const folders: Folders = { library: join(root, "library"), assets: join(root, "own"), results: join(root, "results"), bundles: join(root, "bundles.json") };
