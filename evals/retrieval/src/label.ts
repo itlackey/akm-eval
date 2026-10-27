@@ -3,7 +3,7 @@
 // and a plain BM25 over the library, with the assets the author expected, and a judge model grades each pooled
 // asset 0 to 3. A pair that is already in qrels.jsonl is not graded again unless its asset changed since, so the run can
 // stop and resume. With --from it pools the results of a run instead, the semantic columns too.
-// With --cases DIR it does the same for a set of your own, from akm's results alone. See ../README.md.
+// With --cases DIR it does the same for a set of your own; a set whose library is a folder of bundles is pooled from akm's results alone. See ../README.md.
 //
 //   evals/retrieval/label [--corpus public|custom] [--cases DIR] [--limit N] [--from RESULTS_DIR] [--judge-model ID] [--akm COMMAND]
 
@@ -40,8 +40,10 @@ Use one judge for a set: label warns when the qrels were graded by another, or h
   --corpus  public (default) grades the public library. custom grades a set of your own (--cases DIR; the default custom
             corpus, the rewrite, is not graded: generate carries the public grades over to it).
   --cases   the folder of your own set, in the format of "Run your own set" in evals/retrieval/README.md. It is graded from
-            what akm search and akm curate return for it (no BM25: the library is too big to list), and the grades are appended
-            to its qrels.jsonl. It reports the judge destination before sending your notes; no confirmation is required.
+            what akm search and akm curate return for it, and the grades are appended to its qrels.jsonl. A library that is copied
+            whole (no bundles.json) is listed as the public one is, so its pool also holds a BM25 and the expected assets; a library
+            of bundles is not listed (no BM25, and an expected asset stops the run). It reports the judge destination before
+            sending your notes; no confirmation is required.
   --stamp-legacy  gives every row of assets/qrels.jsonl that records no digest of its asset the digest of the asset as the
             library has it now, and judge "legacy" when it records no judge, so that a later edit to the asset grades the pair
             again. It grades nothing, calls no judge and runs no akm, and can be run again: it stamps only what is not stamped.
@@ -294,8 +296,9 @@ const stamp = () => new Date().toTimeString().slice(0, 8);
  * asset has changed since the grade was made, and appends the grades to the set's qrels.jsonl. A grade that is made again comes
  * after the old one, which a later row of a pair replaces. With `ctx.from`, a results folder of `run`, the pool is what that
  * run returned in every column, semantic search included, in place of the keyword search, curate and BM25 pool. Returns the exit code. The public library is listed whole and read, so
- * its pool holds a plain BM25 over it. The own library is tens of thousands of assets, and akm lists 200 for a call:
- * its pool is what akm search and akm curate return, and what akm said of an asset is all label knows of it.
+ * its pool holds a plain BM25 over it. So is an own library that is copied whole (no bundles.json). An own library of bundles is indexed in
+ * place and can be tens of thousands of assets, and akm lists 200 for a call: its pool is what akm search and akm curate return, and what
+ * akm said of an asset is all label knows of it.
  */
 export async function labelCollection(corpus: Corpus, ctx: { model: string; judge: Judge; limit?: number; from?: string; newSandbox?: () => Sandbox }, folders: Folders): Promise<number> {
   const own = corpus === "own";
@@ -326,14 +329,15 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
   try {
     const version = await akmVersion(sb);
     const nAssets = await akm.load(sb, folders.library, folders.bundles);
-    const listing: Asset[] = own ? [] : await akm.assets(sb, nAssets);
+    const listed = !own || !(folders.bundles && existsSync(folders.bundles));
+    const listing: Asset[] = listed ? await akm.assets(sb, nAssets) : [];
     const byRef = new Map(listing.map((a) => [a.ref, a]));
     const texts = new Map(listing.map((a) => [a.ref, readFileSync(join(folders.library, a.path), "utf8")]));
     const bm25 = new Bm25(listing.map((a) => ({ ref: a.ref, text: `${a.ref}\n${texts.get(a.ref)}` })));
     for (const q of queries) {
       for (const ref of q.expected ?? []) {
         if (byRef.has(ref)) continue;
-        console.error(`retrieval label: ${q.id} expects ${ref}, which is not an asset akm indexes in the library${own ? " (the own library is not listed, so expected assets cannot be looked up)" : ""}`);
+        console.error(`retrieval label: ${q.id} expects ${ref}, which is not an asset akm indexes in the library${listed ? "" : " (a library of bundles is not listed, so expected assets cannot be looked up)"}`);
         return 2;
       }
     }
@@ -344,18 +348,18 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
     const mixed = [...(others.length > 0 ? [`grades by ${others.join(", ")}`] : []), ...(unrecorded > 0 ? [`${unrecorded} grades that record no judge`] : [])];
     if (mixed.length > 0) console.error(`retrieval label: warning: ${name("qrels.jsonl")} has ${mixed.join(" and ")}, and this run grades with ${ctx.model}. Grades of different judges do not mix cleanly: use one judge for a set.`);
 
-    // The own library has no listing: an asset is known by the first hit akm returned for it.
+    // A library of bundles has no listing: an asset is known by the first hit akm returned for it.
     const ask = async (system: "search" | "curate", q: string, searchArgs?: string[]) => {
       const a = await akm.ask(sb, system, q, akm.LIMIT, "keyword", akm.CALL_TIMEOUT_MS, searchArgs);
-      if (own) for (const h of a.assets) if (!byRef.has(h.ref)) byRef.set(h.ref, h);
+      if (!listed) for (const h of a.assets) if (!byRef.has(h.ref)) byRef.set(h.ref, h);
       return a;
     };
     let pooled: Map<string, string[]>;
     if (samples === undefined) {
       pooled = await poolQueries(queries, ask, bm25);
     } else {
-      // An own library has no listing: what akm says of an asset comes from the hits it returns for the query now.
-      if (own) {
+      // A library of bundles has no listing: what akm says of an asset comes from the hits it returns for the query now.
+      if (!listed) {
         for (const q of queries) {
           await ask("search", q.query, q.searchArgs);
           await ask("curate", q.query);
@@ -369,7 +373,7 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
         pooled.set(id, known);
       }
       const absent = queries.filter((q) => !pooled.has(q.id)).length;
-      console.log(`  pool from ${ctx.from}: ${queries.length - absent} of ${queries.length} task queries are in the run${unknown > 0 ? `, and ${unknown} of its results are not assets of this ${own ? "set as akm returns it now" : "library"} and are left out` : ""}`);
+      console.log(`  pool from ${ctx.from}: ${queries.length - absent} of ${queries.length} task queries are in the run${unknown > 0 ? `, and ${unknown} of its results are not assets of this ${listed ? "library" : "set as akm returns it now"} and are left out` : ""}`);
     }
     // A pair whose asset is not what the judge read is graded again. A pair graded before label wrote digests has none, and stays.
     const digestOf = (ref: string): string | undefined => {

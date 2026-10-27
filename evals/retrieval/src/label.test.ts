@@ -408,6 +408,7 @@ async function printed<T>(f: () => Promise<T>): Promise<{ result: T; out: string
 describe("labelCollection", () => {
   const OWN_FILES = { "one/a.md": "alpha alpha alpha\n", "two/b.md": "---\ntitle: B\n---\nbody of b\n", "two/c.md": "body of c\n", "two/d.md": "alpha alpha alpha alpha alpha alpha\n" };
   const OWN_BUNDLES = { one: "akm", two: "claude" };
+  const OWN_FILES_PLAIN = { "a.md": "alpha alpha alpha\n", "b.md": "body of b\n", "c.md": "body of c\n", "d.md": "alpha alpha alpha alpha alpha alpha\n" };
   const OWN_QUERIES = [
     { id: "q1", query: "alpha", kind: "task" },
     { id: "q2", query: "beta", kind: "question" },
@@ -483,8 +484,19 @@ describe("labelCollection", () => {
     const { result, err } = await printed(() => labelCollection("own", set.ctx(judge), set.folders));
     expect(result).toBe(2);
     expect(err.join("\n")).toContain("q1 expects two//knowledge/c");
-    expect(err.join("\n")).toContain("the own library is not listed");
+    expect(err.join("\n")).toContain("a library of bundles is not listed");
     expect(seen).toEqual([]);
+  });
+
+  test("own: a library that is copied whole is listed, so its pool holds a BM25 and the expected assets, as the public one does", async () => {
+    const set = setup(OWN_FILES_PLAIN, [{ ...OWN_QUERIES[0], expected: ["knowledge/c"] }], [], { alpha: { search: ["a"], curate: ["a"] } });
+    const { judge, seen } = stubJudge({ "knowledge/c": 3 });
+    const { result, out } = await printed(() => labelCollection("own", set.ctx(judge), set.folders));
+    expect(result).toBe(0);
+    expect(out[0]).toContain("retrieval label (own): akm 0.9.99-test, 4 assets, 1 task queries");
+    // a from akm; d and a from the BM25 ("alpha"); c expected
+    expect(seen.map((m) => /Ref: (.*)\n/.exec(m)?.[1]).sort()).toEqual(["knowledge/a", "knowledge/c", "knowledge/d"]);
+    expect(parseQrels(set.qrels()).find((r) => r.ref === "knowledge/c")?.grade).toBe(3);
   });
 
   test("own: says where the set goes when its folder holds none, and creates nothing", async () => {
@@ -654,6 +666,16 @@ describe("labelCollection --from", () => {
     expect(result).toBe(0);
     expect(out.join("\n")).toContain("and 1 of its results are not assets of this set as akm returns it now and are left out");
     expect(seen.map((m) => /Ref: (.*)\n/.exec(m)?.[1]).sort()).toEqual(["one//knowledge/a", "two//knowledge/b"]);
+  });
+
+  test("own: a run's results that akm's keyword search does not return now are graded too when the library is listed", async () => {
+    const set = setup({ "a.md": "alpha alpha\n", "b.md": "body of b\n" }, [{ id: "q1", query: "alpha", kind: "task" }], [], { alpha: { search: ["a"], curate: ["a"] } });
+    const dir = from([row("q1", { search: ["knowledge/a"], semantic_search: ["knowledge/b", "knowledge/missing"] })], { eval: "retrieval", corpus: "custom", collection: "own" });
+    const { judge, seen } = stubJudge({});
+    const { result, out } = await printed(() => labelCollection("own", { ...set.ctx(judge), from: dir }, set.folders));
+    expect(result).toBe(0);
+    expect(out.join("\n")).toContain("and 1 of its results are not assets of this library and are left out");
+    expect(seen.map((m) => /Ref: (.*)\n/.exec(m)?.[1]).sort()).toEqual(["knowledge/a", "knowledge/b"]);
   });
 });
 

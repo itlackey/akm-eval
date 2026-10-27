@@ -41,7 +41,7 @@ Claude wrote them in the maintenance session on 2026-10-27 from the library, not
 
 ### Grade it again
 
-`evals/retrieval/label` grades only pairs that have no row, or whose asset changed, so it keeps these grades. To replace them with a judge's, move `qrels.jsonl` aside, run `evals/retrieval/label --cases evals/retrieval/assets/code` (its own-set pool is akm search and curate and the expected assets, without BM25), then `label --from` on the runs to compare, and `scripts/rescore/run` on both sides before `scripts/compare/run`.
+`evals/retrieval/label` grades only pairs that have no row, or whose asset changed, so it keeps these grades. To replace them with a judge's, move `qrels.jsonl` aside, run `evals/retrieval/label --cases evals/retrieval/assets/code` (the library is copied whole, so the pool is akm search and curate, the BM25 and the expected assets, as above), then `label --from` on the runs to compare, and `scripts/rescore/run` on both sides before `scripts/compare/run`.
 
 ## Limits
 

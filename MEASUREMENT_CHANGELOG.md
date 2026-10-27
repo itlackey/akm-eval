@@ -17,6 +17,12 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- No eval changed version. `evals/retrieval/label --cases DIR` lists a set whose `library/` is copied whole (no `bundles.json`) as it lists
+  the public library, so the pool of such a set also holds the BM25 and the expected assets, and `--from` grades every result of a run,
+  semantic ones included. It used to list no own library: a query with `expected` stopped the run, and `--from` left out every result
+  that akm's keyword search did not return for the query at labelling time. A library of bundles is pooled as before. Only how pairs are
+  chosen for grading changed; no grade, query or score did.
+
 - bakeoff collection and scoring 0.4 (was 0.3). Four new memory-inference inputs bring the corpus to 55 cases (23 memory
   inference): nested and flat scope, an observation date only in metadata, and an undated observation with a file `updated` date.
   They use AKM's existing source-context/scope contract (akm#1209 / PR #1222); no prompt is duplicated in the evaluator.
