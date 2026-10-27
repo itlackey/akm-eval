@@ -1,0 +1,20 @@
+{"id": "r01", "query": "where does akm strip fenced code and link targets from markdown before indexing it for search", "kind": "concept", "expected": ["knowledge/akm-map/src/indexer"]}
+{"id": "r02", "query": "projectMarkdownFragmentContent", "kind": "identifier", "expected": ["knowledge/akm-map/src/indexer"]}
+{"id": "r03", "query": "where are markdown bodies split into addressable akm-fragment selectors", "kind": "concept", "expected": ["knowledge/akm-map/src/core"]}
+{"id": "r04", "query": "ftsOrMatch", "kind": "identifier", "expected": ["knowledge/akm-map/src/indexer"]}
+{"id": "r05", "query": "CANONICAL_INDEX_DB_VERSION", "kind": "identifier", "expected": ["knowledge/akm-map/src/storage"]}
+{"id": "r06", "query": "where is robots.txt checked before fetching a website snapshot", "kind": "concept", "expected": ["knowledge/akm-map/src/sources"]}
+{"id": "r07", "query": "where is a package downloaded from the npm registry checked against its sha512 integrity", "kind": "concept", "expected": ["knowledge/akm-map/src/core"]}
+{"id": "r08", "query": "satisfiesRange maxSatisfying", "kind": "identifier", "expected": ["knowledge/akm-map/src/registry"]}
+{"id": "r09", "query": "where does the CLI reject flags a command does not declare", "kind": "concept", "expected": ["knowledge/akm-map/src/cli"]}
+{"id": "r10", "query": "redactCredentialPatterns", "kind": "identifier", "expected": ["knowledge/akm-map/src/core"]}
+{"id": "r11", "query": "where are task run logs redacted of secret values", "kind": "concept", "expected": ["knowledge/akm-map/src/tasks"]}
+{"id": "r12", "query": "where is a workflow markdown file parsed into steps", "kind": "concept", "expected": ["knowledge/akm-map/src/workflows"]}
+{"id": "r13", "query": "withImmediateTransaction", "kind": "identifier", "expected": ["knowledge/akm-map/src/storage"]}
+{"id": "r14", "query": "where are Claude Code and Codex session transcripts read for extraction", "kind": "concept", "expected": ["knowledge/akm-map/src/integrations"]}
+{"id": "r15", "query": "classifyNetworkAddress", "kind": "identifier", "expected": ["knowledge/akm-map/src/core"]}
+{"id": "r16", "query": "where does curate decide an input is not a real task, like a tool envelope", "kind": "concept", "expected": ["knowledge/akm-map/src/core", "knowledge/akm-map/src/commands"]}
+{"id": "r17", "query": "EXECUTION_MAX_TIMEOUT_MS", "kind": "identifier", "expected": ["knowledge/akm-map/src/execution"]}
+{"id": "r18", "query": "where is akm show implemented", "kind": "concept", "expected": ["knowledge/akm-map/src/commands"]}
+{"id": "r19", "query": "where does setup download the local embedding model files", "kind": "concept", "expected": ["knowledge/akm-map/src/setup", "knowledge/akm-map/src/llm"]}
+{"id": "r20", "query": "shapeForCommand", "kind": "identifier", "expected": ["knowledge/akm-map/src/output"]}
