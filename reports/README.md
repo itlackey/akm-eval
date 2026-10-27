@@ -2,6 +2,7 @@
 
 Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
+- [`repomap-codeblocks-2026-10-27/README.md`](repomap-codeblocks-2026-10-27/README.md): work in progress, phase 1 of akm#1260; the keyword-only b0 retrieval baseline of akm `release/0.10.0` at `f8f97704` on `library`, `books` and the new `code` and `repomap` sets (provisional grades). No decision yet.
 - [`flint-don-2026-10-25/README.md`](flint-don-2026-10-25/README.md): Flint on Apple M4 Pro with AKM 0.10.261011-beta; full GGUF bakeoff, pilots, official rec INT4 diagnostics, and a [full 55-case rec capture](flint-don-2026-10-25/rec/budget-run.md) with explicit completion budgets, raw outputs and native timing counters. Earlier preflight/budget failures remain preserved.
 - [`no-change-132-2026-10-21/README.md`](no-change-132-2026-10-21/README.md): bakeoff 0.3 scores memory inference's explicit no-change decision; a paired 19-case Flash-Next pilot of the 0.2 and 0.3 harnesses on one akm `release/0.10.0` build (no model-quality claim), with the remaining scope and date cases.
 - [`memory-lifecycle-125/README.md`](memory-lifecycle-125/README.md): manual, opt-in real-akm checks that memory claims, evidence and scopes survive extraction, acceptance, improvement and recall; all 12 pass on akm `release/0.10.0` at `d2369845a`.
