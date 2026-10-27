@@ -6,27 +6,35 @@ import { goldText, holds, libraryProblems, nudges, specOf, staleTokens } from ".
 import { taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
-const TASKS = join(EVAL_DIR, "tasks");
-const LIBRARIES = join(EVAL_DIR, "libraries");
+// The public tasks, and the akm#1260 repo-map family that runs with --cases evals/agent-ab/cases/repomap.
+const SETS: [string, string][] = [
+  ["the public tasks", EVAL_DIR],
+  ["the repomap tasks", join(EVAL_DIR, "cases", "repomap")],
+];
 
-describe("the public tasks", () => {
-  const tasks = taskNames(TASKS);
+for (const [name, dir] of SETS) {
+  describe(name, () => {
+    const TASKS = join(dir, "tasks");
+    const LIBRARIES = join(dir, "libraries");
+    const tasks = taskNames(TASKS);
 
-  test("each declares the literals its verifier looks for, and its gold ref holds every one", () => {
-    for (const t of tasks) {
-      expect(specOf(join(TASKS, t)).tokens.length).toBeGreaterThan(0);
-      expect({ task: t, problems: libraryProblems(join(TASKS, t), LIBRARIES) }).toEqual({ task: t, problems: [] });
-    }
+    test("each declares the literals its verifier looks for, and its gold ref holds every one", () => {
+      expect(tasks.length).toBeGreaterThan(0);
+      for (const t of tasks) {
+        expect(specOf(join(TASKS, t)).tokens.length).toBeGreaterThan(0);
+        expect({ task: t, problems: libraryProblems(join(TASKS, t), LIBRARIES) }).toEqual({ task: t, problems: [] });
+      }
+    });
+
+    test("each declares only literals that its verifier or its solution has", () => {
+      for (const t of tasks) expect({ task: t, stale: staleTokens(join(TASKS, t)) }).toEqual({ task: t, stale: [] });
+    });
+
+    test("none tells the agent to use akm or to consult a skill, and none names its gold ref", () => {
+      for (const t of tasks) expect({ task: t, nudges: nudges(join(TASKS, t)) }).toEqual({ task: t, nudges: [] });
+    });
   });
-
-  test("each declares only literals that its verifier or its solution has", () => {
-    for (const t of tasks) expect({ task: t, stale: staleTokens(join(TASKS, t)) }).toEqual({ task: t, stale: [] });
-  });
-
-  test("none tells the agent to use akm or to consult a skill, and none names its gold ref", () => {
-    for (const t of tasks) expect({ task: t, nudges: nudges(join(TASKS, t)) }).toEqual({ task: t, nudges: [] });
-  });
-});
+}
 
 describe("holds", () => {
   test("finds a token as a whole word, so a short flag or word does not match inside a longer one", () => {

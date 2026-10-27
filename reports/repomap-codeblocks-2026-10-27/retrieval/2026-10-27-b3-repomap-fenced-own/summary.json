@@ -1,0 +1,277 @@
+{
+  "eval": "retrieval",
+  "corpus": "custom",
+  "corpus_folder": "evals/retrieval/assets/repomap/fenced",
+  "collection": "own",
+  "label": "b3-repomap-fenced",
+  "date": "2026-10-27T07:04:39.719Z",
+  "git_commit": "397009b",
+  "akm_version": "0.10.261015",
+  "akm_bin": "bun /home/user/akm-b3/src/cli.ts",
+  "akm_build": "b98738aa4",
+  "akm_build_fingerprint": null,
+  "search_mode": {
+    "keyword": "keyword"
+  },
+  "semantic_flag": "off",
+  "depth": 10,
+  "relevant_from_grade": 2,
+  "limit": null,
+  "n_assets": 15,
+  "index_seconds": {
+    "keyword": 0.8
+  },
+  "status": "complete",
+  "aborted_reason": null,
+  "n_queries": 20,
+  "n_scored": 20,
+  "n_errored": 0,
+  "errored": {
+    "search": 0,
+    "curate": 0
+  },
+  "timeouts": 0,
+  "metrics": {
+    "search": {
+      "n": 20,
+      "ndcg_10": 0.7546,
+      "ndcg_10_condensed": 0.7546,
+      "p_5": 0.2,
+      "success_5": 0.8,
+      "mrr": 0.6622,
+      "recall_10": 1,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "curate": {
+      "n": 20,
+      "ndcg_10": 0.7546,
+      "ndcg_10_condensed": 0.7546,
+      "p_5": 0.2,
+      "success_5": 0.8,
+      "mrr": 0.6622,
+      "recall_10": 1,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    }
+  },
+  "abstention": {
+    "non_task": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    },
+    "no_answer": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    }
+  },
+  "config": {
+    "keyword": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "off",
+      "registries": []
+    }
+  },
+  "engine": {
+    "engine": null,
+    "model": null,
+    "endpoint": null,
+    "temperature": null,
+    "enableThinking": null,
+    "timeoutMs": null,
+    "engines": {}
+  },
+  "assets_sha256": "56384b23a8a3875054092284593b0d7996476bb426d851f61537d7e54a81be75",
+  "assets": {
+    "library_sha256": "0bb2e697a938e75bea9e590b470e92dbfedbd6f3c881069a5768399b3d46f4a4",
+    "bundles_sha256": null,
+    "queries_sha256": "32ad70026215357ccb9338b5d0a07f7ff253f75ce5994f176947ccc7e22335cb",
+    "qrels_sha256": "8953de3ff9ad7a0f070d6206ae159705d1303cc02a8ff5e3d3bb030552a81756"
+  },
+  "seed": null,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "retrieval",
+    "corpus": "custom",
+    "collection": "own",
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.3"
+    },
+    "cases": {
+      "r01": {
+        "input_sha256": "d81bde977ebeeb7f6b63cd2b3bc1c4bb31266d5c6f9fe5c49fd2cbfd84713a2f",
+        "label_sha256": "dbdc374adc33e06d2a7de26e80ca97d34a4cf48dbc38d9185d260d3dfd2b2fac"
+      },
+      "r02": {
+        "input_sha256": "d8ca2b5b82c5528632fafc10eb170d12a0f1e1e210e8677ace24cc695f5100ed",
+        "label_sha256": "9013625514123df5e1a5bd94f19f581b6500834083b0825bee41c0dcec801b47"
+      },
+      "r03": {
+        "input_sha256": "7a14d35a95200de433341a59e8ea3bd82effd4fb91fc187abc62c7d19b7318a9",
+        "label_sha256": "c440599b56208500d211582a6dd9fc694490a6b8fee721f7596f5249481fec37"
+      },
+      "r04": {
+        "input_sha256": "616f752ac57f11b319903c55dbfaa0e794fc1e5ff28dda1ba17c6faec27bb414",
+        "label_sha256": "a83a4f2a1ce878112013f52a9c59cb5107bb2dfa6152718a1259ef97a39ff318"
+      },
+      "r05": {
+        "input_sha256": "8def0723e60f76892ac8f47b53b19c0b7d10f6bde27fc4474d4615530a3f11bb",
+        "label_sha256": "6b78841248946773c8990a88f8de47532a231a06e44fc7bd5d36e83847dbd18a"
+      },
+      "r06": {
+        "input_sha256": "b43d7bbfe6b6d38b95afbbd8e69452269965f899d7350e3d419d2ee19bd17309",
+        "label_sha256": "f322e9f7a7acb6eb077772f3e043a4b3dc16739c7cf0a69111d80cc13bd647dd"
+      },
+      "r07": {
+        "input_sha256": "b84ae0f67c1599a386e61cf040539f385406b1ea574238536930daa9983282dc",
+        "label_sha256": "cc12e07701db98bfc91079a302094d0d266c8525c36ddc365e88dee93beac153"
+      },
+      "r08": {
+        "input_sha256": "165379cbb8d4259936ab37a73748ec5e79da8778761700b101b04e55e923a1ff",
+        "label_sha256": "9f19bd063b2c67b61b4305ea21cc287e5c935fb838a3d7a81106f5a46785f152"
+      },
+      "r09": {
+        "input_sha256": "7e31e25daa643b5acd0f81f5a3ecb67c85c0506c08c0682675279a673283fb09",
+        "label_sha256": "4f634b3c4a3c69d749d87c730e2f734b098772faab2d0235bc764208846e40bf"
+      },
+      "r10": {
+        "input_sha256": "5f15e5f329b9b1897a6922326a0a1d7af65ad8433a7fa139a326d2611b7664f3",
+        "label_sha256": "3dc630462b13684765223e8106876b69087c20f8a820e33827db51f3e7135130"
+      },
+      "r11": {
+        "input_sha256": "c26520292893750394e757ec6034f086685bc375e124be56de0ed44094b2cb38",
+        "label_sha256": "581d56a8d2a97fccb3c8c5ab57fc91c7fc60e201bed0a86934ea0844f146db1e"
+      },
+      "r12": {
+        "input_sha256": "1ba6c6e4cf0ce265055a03d6a7ae466d26585bb78d2911848f3d54f5e03b9b36",
+        "label_sha256": "2335c484d8e0dc45907b44400d88e43f6bf950d5bd7d78798e884171fb2880f3"
+      },
+      "r13": {
+        "input_sha256": "83263f2393bc9856fcdaa27676b6284ac4bef3f3daad7453629062a18f1f46d3",
+        "label_sha256": "b858144445cee7d81ff9c7305f93f6cb30d182ca51dcdd2b4e5206324b6c5298"
+      },
+      "r14": {
+        "input_sha256": "6758b6e54f72f009692243c34eab2f4a77b26f9a460c31b9d84ea6afeba0ac40",
+        "label_sha256": "e18acfa15bc3e18ebb7cfa1548f4c77a3f343b5de3cb70e9e7d664eb6c265040"
+      },
+      "r15": {
+        "input_sha256": "08790182f836e4e67ad0676b812b52a267a4ec7d28f6d007534854c103c407ec",
+        "label_sha256": "18b009641d0373b3f6e7971379249eba66179dce7583de094ee32d7b9995e524"
+      },
+      "r16": {
+        "input_sha256": "381b7599e114d22f5b9d56cf67d8e14134bfdba770f7a3e81688f7bd92efdeea",
+        "label_sha256": "ff5423ff639deec7f7a3759e1690aad8035faa5b36d361c7407b058daabf0e79"
+      },
+      "r17": {
+        "input_sha256": "fd76c83f20f9ab2e44bbf344ce85247c1b86132fbd80e22d38f06006271669e8",
+        "label_sha256": "74b46216a319472cf3b9979d845f7a7b4974c9b4ff87a011db51c43e6fe3d613"
+      },
+      "r18": {
+        "input_sha256": "53d724dc1a6702f3e51f4361dc61f76967d10a2ace617e91b87efb5e2a6c9b3e",
+        "label_sha256": "1103a05645e51f5017b493f0fb6c6583c8cac0d0dd7bd7bf3930dcc8382610c0"
+      },
+      "r19": {
+        "input_sha256": "a82fef89ad616fb5ece273b0f16e626373554032b30ecad146adc42906cbf54a",
+        "label_sha256": "be88ee0b6077672b586a51731a3ffc4b48a24eb303da620d39a0118daca79133"
+      },
+      "r20": {
+        "input_sha256": "646e52cfac2b7437dd56da767aa1bfde4413a871921454f82724872f0182ca7a",
+        "label_sha256": "cd550a4c87795f530a92d1e3cc6c58ab5048dde9a0df4f3fb43d443a6b3c8e37"
+      }
+    },
+    "akm": {
+      "version": "0.10.261015",
+      "bin": "bun /home/user/akm-b3/src/cli.ts",
+      "build": "b98738aa4",
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "keyword": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "off",
+          "registries": []
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 120000,
+      "seed": null
+    },
+    "engines": {},
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "r01",
+        "r02",
+        "r03",
+        "r04",
+        "r05",
+        "r06",
+        "r07",
+        "r08",
+        "r09",
+        "r10",
+        "r11",
+        "r12",
+        "r13",
+        "r14",
+        "r15",
+        "r16",
+        "r17",
+        "r18",
+        "r19",
+        "r20"
+      ],
+      "scored": [
+        "r01",
+        "r02",
+        "r03",
+        "r04",
+        "r05",
+        "r06",
+        "r07",
+        "r08",
+        "r09",
+        "r10",
+        "r11",
+        "r12",
+        "r13",
+        "r14",
+        "r15",
+        "r16",
+        "r17",
+        "r18",
+        "r19",
+        "r20"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 25.576
+}

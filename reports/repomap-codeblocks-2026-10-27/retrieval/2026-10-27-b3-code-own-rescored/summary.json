@@ -1,0 +1,232 @@
+{
+  "eval": "retrieval",
+  "corpus": "custom",
+  "corpus_folder": "evals/retrieval/assets/code",
+  "collection": "own",
+  "label": "b3-code-rescored",
+  "date": "2026-10-27T07:03:51.531Z",
+  "git_commit": "397009b",
+  "akm_version": "0.10.261015",
+  "akm_bin": "bun /home/user/akm-b3/src/cli.ts",
+  "akm_build": "b98738aa4",
+  "akm_build_fingerprint": null,
+  "search_mode": {
+    "keyword": "keyword"
+  },
+  "semantic_flag": "off",
+  "depth": 10,
+  "relevant_from_grade": 2,
+  "limit": null,
+  "n_assets": 251,
+  "index_seconds": {
+    "keyword": 1.6
+  },
+  "status": "complete",
+  "aborted_reason": null,
+  "n_queries": 30,
+  "n_scored": 30,
+  "n_errored": 0,
+  "errored": {
+    "search": 0,
+    "curate": 0
+  },
+  "timeouts": 0,
+  "metrics": {
+    "search": {
+      "n": 30,
+      "ndcg_10": 0.9489,
+      "ndcg_10_condensed": 0.9489,
+      "p_5": 0.2867,
+      "success_5": 1,
+      "mrr": 0.9833,
+      "recall_10": 0.9722,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "curate": {
+      "n": 30,
+      "ndcg_10": 0.9489,
+      "ndcg_10_condensed": 0.9489,
+      "p_5": 0.2867,
+      "success_5": 1,
+      "mrr": 0.9833,
+      "recall_10": 0.9722,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    }
+  },
+  "abstention": {
+    "non_task": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    },
+    "no_answer": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    }
+  },
+  "config": {
+    "keyword": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "off",
+      "registries": []
+    }
+  },
+  "engine": {
+    "engine": null,
+    "model": null,
+    "endpoint": null,
+    "temperature": null,
+    "enableThinking": null,
+    "timeoutMs": null,
+    "engines": {}
+  },
+  "assets_sha256": "f1fde5ae7d41c767da1b89dc4d830364dbf0288778856db3f30eb3debb1bf971",
+  "assets": {
+    "library_sha256": "8813ba794a3d327c4d58927ef75edf8c080e8b5814c8e523e620774b5980a227",
+    "bundles_sha256": null,
+    "queries_sha256": "5bb1cd8045cae701254f9043683d94fddd1cb0cb3838e24b495f8931bba46c6a",
+    "qrels_sha256": "a8ab12499410bb506a322e758e326a5ee9c528be53b39a2c9727e0151a223726"
+  },
+  "seed": null,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "retrieval",
+    "corpus": "custom",
+    "collection": "own",
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.3"
+    },
+    "akm": {
+      "version": "0.10.261015",
+      "bin": "bun /home/user/akm-b3/src/cli.ts",
+      "build": "b98738aa4",
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "keyword": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "off",
+          "registries": []
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 120000,
+      "seed": null
+    },
+    "engines": {},
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "c01",
+        "c02",
+        "c03",
+        "c04",
+        "c05",
+        "c06",
+        "c07",
+        "c08",
+        "c09",
+        "c10",
+        "c11",
+        "c12",
+        "c13",
+        "c14",
+        "c15",
+        "c16",
+        "c17",
+        "c18",
+        "c19",
+        "c20",
+        "c21",
+        "c22",
+        "c23",
+        "c24",
+        "c25",
+        "c26",
+        "c27",
+        "c28",
+        "c29",
+        "c30"
+      ],
+      "scored": [
+        "c01",
+        "c02",
+        "c03",
+        "c04",
+        "c05",
+        "c06",
+        "c07",
+        "c08",
+        "c09",
+        "c10",
+        "c11",
+        "c12",
+        "c13",
+        "c14",
+        "c15",
+        "c16",
+        "c17",
+        "c18",
+        "c19",
+        "c20",
+        "c21",
+        "c22",
+        "c23",
+        "c24",
+        "c25",
+        "c26",
+        "c27",
+        "c28",
+        "c29",
+        "c30"
+      ],
+      "errored": []
+    },
+    "rescored_from": {
+      "results": "2026-10-27-b3-code-own",
+      "scorer": {
+        "version": "0.3"
+      },
+      "at": "2026-10-27T07:12:05.204Z",
+      "dropped": []
+    }
+  },
+  "wall_seconds": 37.843,
+  "scoring_version": "0.3",
+  "rescored_from": {
+    "results": "2026-10-27-b3-code-own",
+    "scorer": {
+      "version": "0.3"
+    },
+    "at": "2026-10-27T07:12:05.204Z",
+    "dropped": []
+  }
+}

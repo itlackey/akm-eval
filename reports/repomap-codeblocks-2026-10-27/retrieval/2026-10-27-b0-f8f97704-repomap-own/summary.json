@@ -1,0 +1,277 @@
+{
+  "eval": "retrieval",
+  "corpus": "custom",
+  "corpus_folder": "evals/retrieval/assets/repomap",
+  "collection": "own",
+  "label": "b0-f8f97704-repomap",
+  "date": "2026-10-27T06:27:54.040Z",
+  "git_commit": "c4df419",
+  "akm_version": "0.10.261015",
+  "akm_bin": "bun /home/user/akm/src/cli.ts",
+  "akm_build": "f8f977046",
+  "akm_build_fingerprint": null,
+  "search_mode": {
+    "keyword": "keyword"
+  },
+  "semantic_flag": "off",
+  "depth": 10,
+  "relevant_from_grade": 2,
+  "limit": null,
+  "n_assets": 15,
+  "index_seconds": {
+    "keyword": 0.5
+  },
+  "status": "complete",
+  "aborted_reason": null,
+  "n_queries": 20,
+  "n_scored": 20,
+  "n_errored": 0,
+  "errored": {
+    "search": 0,
+    "curate": 0
+  },
+  "timeouts": 0,
+  "metrics": {
+    "search": {
+      "n": 20,
+      "ndcg_10": 0.8494,
+      "ndcg_10_condensed": 0.8494,
+      "p_5": 0.21,
+      "success_5": 0.9,
+      "mrr": 0.8583,
+      "recall_10": 1,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "curate": {
+      "n": 20,
+      "ndcg_10": 0.8494,
+      "ndcg_10_condensed": 0.8494,
+      "p_5": 0.21,
+      "success_5": 0.9,
+      "mrr": 0.8583,
+      "recall_10": 1,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    }
+  },
+  "abstention": {
+    "non_task": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    },
+    "no_answer": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    }
+  },
+  "config": {
+    "keyword": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "off",
+      "registries": []
+    }
+  },
+  "engine": {
+    "engine": null,
+    "model": null,
+    "endpoint": null,
+    "temperature": null,
+    "enableThinking": null,
+    "timeoutMs": null,
+    "engines": {}
+  },
+  "assets_sha256": "9af3c4cb38422e77d8d2c0b27ad57648674c56bac40e91314104d785537e4e09",
+  "assets": {
+    "library_sha256": "42aa2a9b8b08b736803b074d65de9a728544538ac726fbb42ff10a83f696f94e",
+    "bundles_sha256": null,
+    "queries_sha256": "32ad70026215357ccb9338b5d0a07f7ff253f75ce5994f176947ccc7e22335cb",
+    "qrels_sha256": "fa2fac4692ea8b3d8250beb5d3fba4f10770409d72f89310316e9c82be73c17e"
+  },
+  "seed": null,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "retrieval",
+    "corpus": "custom",
+    "collection": "own",
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.3"
+    },
+    "cases": {
+      "r01": {
+        "input_sha256": "64d6c9ccb8211427c2ccf42a773303f38efa57374300bb37ae1fa06054145199",
+        "label_sha256": "dbdc374adc33e06d2a7de26e80ca97d34a4cf48dbc38d9185d260d3dfd2b2fac"
+      },
+      "r02": {
+        "input_sha256": "7e15dfea50e3926bf1b3f545c02821fe2d31be640c8a717b90d96da881fcb09b",
+        "label_sha256": "9013625514123df5e1a5bd94f19f581b6500834083b0825bee41c0dcec801b47"
+      },
+      "r03": {
+        "input_sha256": "e23ac1159dfed30de723824a46763a66a702416ac07aad42bda1c7211818502b",
+        "label_sha256": "c440599b56208500d211582a6dd9fc694490a6b8fee721f7596f5249481fec37"
+      },
+      "r04": {
+        "input_sha256": "5a100d11e0905814f056cc5a487abb2dc8d7f2a52fc8c978f4a15fabdc6894a2",
+        "label_sha256": "a83a4f2a1ce878112013f52a9c59cb5107bb2dfa6152718a1259ef97a39ff318"
+      },
+      "r05": {
+        "input_sha256": "bd7b0007aa0eed036610ccf42b221add9b8fad4f3563634c4839656036a72bde",
+        "label_sha256": "6b78841248946773c8990a88f8de47532a231a06e44fc7bd5d36e83847dbd18a"
+      },
+      "r06": {
+        "input_sha256": "9073626b908a1a67494e4108a839b8e4d17591113014ea08764de9da0cea25cb",
+        "label_sha256": "f322e9f7a7acb6eb077772f3e043a4b3dc16739c7cf0a69111d80cc13bd647dd"
+      },
+      "r07": {
+        "input_sha256": "cd21c40a00d5de6cc7d76e59df51ef1f48e147911aed4c5bb1a493ed70a2e85f",
+        "label_sha256": "cc12e07701db98bfc91079a302094d0d266c8525c36ddc365e88dee93beac153"
+      },
+      "r08": {
+        "input_sha256": "a64c5836f25d3803b8ce989df1139180483b9b7285dc84e6a185df55499c9009",
+        "label_sha256": "9f19bd063b2c67b61b4305ea21cc287e5c935fb838a3d7a81106f5a46785f152"
+      },
+      "r09": {
+        "input_sha256": "23893b4c76ac141243c4f666ee434d15e1332d2284e10f49482f20e327c3d197",
+        "label_sha256": "4f634b3c4a3c69d749d87c730e2f734b098772faab2d0235bc764208846e40bf"
+      },
+      "r10": {
+        "input_sha256": "0e2304b2ed095c044cdbadd7771c96625438aae8c94278ccaac87752673d6e23",
+        "label_sha256": "3dc630462b13684765223e8106876b69087c20f8a820e33827db51f3e7135130"
+      },
+      "r11": {
+        "input_sha256": "87847661ef803a68339a2914a2a1c7ad8e4ff7e5a5c30e069fda6383c4a7ce8f",
+        "label_sha256": "581d56a8d2a97fccb3c8c5ab57fc91c7fc60e201bed0a86934ea0844f146db1e"
+      },
+      "r12": {
+        "input_sha256": "26f407fe7ec28095a8821f41daac792aaaca833ac2f25365449afdb5038bbb1d",
+        "label_sha256": "2335c484d8e0dc45907b44400d88e43f6bf950d5bd7d78798e884171fb2880f3"
+      },
+      "r13": {
+        "input_sha256": "643e3c2a7c81377cab4be65b8ac840a7b61a9b60f76aa4eb2741201717c70730",
+        "label_sha256": "b858144445cee7d81ff9c7305f93f6cb30d182ca51dcdd2b4e5206324b6c5298"
+      },
+      "r14": {
+        "input_sha256": "b878575fb196a9df542b5df5af20fcea38a70a2ef2191481c600b7c457f4f385",
+        "label_sha256": "e18acfa15bc3e18ebb7cfa1548f4c77a3f343b5de3cb70e9e7d664eb6c265040"
+      },
+      "r15": {
+        "input_sha256": "b0e7c2b35c3a536928d4717c0453688b5d761b0007396d6d620b3f431b1d38c4",
+        "label_sha256": "18b009641d0373b3f6e7971379249eba66179dce7583de094ee32d7b9995e524"
+      },
+      "r16": {
+        "input_sha256": "1435856106d8c8152edb2d716f3a9bf452bf61a1070628c7da0bcf4d524a31a8",
+        "label_sha256": "ff5423ff639deec7f7a3759e1690aad8035faa5b36d361c7407b058daabf0e79"
+      },
+      "r17": {
+        "input_sha256": "a10d8baf4abf6734304baab995e994e8d746e68c45e62525e11dda5a5418a341",
+        "label_sha256": "74b46216a319472cf3b9979d845f7a7b4974c9b4ff87a011db51c43e6fe3d613"
+      },
+      "r18": {
+        "input_sha256": "e9f22da20ce88f2b668b1358af135c5300b53834b70deab785421fe7b8060830",
+        "label_sha256": "1103a05645e51f5017b493f0fb6c6583c8cac0d0dd7bd7bf3930dcc8382610c0"
+      },
+      "r19": {
+        "input_sha256": "404b08346550529146a01b1a5ce53246f32ed432b042bf94c01aa40c002ea805",
+        "label_sha256": "be88ee0b6077672b586a51731a3ffc4b48a24eb303da620d39a0118daca79133"
+      },
+      "r20": {
+        "input_sha256": "c8c353a6d28a583c6b3c57736e4c8ff81ffeb2600d23ac60820a72e423d2437c",
+        "label_sha256": "cd550a4c87795f530a92d1e3cc6c58ab5048dde9a0df4f3fb43d443a6b3c8e37"
+      }
+    },
+    "akm": {
+      "version": "0.10.261015",
+      "bin": "bun /home/user/akm/src/cli.ts",
+      "build": "f8f977046",
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "keyword": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "off",
+          "registries": []
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 120000,
+      "seed": null
+    },
+    "engines": {},
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "r01",
+        "r02",
+        "r03",
+        "r04",
+        "r05",
+        "r06",
+        "r07",
+        "r08",
+        "r09",
+        "r10",
+        "r11",
+        "r12",
+        "r13",
+        "r14",
+        "r15",
+        "r16",
+        "r17",
+        "r18",
+        "r19",
+        "r20"
+      ],
+      "scored": [
+        "r01",
+        "r02",
+        "r03",
+        "r04",
+        "r05",
+        "r06",
+        "r07",
+        "r08",
+        "r09",
+        "r10",
+        "r11",
+        "r12",
+        "r13",
+        "r14",
+        "r15",
+        "r16",
+        "r17",
+        "r18",
+        "r19",
+        "r20"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 18.72
+}

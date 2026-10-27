@@ -17,6 +17,27 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- retrieval scoring 0.4 (was 0.3), a label-only change: the [2026-10-27 expansion](evals/retrieval/assets/judgment-expansion-20261027.md)
+  appends 138 judge-endpoint grades (`fast/qwen3.6-35b-a3b`) of unjudged top-ten `library` pairs from four akm#1260 semantic runs. Inputs
+  and collection version 0.3 are unchanged; books are unchanged. Rescore both sides of a comparison (`scripts/rescore/run`) before reading
+  it; a 0.3 score and a 0.4 score of one run differ where the new grades fall. The `--cases` sets `code`, `repomap` and `repomap/fenced`
+  were graded again by the same judge (their provisional grades are kept as `qrels.claude-review.jsonl`); they are not public collections
+  and need no version.
+
+- No eval changed version. agent-ab and terminal-bench summaries add `input_tokens`, `output_tokens` and `tool_calls` to each arm's
+  metrics and to `report.<arm>.per_trial`: their means per scored trial, over the trials that record them. The trials already held these
+  figures (`samples.jsonl`); older summaries lack the fields. agent-ab gains a task set run with `--cases`, `cases/repomap` (akm#1260);
+  the public tasks are unchanged.
+
+- No eval changed version. `evals/retrieval/label --cases DIR` lists a set whose `library/` is copied whole (no `bundles.json`) as it lists
+  the public library, so the pool of such a set also holds the BM25 and the expected assets, and `--from` grades every result of a run,
+  semantic ones included. It used to list no own library: a query with `expected` stopped the run, and `--from` left out every result
+  that akm's keyword search did not return for the query at labelling time. A library of bundles is pooled as before. Only how pairs are
+  chosen for grading changed; no grade, query or score did.
+  label also no longer stops on an expected ref that akm does not index when the qrels already grade that pair: the public q092
+  expects `commands/skills/ai-skills/opencode-extensions/references/commands`, which akm 0.10 prints as a knowledge ref, so label of
+  the public library stopped on every 0.10 build. A mistyped expected ref with no grade still stops the run.
+
 - bakeoff collection and scoring 0.4 (was 0.3). Four new memory-inference inputs bring the corpus to 55 cases (23 memory
   inference): nested and flat scope, an observation date only in metadata, and an undated observation with a file `updated` date.
   They use AKM's existing source-context/scope contract (akm#1209 / PR #1222); no prompt is duplicated in the evaluator.

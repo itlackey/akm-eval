@@ -59,6 +59,8 @@ Pick `--concurrency` before the full run. The width is part of the job: Agent A/
 
 `--cases DIR`: a folder with `tasks/` and `libraries/`, laid out as the public ones (Harbor's task format; each `task.toml` names its library as `AKM_TASK_STASH`).
 
+One such set is committed: [`cases/repomap`](cases/repomap/README.md), seven localization tasks over a pinned checkout of akm with a repo map as the library, for akm#1260. Run it with `--cases evals/agent-ab/cases/repomap`.
+
 ## The tasks
 
 - `tasks/`: 6 tasks, 3 for the made-up `drillbit` and 3 for `inkwell`. Each has `instruction.md`, `environment/`, `solution/solve.sh` and `tests/`. Each `task.toml` lists `library_tokens`, the literals its verifier looks for; a test checks the library holds them and that no instruction or starting file mentions akm or the library.
@@ -102,7 +104,7 @@ Read `status`, then `completion`, then engagement before the difference: where t
 
 ## What the summary reports
 
-`summary.json`: `status`, `aborted_reason`, `completion` (`expected`, `completed`, `failed`, `missing`, `unexpected`, overall and per arm), `metrics` (per arm `pass_rate`, `passed`, `scored`, `errored`, `timeouts`; `delta`; `better`; `engagement`), `report` (with `sign_test` and `flips`), `timeouts` by arm, `engine` (model and endpoint host), `config` (the Harbor job, credentials redacted), `job`, `pins`, `akm_version`, `akm_bin`, `akm_build`, `akm_env`, `akm_install`, `assets_sha256` (over the run's copy of the tasks and libraries, and the attempts), `libraries_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one line per task with every trial of both arms (reward, exception, `timed_out`, akm tools called, tokens, time). The run folder also keeps its copy of `tasks/` and `libraries/`, any `akm-packages/`, and Harbor's `jobs/`.
+`summary.json`: `status`, `aborted_reason`, `completion` (`expected`, `completed`, `failed`, `missing`, `unexpected`, overall and per arm), `metrics` (per arm `pass_rate`, `passed`, `scored`, `errored`, `timeouts`, and the means per scored trial of `minutes`, `agent_minutes`, `cost_usd`, `input_tokens`, `output_tokens` and `tool_calls`; `delta`; `better`; `engagement`), `report` (with `sign_test` and `flips`), `timeouts` by arm, `engine` (model and endpoint host), `config` (the Harbor job, credentials redacted), `job`, `pins`, `akm_version`, `akm_bin`, `akm_build`, `akm_env`, `akm_install`, `assets_sha256` (over the run's copy of the tasks and libraries, and the attempts), `libraries_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one line per task with every trial of both arms (reward, exception, `timed_out`, akm tools called, tokens, time). The run folder also keeps its copy of `tasks/` and `libraries/`, any `akm-packages/`, and Harbor's `jobs/`.
 
 ## Notes
 

@@ -363,16 +363,16 @@ describe("timeouts, minutes and dollars", () => {
     expect(formatReport(buildReport([trial("t1", "control", 1)])).join("\n")).not.toContain("T: the agent");
   });
 
-  test("averages the minutes and the dollars over the scored trials that have them", () => {
+  test("averages the minutes, the dollars, the tokens and the tool calls over the scored trials that have them", () => {
     const r = buildReport([
-      trial("t1", "akm", 1, { seconds: 600, agentSeconds: 300, costUsd: 0.1 }),
-      trial("t2", "akm", 1, { seconds: 1200, agentSeconds: 900, costUsd: 0.3 }),
-      trial("t3", "akm", 0, { seconds: null, agentSeconds: null, costUsd: null }),
-      trial("t4", "akm", null, { seconds: 60, agentSeconds: null, costUsd: null }), // stopped in the setup
+      trial("t1", "akm", 1, { seconds: 600, agentSeconds: 300, costUsd: 0.1, tokens: { input: 1000, cache: 0, output: 100 }, tools: 4 }),
+      trial("t2", "akm", 1, { seconds: 1200, agentSeconds: 900, costUsd: 0.3, tokens: { input: 3000, cache: 0, output: 300 }, tools: 7 }),
+      trial("t3", "akm", 0, { seconds: null, agentSeconds: null, costUsd: null, tokens: null, tools: null }),
+      trial("t4", "akm", null, { seconds: 60, agentSeconds: null, costUsd: null, tokens: { input: 99999, cache: 0, output: 9999 }, tools: 99 }), // stopped in the setup
     ]);
-    expect(r.akm.per_trial).toEqual({ minutes: 15, agent_minutes: 10, cost_usd: 0.2 });
-    expect(buildReport([]).control.per_trial).toEqual({ minutes: null, agent_minutes: null, cost_usd: null });
-    expect(formatReport(r).join("\n")).toContain("akm      per scored trial: 15.0 minutes, 10.0 of them the agent's own run, 0.2 USD");
+    expect(r.akm.per_trial).toEqual({ minutes: 15, agent_minutes: 10, cost_usd: 0.2, input_tokens: 2000, output_tokens: 200, tool_calls: 5.5 });
+    expect(buildReport([]).control.per_trial).toEqual({ minutes: null, agent_minutes: null, cost_usd: null, input_tokens: null, output_tokens: null, tool_calls: null });
+    expect(formatReport(r).join("\n")).toContain("akm      per scored trial: 15.0 minutes, 10.0 of them the agent's own run, 0.2 USD, 2,000 input tokens, 200 output tokens, 5.5 tool calls");
   });
 });
 
