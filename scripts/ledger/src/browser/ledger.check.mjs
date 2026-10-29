@@ -260,6 +260,9 @@ test('AKM versions support one or several selections, other filters, removal and
   expect(menu.x).toBeGreaterThanOrEqual(0); expect(menu.x + menu.width).toBeLessThanOrEqual(390);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await page.screenshot({ path: info.outputPath('versions-mobile.png'), fullPage: true });
+  // On a phone the open menu covers the export buttons, and every published version makes it taller: close it first, as a person would.
+  await page.keyboard.press('Escape');
+  await expect(picker).not.toHaveAttribute('open');
   expect(await exported()).toEqual(expected(versions));
   await page.locator('#version-summary').click();
   await option(versions[0]).uncheck(); await option(versions[1]).uncheck();
