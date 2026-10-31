@@ -29,11 +29,14 @@ export function stripReasoning(reply: string): string {
 
 export const renderSession = (s: SessionView, n: number): string => `### Session ${n}\nSession Date: ${s.date}\n${s.turns.map((t) => `${t.role}: ${t.content}`).join("\n")}`;
 
+/** The reader's instruction, the benchmark's own. memory-utility's LongMemEval cases send the same one. */
+export const READER_INSTRUCTION = "I will give you several history chats between you and a user. Please answer the question based on the relevant chat history. Answer concisely. If the chat history does not hold the information needed, say that you do not know.";
+
 /** The question and the chats the model may use: every session of the haystack, or the ones akm returned. */
 export function readerPrompt(sessions: SessionView[], questionDate: string, question: string): string {
   const history = sessions.length > 0 ? sessions.map((s, i) => renderSession(s, i + 1)).join("\n\n") : "(there are no chats)";
   return [
-    "I will give you several history chats between you and a user. Please answer the question based on the relevant chat history. Answer concisely. If the chat history does not hold the information needed, say that you do not know.",
+    READER_INSTRUCTION,
     "",
     "History Chats:",
     "",

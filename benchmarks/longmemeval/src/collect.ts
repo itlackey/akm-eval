@@ -10,7 +10,7 @@
 import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
 import { Akm, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import type { Question } from "./dataset.ts";
-import { type ChatResult, type Endpoint, ChatError, chat, temperatureOf, tokenLimit } from "./llm.ts";
+import { type CallUsage, type ChatResult, type Endpoint, ChatError, chat, temperatureOf, tokenLimit } from "./llm.ts";
 import { type SessionView, isAbstentionQuestion, judgePrompt, readerPrompt, stripReasoning } from "./prompts.ts";
 import { type Raw, type RawArm, type Row, makeRow, isDecidable } from "./score.ts";
 
@@ -36,6 +36,35 @@ export const openSandbox = (mode: SearchMode): Sandbox => createSandbox(NAME, mo
 
 const failedArm = (error: string, partial: Partial<RawArm> = {}): RawArm => ({ hypothesis: null, verdict: null, error, seconds: null, prompt_tokens: null, completion_tokens: null, finish_reason: null, model: null, judge_model: null, ...partial });
 
+/** What the judge made of one answer. */
+export type Grade =
+  /** The judge call itself failed (a request that did not return), so there is no reply to read. */
+  | { failed: string; judge_usage?: CallUsage }
+  /** A reply. `error` says why it is not a verdict (it is not exactly yes or no); null for a verdict. */
+  | { failed: null; error: string | null; verdict: string; judge_model: string | null; judge_usage: CallUsage | null; judge_cached: boolean };
+
+/**
+ * The judge's verdict on an answer, with the benchmark's grading prompt for the question's type. The judge is sent the answer without its
+ * reasoning. Identical prompts share one verdict through `cache`, and the reuse is `judge_cached`. A reply that is not exactly yes or no
+ * is a grading error, and the answer is not scored.
+ */
+export async function grade(q: Pick<Question, "question_type" | "question_id" | "question" | "answer">, hypothesis: string, judge: Endpoint, cache: Map<string, ChatResult>): Promise<Grade> {
+  try {
+    const prompt = judgePrompt(q.question_type, q.question, String(q.answer), hypothesis, isAbstentionQuestion(q.question_id));
+    const key = JSON.stringify([judge.baseUrl, judge.model, judge.chat, prompt]);
+    const cached = cache.get(key);
+    const verdictReply = cached ?? await chat(judge, prompt, { maxTokens: MAX_JUDGE_TOKENS });
+    cache.set(key, verdictReply);
+    // A judge that thinks first is read as the reader is: by what follows its reasoning. A reply that is only reasoning has no verdict, and the error shows how it began.
+    const verdict = stripReasoning(verdictReply.text).slice(0, 200);
+    const said = verdict || verdictReply.text.trim().slice(0, 200);
+    return { failed: null, error: isDecidable(verdict) ? null : `judge: undecidable verdict: ${said}${verdictReply.finishReason === "length" ? " (cut off at the token limit)" : ""}`,
+      verdict, judge_model: verdictReply.model, judge_usage: cached ? null : verdictReply.usage, judge_cached: !!cached };
+  } catch (e) {
+    return { failed: `judge: ${(e as Error).message}`, ...(e instanceof ChatError ? { judge_usage: e.usage } : {}) };
+  }
+}
+
 /** One answer from the model, and the judge's verdict on it. */
 async function answer(prompt: string, q: Question, model: Endpoint, judge: Endpoint, cache: Map<string, ChatResult>): Promise<RawArm> {
   let reply: ChatResult;
@@ -49,20 +78,9 @@ async function answer(prompt: string, q: Question, model: Endpoint, judge: Endpo
   const hypothesis = stripReasoning(reply.text);
   const got = { hypothesis, seconds: reply.seconds, prompt_tokens: reply.promptTokens, completion_tokens: reply.completionTokens, finish_reason: reply.finishReason, model: reply.model, reader_usage: reply.usage };
   if (hypothesis === "") return { ...failedArm(""), ...got, error: null };
-  try {
-    const prompt = judgePrompt(q.question_type, q.question, String(q.answer), hypothesis, isAbstentionQuestion(q.question_id));
-    const key = JSON.stringify([judge.baseUrl, judge.model, judge.chat, prompt]);
-    const cached = cache.get(key);
-    const verdictReply = cached ?? await chat(judge, prompt, { maxTokens: MAX_JUDGE_TOKENS });
-    cache.set(key, verdictReply);
-    // A judge that thinks first is read as the reader is: by what follows its reasoning. A reply that is only reasoning has no verdict, and the error shows how it began.
-    const verdict = stripReasoning(verdictReply.text).slice(0, 200);
-    const said = verdict || verdictReply.text.trim().slice(0, 200);
-    return { ...failedArm(""), ...got, error: isDecidable(verdict) ? null : `judge: undecidable verdict: ${said}${verdictReply.finishReason === "length" ? " (cut off at the token limit)" : ""}`,
-      verdict, judge_model: verdictReply.model, judge_usage: cached ? null : verdictReply.usage, judge_cached: !!cached };
-  } catch (e) {
-    return failedArm(`judge: ${(e as Error).message}`, { ...got, ...(e instanceof ChatError ? { judge_usage: e.usage } : {}) });
-  }
+  const graded = await grade(q, hypothesis, judge, cache);
+  if (graded.failed !== null) return failedArm(graded.failed, { ...got, ...(graded.judge_usage ? { judge_usage: graded.judge_usage } : {}) });
+  return { ...failedArm(""), ...got, error: graded.error, verdict: graded.verdict, judge_model: graded.judge_model, judge_usage: graded.judge_usage, judge_cached: graded.judge_cached };
 }
 
 export interface Context {
