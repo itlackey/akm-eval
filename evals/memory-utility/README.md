@@ -144,6 +144,12 @@ evals/memory-utility/run --model my-model --semantic --split dev --limit 40 --ju
 A run is one source: the options `--haystack`, `--budgets`, `--sample-seed` and `--judge-model` need `--split`, and `--context-tokens`
 does not go with it.
 
+**Thinking off, and the judge's line.** `eval-judge-35b` above is a `models.json` line (`"model"` the 35B, `"chat": { "max_tokens": 64 }`),
+not a model a server knows; the summary records its `model`. The reader and the judge take `chat.reasoning_effort` and the token cap from
+their `models.json` lines (see the [repository README](../../README.md)). Native inference sends the `bakeoff` engine's thinking-off
+setting, which some servers ignore (LM Studio does); there, pass a `--config-patch` file holding
+`{ "engines": { "bakeoff": { "reasoningEffort": "none" } } }`. Its digest is in the manifest, so `--resume` needs the same file.
+
 ## What is collected
 
 1. Write only historical notes into a disposable inference sandbox, index, and
