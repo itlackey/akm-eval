@@ -51,6 +51,8 @@ export interface Measurement<Case = any, Raw = any, Row extends Obj = Obj> {
   score(c: Case, raw: Raw): Row;
   /** The case ended in an error and has no verdict. Errored cases are left out of the counts. */
   errored(row: Row): boolean;
+  /** Optional checkpoint row with unfinished collection and no error; not a scored case. */
+  unfinished?(row: Row): boolean;
   /** The fields of the summary that come from the scored rows: its counts and `metrics`. Pure. A rescored summary takes these anew. */
   summarize(rows: Row[]): Obj;
 }
@@ -180,10 +182,10 @@ export function caseDigests<Case>(m: Pick<Measurement<Case>, "caseId" | "input" 
 }
 
 /** The completion of a run from its scored rows, in the order of `selected`. A selected case with no row was not run. */
-export function completionOf<Row extends Obj>(m: Pick<Measurement<any, any, Row>, "errored">, selected: string[], rows: Row[]): Completion {
+export function completionOf<Row extends Obj>(m: Pick<Measurement<any, any, Row>, "errored" | "unfinished">, selected: string[], rows: Row[]): Completion {
   const byId = new Map(rows.map((r) => [String(r.id), r]));
   const ran = selected.filter((id) => byId.has(id));
-  return { selected, scored: ran.filter((id) => !m.errored(byId.get(id) as Row)), errored: ran.filter((id) => m.errored(byId.get(id) as Row)) };
+  return { selected, scored: ran.filter((id) => !m.errored(byId.get(id) as Row) && !m.unfinished?.(byId.get(id) as Row)), errored: ran.filter((id) => m.errored(byId.get(id) as Row)) };
 }
 
 // ---- the validator -----------------------------------------------------------------------------------------------------------

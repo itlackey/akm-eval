@@ -335,7 +335,7 @@ describe("ENTRIES", () => {
 
   test("gives a reason for every one it skips", () => {
     for (const e of ENTRIES) if (e.skip !== undefined) expect(e.skip.trim().length).toBeGreaterThan(5);
-    expect(ENTRIES.filter((e) => e.skip).map((e) => e.dir).sort()).toEqual(["benchmarks/longmemeval", "benchmarks/skillret", "benchmarks/terminal-bench", "evals/agent-ab"]);
+    expect(ENTRIES.filter((e) => e.skip).map((e) => e.dir).sort()).toEqual(["benchmarks/longmemeval", "benchmarks/skillret", "benchmarks/terminal-bench", "evals/agent-ab", "evals/memory-utility"]);
   });
 
   test("says what an eval that calls no model must show, since no model call counts for it", () => {
