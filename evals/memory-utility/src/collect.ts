@@ -90,7 +90,7 @@ export function pending(c: Case, ordinal: number, seed: string): Raw {
     arms: Object.fromEntries(ARMS.map(a => [a, blankArm(c.common)])) as Record<ArmName, RawArm> };
 }
 /** Native inference over the notes of `raw.source`, in a disposable sandbox: records the report, the snapshot and the outcome in `raw`. Never throws; a failure is `raw.inference.outcome === "error"`. */
-export async function runInference(raw: Raw, config: Record<string, any>, o: Options, checkpoint: () => void = () => {}): Promise<void> {
+export async function runInference(raw: Pick<Raw, "source" | "post_inference" | "inference">, config: Record<string, any>, o: Options, checkpoint: () => void = () => {}): Promise<void> {
   const generator = createSandbox("memory-utility-inference");
   try {
     writeConfig(generator, config); place(generator, raw.source);

@@ -24,7 +24,8 @@ describe("exact paired interval", () => {
   test("Clopper-Pearson matches the published values", () => {
     const [lo, hi] = clopperPearson(5, 10);
     expect(lo).toBeCloseTo(0.1871, 4); expect(hi).toBeCloseTo(0.8129, 4);
-    expect(clopperPearson(0, 10)).toEqual([0, expect.closeTo(0.3085, 4)] as any);
+    const [zero, upper] = clopperPearson(0, 10);
+    expect(zero).toBe(0); expect(upper).toBeCloseTo(0.3085, 4);
     const [l1, h1] = clopperPearson(1, 6);
     expect(l1).toBeCloseTo(0.0042, 4); expect(h1).toBeCloseTo(0.6412, 4);
     expect(clopperPearson(10, 10)[1]).toBe(1);

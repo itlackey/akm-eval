@@ -136,12 +136,16 @@ function combine(cases: ModelCalls[]): ModelCalls | null {
  * each case's per-call mean times its successful calls.
  */
 export function runModelCalls(rows: Row[]): { model_calls: ModelCalls | null; calls_by: CallRow[] } {
-  const native = nativeCalls(rows), reader = readerUsages(rows).map(readerCall);
   const models = [...new Set(rows.flatMap(r => ARMS.map(a => r.raw.arms[a].answer?.model)).filter((m): m is string => !!m))].sort().join(", ");
+  return callsSummary(nativeCalls(rows), readerUsages(rows), models);
+}
+/** The shared part of `runModelCalls`: native inference's calls, the reader's, and (for judged cases) the judge's. `models` name the reader's and the judge's. */
+export function callsSummary(native: ModelCalls[], readerUsage: CallUsage[], models: string, judgeUsage: CallUsage[] = [], judgeModels = ""): { model_calls: ModelCalls | null; calls_by: CallRow[] } {
+  const reader = readerUsage.map(readerCall), judge = judgeUsage.map(readerCall);
   const sums = (calls: ModelCalls[], tokens: (m: ModelCalls) => number | null) => Math.round(total(calls.map(m => (tokens(m) ?? 0) * (m.calls - m.errors))));
-  const by = (process: string, calls: ModelCalls[]): CallRow[] => calls.length ? [{ process, model: models, calls: total(calls.map(m => m.calls)), failures: total(calls.map(m => m.errors)),
+  const by = (process: string, model: string, calls: ModelCalls[]): CallRow[] => calls.length ? [{ process, model, calls: total(calls.map(m => m.calls)), failures: total(calls.map(m => m.errors)),
     prompt_tokens: sums(calls, m => m.prompt_tokens), completion_tokens: sums(calls, m => m.completion_tokens) }] : [];
-  return { model_calls: combine([...native, ...reader]), calls_by: [...by("native inference", native), ...by("reader", reader)] };
+  return { model_calls: combine([...native, ...reader, ...judge]), calls_by: [...by("native inference", models, native), ...by("reader", models, reader), ...by("judge", judgeModels, judge)] };
 }
 export function summarize(rows: Row[]) {
   function pair(before: ArmName, after: ArmName, evaluatedOnly: boolean, supported = false) {
