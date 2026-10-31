@@ -35,4 +35,5 @@ test("memory usefulness headlines the inferred arm, retaining controls and separ
     expect(report.rows.find(r => r.key === `metrics.${path}.failure_inclusive.value`)?.a).toBe(.5);
   for (const arm of ["none", "source", "inferred"])
     expect(report.rows.some(r => r.key === `metrics.arms.${arm}.failure_inclusive_accuracy.rate`)).toBe(true);
+  expect(report.rows.find(r => r.key === "memory_inferred_accuracy")).toMatchObject({ label: "Inferred memory (%)", group: "Memory · quality", a: 100 });
 });
