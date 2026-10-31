@@ -73,7 +73,7 @@ for (const [key, path, label] of [
   ["collector_fingerprint", "collector_fingerprint", "Memory collector fingerprint"],
   ["akm_fingerprint", "manifest.akm.build_fingerprint", "Memory AKM build fingerprint"],
   ["case_source", "manifest.eval_settings.case_source", "Memory case source"],
-  ["split", "manifest.eval_settings.split", "Memory split (dev or heldout)"],
+  ["split", "manifest.eval_settings.split", "Memory split (dev, heldout-a or heldout-b)"],
   ["budgets", "manifest.eval_settings.budgets", "Memory budgets"],
   ["judge_model", "manifest.eval_settings.judge_model", "Memory judge"],
 ]) fields.push({ column: { key: `memory_${key}`, label: label!, kind: "text", group: "Memory · settings", description: "Recorded comparison identity. Hold corpus, labels, prompts, model and retrieval settings constant to isolate an AKM build change." }, path: path!, scale: 1 });

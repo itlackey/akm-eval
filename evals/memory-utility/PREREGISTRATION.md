@@ -10,7 +10,9 @@ version of this file, committed before the run it applies to.
   "dataset": "LongMemEval cleaned S release at the revision pinned in benchmarks/longmemeval/assets/ASSETS.lock",
   "split_salt": "akm-eval/memory-utility/longmemeval-split/v1",
   "split_rule": "per question type, the share of 100 dev questions by largest remainder (ties by the order of the types), then the questions with the smallest sha256(salt:question_id)",
-  "split_sizes": { "dev": 100, "heldout": 400 },
+  "halves_salt": "akm-eval/memory-utility/longmemeval-heldout-halves/v1",
+  "halves_rule": "the 400 held-out questions are cut the same way into A (the first 200, by sha256(halves_salt:question_id) within each type, largest remainder) and B (the other 200)",
+  "split_sizes": { "dev": 100, "heldout_a": 200, "heldout_b": 200 },
   "sample_seed": 42,
   "arm_order_seed": "1",
   "distractor_seed": "the first 32 bits of sha256(sample_seed:question_id)",
@@ -20,7 +22,7 @@ version of this file, committed before the run it applies to.
   "judge": { "model": "fast/qwen3.6-35b-a3b", "chat": { "max_tokens": 64 }, "temperature": 0, "recorded_as": "judge_model and eval_settings.judge_settings_sha256 in the summary" },
   "reader_and_inference": "the model under test, temperature 0, as --model names it",
   "primary_endpoint": "inferred minus source accuracy at the primary budget, over all selected cases, tested with the exact McNemar test (two-sided, alpha 0.05)",
-  "heldout_runs": "on the rewrite (--corpus custom), 200 questions drawn with --limit 200 under the sample seed; the next decision draws 200 from the questions not yet drawn"
+  "heldout_runs": "on the rewrite (--corpus custom), a whole half named by --split heldout-a or --split heldout-b: the first decision uses A, the next uses B, and a half is spent once akm is tuned on its failures"
 }
 ```
 
@@ -62,9 +64,10 @@ paired interval. `source - none` at 4096 is a secondary, and so is 8192.
 ## Held-out discipline
 
 - Dev (100 questions) is for pilots, debugging and estimating discordance; akm tuning may look at dev failures only.
-- Held-out runs once per decision, on the rewrite. `--split heldout` is never a default and the runner refuses it on the public data.
-- Once an akm change is shaped by looking at held-out failures, those cases are spent, and the next decision draws from the held-out
-  cases not yet drawn.
+- Held-out runs once per decision, on the rewrite, on a whole half of 200 questions. `--split heldout-a` and `--split heldout-b` are
+  never a default, there is no bare `heldout`, and the runner refuses both on the public data.
+- The first decision uses half A and the next uses half B. Once an akm change is shaped by looking at the failures of a half, that half is
+  spent; a later decision uses the other half, and when both are spent there is no held-out data left for this dataset and split.
 - The data is public, so the discipline is procedural: this file, the committed split, and every held-out run recorded in the ledger.
 
 ## Pending at the time of writing

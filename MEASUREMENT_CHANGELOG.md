@@ -45,13 +45,14 @@ Add a release entry here when a version changes.
     the uncertainty of the share of discordant pairs. It replaces the conservative Hoeffding bound of 0.1, which ignored that most
     pairs tie. With no discordant pair `ci95` is a narrow interval around zero. `test` and `interval_method` name the method in each pair. The longmemeval benchmark keeps its own Wald
     interval; the two conventions still differ.
-  - **LongMemEval case source (`--split dev|heldout`).** New inputs and a second scoring path beside the exact one. A case is one
+  - **LongMemEval case source (`--split dev|heldout-a|heldout-b`).** New inputs and a second scoring path beside the exact one. A case is one
     LongMemEval question with its evidence sessions and `--haystack` (default 16) seeded distractor sessions from its history, every
     session whole as one memory. Native inference runs once per case; each arm is indexed and searched once and the shown text is packed
     at each `--budgets` value (default 4096 and 8192 estimated tokens; 4096 is primary, 8192 secondary: a median LongMemEval session is about 10k characters, so budgets under 4096 hold only the prefix of one raw session), the reader answering once per
     distinct packed text. The longmemeval benchmark's judge prompts grade each free-form answer yes or no (`--judge-model`, required);
     the citation protocol is dropped for these cases. The split into 100 dev and 400 held-out questions is a salted hash of the
-    question id, stratified by type. Summaries gain `case_source`, `split`, `haystack`, `budgets`, `primary_budget`, `sample_seed`,
+    question id, stratified by type, and the 400 are cut the same way (a second salt) into two fixed halves of 200, `heldout-a` and
+    `heldout-b`; a held-out run names its half and there is no bare `heldout`. Summaries gain `case_source`, `split`, `haystack`, `budgets`, `primary_budget`, `sample_seed`,
     `judge_model` and `dataset`, rows are `kind: longmemeval` with `arms.<arm>.<budget>`, and `metrics` gains `by_budget`, `by_type`,
     `abstention` and, per budget, an `evidence` diagnostic (shown, retrieval missed, packing cut, summary dropped; labels only, never
     prompted). `sessions_over_projection_limit` is recorded as in the benchmark. These cases are never pooled with the 24.

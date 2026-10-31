@@ -19,7 +19,7 @@ import { collect, configFor, pending, type Options } from "./collect.ts";
 import { ARMS, PROMPT, readerSettings } from "./protocol.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { makeRow, summarize } from "./score.ts";
-import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, PRIMARY_BUDGET, SPLIT_SALT, isLmeCase, lmeCases, type LmeCase, type Split } from "./lme.ts";
+import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, PRIMARY_BUDGET, HALVES_SALT, SPLIT_SALT, SPLITS, isHeldout, isLmeCase, lmeCases, type LmeCase, type Split } from "./lme.ts";
 import { lmeCollect, lmePending, type LmeOptions } from "./lme-collect.ts";
 import { makeLmeRow, isLmeRow } from "./lme-score.ts";
 
@@ -42,7 +42,8 @@ const usage = `Usage: evals/memory-utility/run [options]
   --resume DIR         Carry on a stopped run in its folder: asks only the cases that are not scored. The manifest has to match.
 
 LongMemEval cases (judged, several budgets): --split selects them, and the options below need it.
-  --split dev|heldout  The split of the 500 questions. heldout needs the rewrite (--corpus custom) and is never a default.
+  --split dev|heldout-a|heldout-b  The split of the 500 questions: 100 dev, and the 400 held-out in two halves of 200. A held-out half
+                       needs the rewrite (--corpus custom), is never a default, and is named, not drawn from a pool.
   --judge-model ID     The judge, as the gateway or a models.json line names it. Required with --split.
   --haystack K         Distractor sessions per question, with the evidence sessions (default ${DEFAULT_HAYSTACK}).
   --budgets A,B,...    Memory budgets, estimated tokens (default ${DEFAULT_BUDGETS.join(",")}); ${PRIMARY_BUDGET} is the primary comparison and must be one.
@@ -74,10 +75,10 @@ export function checkSplitFlags(v: { split?: string; corpus?: string; cases?: st
     for (const flag of ["haystack", "budgets", "sample-seed", "judge-model"] as const) if (v[flag] !== undefined) failWith(`--${flag} is for the LongMemEval cases: add --split dev`);
     return;
   }
-  if (v.split !== "dev" && v.split !== "heldout") failWith(`--split must be dev or heldout, not "${v.split}"`);
+  if (!(SPLITS as string[]).includes(v.split)) failWith(`--split must be ${SPLITS.join(", ")}, not "${v.split}"`);
   if (v["context-tokens"] !== undefined) failWith("--context-tokens is for the 24 public cases: LongMemEval cases are read at --budgets");
   if (v["judge-model"] === undefined) failWith("--split needs --judge-model: the judge is part of the measurement, so it is named and never taken from .env");
-  if (v.split === "heldout" && ((v.corpus ?? (v.cases === undefined ? "public" : "custom")) !== "custom")) failWith("held-out questions run on the rewrite, not the public data: use --split heldout --corpus custom (./generate-assets --only longmemeval)");
+  if (isHeldout(v.split as Split) && ((v.corpus ?? (v.cases === undefined ? "public" : "custom")) !== "custom")) failWith(`held-out questions run on the rewrite, not the public data: use --split ${v.split} --corpus custom (./generate-assets --only longmemeval)`);
 }
 type AnyCase = Case | LmeCase;
 type Plan = { cases: AnyCase[]; pending: (c: AnyCase, i: number) => any; collect: (c: AnyCase, raw: any, checkpoint: () => void) => Promise<unknown>; row: (c: AnyCase, raw: any) => any;
@@ -127,7 +128,7 @@ async function main() {
   const limit = v.limit === undefined ? undefined : positive(v.limit, 0, "--limit");
   const corpora = resolveCorpora({ eval: lme ? "longmemeval" : MEASUREMENT.eval, values: v, publicFolder: lme ? join(REPO_ROOT, "benchmarks/longmemeval/assets") : join(REPO_ROOT, "evals/memory-utility/assets"), rewrite: lme, fail });
   if (v.resume !== undefined && corpora.length > 1) fail("--resume carries on one run, so pick one corpus with --corpus public or --corpus custom");
-  if (lme && split === "heldout" && corpora.some(c => c.name === "public")) fail("held-out questions run on the rewrite, not the public data: use --split heldout --corpus custom");
+  if (lme && isHeldout(split) && corpora.some(c => c.name === "public")) fail(`held-out questions run on the rewrite, not the public data: use --split ${split} --corpus custom`);
   if (lme) for (const c of corpora) if (c.name === "custom" && !existsSync(join(c.folder, DATA_FILE))) fail(c.rewrite ? `the custom assets are missing. Make them with: ./generate-assets --only longmemeval` : `${c.flag} needs ${DATA_FILE} in its folder`);
   useAkm(v, fail); const model = useModel(v, fail); const baseLabel = resultsLabel(v.label, model.name);
   const judge = lme ? useJudge(v, fail, process.env, undefined, { baseUrl: model.baseUrl, apiKey: model.apiKey }) : null;
@@ -228,7 +229,7 @@ async function lmePlan(corpus: ResolvedCorpus, a: { split: Split; limit?: number
   return { cases, pending: (_c, i) => lmePending(i, o.seed, lo.budgets), collect: (c, raw, checkpoint) => lmeCollect(c as LmeCase, raw, lo, checkpoint), row: (c, raw) => makeLmeRow(c as LmeCase, raw),
     header: `memory-utility (${corpus.name}) | LongMemEval ${a.split} | ${cases.length} of ${sample.total} questions × 3 arms × ${lo.budgets.length} budgets | K=${a.haystack} | ${model.name}, judge ${judge.name} | ${o.semantic ? "semantic" : "keyword"} | one sequential case at a time`,
     evalSettings: { case_source: "longmemeval", split: a.split, sample_seed: a.sampleSeed, haystack: a.haystack, limit: a.limit ?? null, budgets: lo.budgets.join(","), primary_budget: PRIMARY_BUDGET, context_tokens_estimated: PRIMARY_BUDGET,
-      split_salt_sha256: sha256Json(SPLIT_SALT), reader_model: model.name, judge_model: judge.name, judge_settings_sha256: sha256Json(judgeSettings), judge_endpoint_sha256: endpointDigest(judge.baseUrl) },
+      split_salt_sha256: sha256Json({ split: SPLIT_SALT, halves: HALVES_SALT }), reader_model: model.name, judge_model: judge.name, judge_settings_sha256: sha256Json(judgeSettings), judge_endpoint_sha256: endpointDigest(judge.baseUrl) },
     summaryExtra: { case_source: "longmemeval", split: a.split, haystack: a.haystack, budgets: lo.budgets, primary_budget: PRIMARY_BUDGET, sample_seed: a.sampleSeed, sample: { order: sample.order, seed: sample.seed, n: sample.n, total: sample.total, per_type: sample.per_type },
       judge_model: judge.name, judge_endpoint: endpointHost(judge.baseUrl), judge_temperature: judgeSettings.temperature, dataset, dataset_sha256: digestFiles(assets, files) },
     progress: (row: any) => `${row.category.padEnd(25)} ${ARMS.map(a => `${a}=${row.arms[a][PRIMARY_BUDGET]?.evaluated ? (row.arms[a][PRIMARY_BUDGET].correct ? "right" : "wrong") : "error"}`).join(" ")} @${PRIMARY_BUDGET}` };

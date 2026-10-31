@@ -97,7 +97,7 @@ the reader. Field **names** define the response shape, not answer options.
 
 ### LongMemEval cases (`--split`)
 
-The 24 cases are small and synthetic. `--split dev|heldout` builds cases from [LongMemEval](../../benchmarks/longmemeval/README.md)
+The 24 cases are small and synthetic. `--split dev|heldout-a|heldout-b` builds cases from [LongMemEval](../../benchmarks/longmemeval/README.md)
 instead, to ask the same question at a scale where the history is much larger than any budget:
 
 ```sh
@@ -110,11 +110,13 @@ evals/memory-utility/run --model my-model --semantic --split dev --limit 40 --ju
   per session as the benchmark writes them. The dataset, the draw of questions (`--limit N`, in proportion to type, under
   `--sample-seed`, default 42) and the memory text are the longmemeval benchmark's own. Each question's distractors are drawn under a seed
   derived from the sample seed and its id, so they do not depend on which other questions are drawn.
-- **Split.** The 500 questions are split once into 100 dev and 400 held-out by a salted hash of the question id, stratified by type. The
-  split depends on the id and type only, so it is the same on the public data and on its rewrite. Dev is for pilots, debugging and
-  estimating discordance. **Held-out is never a default**: `--split heldout` is explicit and runs only on the rewrite
-  (`--corpus custom`, made by `./generate-assets --only longmemeval`), never on the public data. Read
-  [PREREGISTRATION.md](PREREGISTRATION.md), committed before any held-out run.
+- **Split.** The 500 questions are split once into 100 dev and 400 held-out by a salted hash of the question id, stratified by type, and
+  the 400 are cut the same way (a second salt) into two fixed halves of 200, A and B. The split depends on the id and type only, so it
+  is the same on the public data and on its rewrite. Dev is for pilots, debugging and estimating discordance. **Held-out is never a
+  default**: `--split heldout-a` or `--split heldout-b` is explicit (there is no bare `heldout`; a run names its half) and runs only on
+  the rewrite (`--corpus custom`, made by `./generate-assets --only longmemeval`), never on the public data. The first decision uses half
+  A, the next half B, and a half is spent once akm is tuned on its failures. Read [PREREGISTRATION.md](PREREGISTRATION.md), committed
+  before any held-out run.
 - **Arms and budgets.** The same three arms. Inference runs once per case over its sessions; each arm is indexed and searched once; the
   shown text of the hits is packed at every `--budgets` value (default `4096,8192`, estimated tokens as characters/4;
   4096 is the primary comparison and must be among them; 8192 still fits the 35B's 32k context) and the reader answers once per distinct packed text. The 24 cases keep

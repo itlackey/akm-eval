@@ -12,7 +12,9 @@ import type { Packed } from "./protocol.ts";
 
 /** The salt of the split. Fixed and public: the split is a procedure, not a secret. A new salt is a new split, and needs a new pre-registration. */
 export const SPLIT_SALT = "akm-eval/memory-utility/longmemeval-split/v1";
-/** The size of the dev split. The rest of the 500 questions are held out. */
+/** The salt that cuts the held-out questions into their two halves, A and B, the same way. */
+export const HALVES_SALT = "akm-eval/memory-utility/longmemeval-heldout-halves/v1";
+/** The size of the dev split. The rest of the 500 questions are held out, in two halves. */
 export const DEV_QUESTIONS = 100;
 /** The seed of the draw of the questions (the benchmark's own default), from which each question's distractor seed is derived. */
 export const DEFAULT_SAMPLE_SEED = 42;
@@ -22,31 +24,45 @@ export const DEFAULT_BUDGETS = [4096, 8192];
 /** The budget of the primary comparison. The others are secondary. */
 export const PRIMARY_BUDGET = 4096;
 
-export type Split = "dev" | "heldout";
+export type Split = "dev" | "heldout-a" | "heldout-b";
+export const SPLITS: Split[] = ["dev", "heldout-a", "heldout-b"];
+export const isHeldout = (split: Split): boolean => split !== "dev";
 
 const hash = (text: string): string => createHash("sha256").update(text).digest("hex");
 
 /**
- * The dev and held-out questions. Each question type gives dev its share of `devSize` (largest remainder, ties by the order of
- * QUESTION_TYPES), and within a type the questions with the smallest sha256(salt:question_id) are dev. It depends only on the ids and
- * types, not on the order of the file, so the same split holds for the public data and for its rewrite, which keeps the ids.
- * Both lists keep the order of `questions`.
+ * The `size` questions that come first, by a salted hash, in each type's share of `size` (largest remainder, ties by the order of
+ * QUESTION_TYPES): within a type, the questions with the smallest sha256(salt:question_id).
  */
-export function splitQuestions(questions: Question[], salt = SPLIT_SALT, devSize = DEV_QUESTIONS): { dev: Question[]; heldout: Question[] } {
+function firstBySalt(questions: Question[], size: number, salt: string): Set<string> {
   const types = QUESTION_TYPES.filter(t => questions.some(q => q.question_type === t));
-  const exact = new Map(types.map(t => [t, devSize * questions.filter(q => q.question_type === t).length / questions.length]));
+  const exact = new Map(types.map(t => [t, size * questions.filter(q => q.question_type === t).length / questions.length]));
   const quota = new Map(types.map(t => [t, Math.floor(exact.get(t)!)]));
-  let left = devSize - [...quota.values()].reduce((a, b) => a + b, 0);
+  let left = size - [...quota.values()].reduce((a, b) => a + b, 0);
   for (const t of [...types].sort((a, b) => (exact.get(b)! - quota.get(b)!) - (exact.get(a)! - quota.get(a)!) || types.indexOf(a) - types.indexOf(b))) {
     if (left-- <= 0) break;
     quota.set(t, quota.get(t)! + 1);
   }
-  const dev = new Set<string>();
+  const chosen = new Set<string>();
   for (const t of types) {
     const ranked = questions.filter(q => q.question_type === t).map(q => ({ id: q.question_id, key: hash(`${salt}:${q.question_id}`) })).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
-    for (const r of ranked.slice(0, quota.get(t)!)) dev.add(r.id);
+    for (const r of ranked.slice(0, quota.get(t)!)) chosen.add(r.id);
   }
-  return { dev: questions.filter(q => dev.has(q.question_id)), heldout: questions.filter(q => !dev.has(q.question_id)) };
+  return chosen;
+}
+
+/**
+ * The dev questions, the held-out ones, and the two halves of the held-out ones. Dev takes its share of `devSize` from each type by
+ * `firstBySalt`; half A takes half the rest, the same way under the halves salt, and B is what remains. It depends only on the ids and
+ * types, not on the order of the file, so the same split holds for the public data and for its rewrite, which keeps the ids.
+ * Every list keeps the order of `questions`.
+ */
+export function splitQuestions(questions: Question[], salt = SPLIT_SALT, devSize = DEV_QUESTIONS): Record<Split, Question[]> & { heldout: Question[] } {
+  const dev = firstBySalt(questions, devSize, salt);
+  const heldout = questions.filter(q => !dev.has(q.question_id));
+  const a = firstBySalt(heldout, Math.ceil(heldout.length / 2), HALVES_SALT);
+  const inOrder = (keep: (id: string) => boolean) => questions.filter(q => keep(q.question_id));
+  return { dev: inOrder(id => dev.has(id)), heldout, "heldout-a": inOrder(id => a.has(id)), "heldout-b": heldout.filter(q => !a.has(q.question_id)) };
 }
 
 /** The distractor seed of a question: derived from the sample seed and the question id, so a question's distractors do not depend on which others are drawn. */

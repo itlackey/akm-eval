@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Question } from "../../../benchmarks/longmemeval/src/dataset.ts";
 import { caseDigests } from "../../../lib/manifest.ts";
-import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, DEV_QUESTIONS, PRIMARY_BUDGET, SPLIT_SALT, buildLmeCase, distractorSeed, lmeCases, lmePrompt, splitQuestions } from "./lme.ts";
+import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, DEV_QUESTIONS, HALVES_SALT, PRIMARY_BUDGET, SPLIT_SALT, buildLmeCase, distractorSeed, lmeCases, lmePrompt, splitQuestions } from "./lme.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { pack, sourceFiles } from "./protocol.ts";
 
@@ -33,6 +33,36 @@ describe("the dev / held-out split", () => {
   });
   test("another salt is another split", () => {
     expect(sha(splitQuestions(idsOnly(), `${SPLIT_SALT}/other`).dev.map(q => q.question_id))).not.toBe(sha(dev.map(q => q.question_id)));
+  });
+});
+
+describe("the two held-out halves", () => {
+  const split = splitQuestions(idsOnly());
+  const a = split["heldout-a"], b = split["heldout-b"];
+  const per = (qs: Question[]) => Object.fromEntries([...new Set(ids.map(i => i[1]))].sort().map(t => [t, qs.filter(q => q.question_type === t).length]));
+  test("are 200 questions each, with no question in both, and together exactly the 400 held-out ones (none of them dev)", () => {
+    expect(a).toHaveLength(200); expect(b).toHaveLength(200);
+    const inA = new Set(a.map(q => q.question_id));
+    expect(b.filter(q => inA.has(q.question_id))).toEqual([]);
+    expect([...a, ...b].map(q => q.question_id).sort()).toEqual(split.heldout.map(q => q.question_id).sort());
+    const dev = new Set(split.dev.map(q => q.question_id));
+    expect([...a, ...b].some(q => dev.has(q.question_id))).toBe(false);
+  });
+  test("are stratified by type: each type is split in half, to within the one question an odd count leaves over", () => {
+    expect(per(a)).toEqual({ "knowledge-update": 31, "multi-session": 53, "single-session-assistant": 23, "single-session-preference": 12, "single-session-user": 28, "temporal-reasoning": 53 });
+    expect(per(b)).toEqual({ "knowledge-update": 32, "multi-session": 53, "single-session-assistant": 22, "single-session-preference": 12, "single-session-user": 28, "temporal-reasoning": 53 });
+  });
+  test("are the same every time: pinned digests of each half's ids", () => {
+    expect(sha(a.map(q => q.question_id))).toBe("011ac13febd6701496cf4d5106fec25b278604f248bd9aec9300ec4dde9cd061");
+    expect(sha(b.map(q => q.question_id))).toBe("0663e9aad7e89d9805570019e9ff499245a817525b157c52911c5e3975ddfef7");
+  });
+  test("do not depend on the order of the file, and keep its order", () => {
+    const shuffled = [...idsOnly()].reverse();
+    const again = splitQuestions(shuffled);
+    expect(sha(again["heldout-a"].map(q => q.question_id))).toBe(sha(a.map(q => q.question_id)));
+    expect(sha(again["heldout-b"].map(q => q.question_id))).toBe(sha(b.map(q => q.question_id)));
+    const inA = new Set(a.map(q => q.question_id));
+    expect(again["heldout-a"].map(q => q.question_id)).toEqual(shuffled.map(q => q.question_id).filter(id => inA.has(id)));
   });
 });
 
@@ -106,7 +136,8 @@ describe("LongMemEval cases", () => {
     const block = JSON.parse(/```json\n([\s\S]*?)```/.exec(text)![1]!);
     // Each value is held to the constant the code runs with, not to a copy of it here.
     expect(block.split_salt).toBe(SPLIT_SALT);
-    expect(block.split_sizes).toEqual({ dev: DEV_QUESTIONS, heldout: ids.length - DEV_QUESTIONS });
+    expect(block.halves_salt).toBe(HALVES_SALT);
+    expect(block.split_sizes).toEqual({ dev: DEV_QUESTIONS, heldout_a: splitQuestions(idsOnly())["heldout-a"].length, heldout_b: splitQuestions(idsOnly())["heldout-b"].length });
     expect(block.haystack).toBe(DEFAULT_HAYSTACK);
     expect(block.budgets).toEqual(DEFAULT_BUDGETS);
     expect(block.primary_budget).toBe(PRIMARY_BUDGET);
