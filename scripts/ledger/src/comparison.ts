@@ -1,5 +1,6 @@
 /** Public scalar fields used by the comparison table; raw configs are never copied. */
 import type { Score } from "./presentation";
+import { memoryColumns, memoryFields } from "./memory";
 
 type RecordValue = Record<string, unknown>;
 export type Cell = string | number | null;
@@ -235,7 +236,7 @@ export function comparisonFields(summary: RecordValue, samples: unknown[] | null
     fields[key!] = string(at(summary, `pins.${pin}`));
   fields.akm_build = string(summary.akm_build);
   for (const score of scores) fields[`score:${score.label}`] = score.value === null ? null : score.value * (score.unit === "percent" ? 100 : 1);
-  return fields;
+  return Object.assign(fields, memoryFields(summary));
 }
 
 export function scoreColumns(runs: { scores: Score[] }[]): Column[] {
@@ -249,11 +250,12 @@ export function scoreColumns(runs: { scores: Score[] }[]): Column[] {
   return [...columns.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
-export function comparisonColumns(runs: { scores: Score[] }[]): Column[] {
+export function comparisonColumns(runs: { scores: Score[]; suite?: string }[]): Column[] {
   const leading = ["model", "label", "suite", "quality_percent", "quality_metric", "case_p50_s", "scored", "errors"];
   return [
     ...leading.map(key => ({ ...coreColumns.find(column => column.key === key)!, group: "Compare" })),
     ...coreColumns.filter(column => !leading.includes(column.key)),
     ...scoreColumns(runs),
+    ...(runs.some(run => run.suite === "memory-utility") ? memoryColumns() : []),
   ];
 }

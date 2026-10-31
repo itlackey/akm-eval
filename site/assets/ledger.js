@@ -58,7 +58,11 @@ function runName(value, suite) {
 function latestRuns(rows) {
   const latest = new Map();
   for (const row of rows) {
-    const key = JSON.stringify([row.akm_version, row.suite, row.collection, row.mode, row.model, row.search_method, row.embedding_model, row.strategy]);
+    const identity = [row.akm_version, row.suite, row.collection, row.mode, row.model, row.search_method, row.embedding_model, row.strategy];
+    if (row.suite === 'memory-utility') identity.push(row.memory_akm_fingerprint, row.measurement, row.scoring_version,
+      row.memory_input_digest, row.memory_labels_digest, row.memory_prompt_digest, row.memory_reader_digest,
+      row.memory_embedding_digest, row.memory_context_budget, row.memory_search_limit);
+    const key = JSON.stringify(identity);
     const previous = latest.get(key);
     if (!previous || row.date > previous.date || (row.date === previous.date && row.id < previous.id)) latest.set(key, row);
   }
@@ -109,6 +113,13 @@ async function startLedger() {
     { key: 'latency_basis', label: 'Latency basis', kind: 'text', group: 'Performance', description: 'Which recorded timing supplies the comparison latency. Original timing fields remain available separately.' },
   ]];
   const columnByKey = new Map(columns.map(column => [column.key, column]));
+  // Only offer three-arm views when such reports are published. Existing views keep their contract.
+  const memoryViews = ['memory', 'memory-performance', 'memory-diagnostics'];
+  if (rows.some(row => row.suite === 'memory-utility')) {
+    const group = document.createElement('optgroup'); group.label = 'Memory usefulness';
+    for (const [key, label] of [['memory', 'Memory · quality & gains'], ['memory-performance', 'Memory · time & usage'], ['memory-diagnostics', 'Memory · errors & coverage']]) group.append(new Option(label, key));
+    $('view').append(group);
+  }
   const facets = ['model', 'suite', 'role', 'collection', 'measurement', 'search_method', 'strategy'];
   const state = { search: '', versions: [], latestOnly: false, facets: {}, conditions: [], analysisView: 'compare', errorsOnly: false, dateFrom: '', dateTo: '' };
   let latestIds = null, restoringURL = false;
@@ -208,6 +219,7 @@ async function startLedger() {
   }
 
   function matchesFilters(row) {
+    if (memoryViews.includes(state.analysisView) && row.suite !== 'memory-utility') return false;
     if (state.analysisView === 'impact' && !(row.paired_cases > 0 && row.control_quality_percent != null && row.akm_quality_percent != null)) return false;
     if (state.search && !matchesText([row.model, modelName(row.model), ...columns.map(column => row[column.key])].join(' '), state.search)) return false;
     if (state.versions.length && !state.versions.includes(row.akm_version)) return false;
@@ -241,7 +253,13 @@ async function startLedger() {
     const models = [...new Set(active.filter(row => !row.model.startsWith('No LLM')).map(row => modelName(row.model)))];
     const collections = new Set(active.map(row => row.collection));
     let text;
-    if (view === 'impact') {
+    if (memoryViews.includes(view)) {
+      text = view === 'memory' ? 'Notes − none measures persistent-memory gain; Inferred − notes measures native-inference gain. Gains use all selected cases (errors/unrun = zero). Compare complete pairs and conservative 95% bounds; no winner is inferred.'
+        : view === 'memory-performance' ? 'Phase times include observed failed work. Reader token/cost totals exclude inference and embeddings; compare reporting counts and equal case counts. — means unknown, not zero.'
+        : 'Factual accuracy, format compliance and citation checks are separate. Safety flags cover labeled cases only. Exact quotes do not prove entailment; literal anchors can miss valid paraphrases.';
+      if (!active.length) text = 'No memory-usefulness results match these filters. ' + text;
+      else if (active.every(row => row.role !== 'Full suite')) text += ' These are pilot/diagnostic runs, not full-suite evidence.';
+    } else if (view === 'impact') {
       text = active.length ? `${active.length} paired runs. Positive quality gain means better; negative time change means faster.` : 'No scored with/without-AKM comparison is published for these filters.';
       if (active.length && active.every(row => row.role !== 'Full suite')) text += ' These are pilots; sample sizes and uncertainty are shown.';
     } else if (view === 'quality') {
@@ -285,7 +303,7 @@ async function startLedger() {
   }
   function applyFilters() {
     renderVersions(); grid.setFilter(filtered); renderChips();
-    if (['quality', 'performance', 'settings', 'impact'].includes($('view').value)) applyView($('view').value);
+    if (['quality', 'performance', 'settings', 'impact', ...memoryViews].includes($('view').value)) applyView($('view').value);
     updateCount();
   }
   function viewKeys(view) {
@@ -293,6 +311,17 @@ async function startLedger() {
     const recorded = column => context.some(row => row[column.key] != null && row[column.key] !== '');
     if (view === 'all') return columns.map(column => column.key === 'label' ? 'akm_version' : column.key === 'akm_version' ? 'label' : column.key);
     if (view === 'compare') return compareKeys;
+    if (memoryViews.includes(view)) {
+      const arms = ['none', 'source', 'inferred'];
+      const pairs = ['persistent_memory', 'memory_inference'];
+      const quality = [...arms.map(arm => `memory_${arm}_accuracy`), ...pairs.map(pair => `memory_${pair}_failure_inclusive_gain`), ...pairs.flatMap(pair =>
+        ['ci_low', 'ci_high', 'complete_pairs', 'incomplete_pairs'].map(key => `memory_${pair}_failure_inclusive_${key}`))];
+      const performance = ['memory_inference_mean_s', 'memory_inference_index_mean_s', ...arms.flatMap(arm =>
+        ['index_s', 'retrieval_s', 'answer_s', 'prompt_tokens', 'completion_tokens', 'cost_usd', 'prompt_tokens_reported', 'prompt_tokens_attempted', 'cost_usd_reported'].map(key => `memory_${arm}_${key}`))];
+      const diagnostics = ['memory_selected', 'memory_scored', 'memory_unfinished', 'memory_inference_output', 'memory_inference_no_change', 'memory_inference_errors', ...arms.flatMap(arm =>
+        ['n_evaluated', 'n_errors', 'n_not_run', 'protocol_correct', 'cited_correct', 'malformed_answers', 'missing_citation', 'outdated_answer', 'wrong_scope_answer', 'unsupported_unanswerable'].map(key => `memory_${arm}_${key}`))];
+      return ['model', 'suite', 'akm_version', 'role', ...(view === 'memory' ? quality : view === 'memory-performance' ? performance : diagnostics), 'errors', 'measurement', 'scoring_version', 'label', 'date'];
+    }
     if (view === 'impact') return ['model', 'suite', 'akm_version', 'role', 'control_quality_percent', 'akm_quality_percent', 'akm_delta_pp', 'akm_gain_ci', 'paired_cases', 'control_p50_s', 'akm_p50_s', 'median_time_change_percent', 'control_timed', 'akm_timed', 'errors', 'collection', 'label', 'date'];
     if (view === 'performance') return ['model', 'suite', 'akm_version', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'input_tokens', 'output_tokens', 'cost_usd', 'cost_calls', 'usage_cases', 'usage_basis', 'run_wall_s', 'collection', 'label', 'date'];
     const base = ['model', 'suite', 'akm_version', 'role', 'quality_percent', 'quality_metric', 'quality_cases', 'scored', 'errors'];
@@ -305,6 +334,7 @@ async function startLedger() {
     return grid.getColumns().filter(column => column.isVisible() && columnByKey.has(column.getField())).map(column => column.getField());
   }
   function defaultSort() {
+    if (memoryViews.includes(state.analysisView)) return [{ column: 'date', dir: 'desc' }];
     return [{ column: state.analysisView === 'quality' ? 'quality_percent' : state.analysisView === 'performance' ? 'latency_p50_s' : state.analysisView === 'impact' ? 'akm_delta_pp' : 'date', dir: state.analysisView === 'performance' ? 'asc' : 'desc' }];
   }
   function applyView(view, force = false, keys = viewKeys(view)) {
@@ -316,7 +346,10 @@ async function startLedger() {
     visibleKeys = new Set(keys);
     const sizing = view === 'impact' ? { model: 148, suite: 118, label: 138, role: 88,
       control_quality_percent: 105, akm_quality_percent: 105, akm_delta_pp: 110,
-      akm_gain_ci: 145, paired_cases: 85, control_p50_s: 110, akm_p50_s: 110, median_time_change_percent: 125 } : widths;
+      akm_gain_ci: 145, paired_cases: 85, control_p50_s: 110, akm_p50_s: 110, median_time_change_percent: 125 }
+      : view === 'memory' ? { model: 148, suite: 118, role: 88,
+        memory_none_accuracy: 110, memory_source_accuracy: 110, memory_inferred_accuracy: 110,
+        memory_persistent_memory_failure_inclusive_gain: 150, memory_memory_inference_failure_inclusive_gain: 150 } : widths;
     const filters = grid.getHeaderFilters(), sorting = grid.getSorters().map(sort => ({ column: sort.field, dir: sort.dir }));
     const ordered = [...keys, ...columns.map(column => column.key).filter(key => !visibleKeys.has(key))];
     grid.setColumnLayout([...ordered.map(field => ({ field, visible: visibleKeys.has(field),

@@ -29,6 +29,33 @@ Choose a test and collection, then choose a view:
   Positive gain means better quality; negative time change means faster.
   Pilot scope stays visible. Unscored diagnostics cannot produce an impact claim.
 
+When `memory-utility` reports are published, the same view selector also offers:
+
+- **Memory · quality & gains:** three accuracy controls, **Notes − none** and
+  **Inferred − notes**, their recorded conservative 95% bounds and pair coverage.
+  Default gains retain every selected case (errors/unrun = zero). Complete-pair
+  gains, denominators, help/harm/tie counts and evaluated-only accuracy remain
+  available through **Columns**, filters and exports. They are distinct from
+  the existing two-arm **AKM impact** view; no three-arm result is relabeled as
+  a two-arm comparison or declared a statistical winner.
+- **Memory · time & usage:** separate native-inference means and per-arm phase
+  totals, including observed failed work. Provider token/cost totals are
+  reader-only and show reporting/attempted-call coverage; they exclude native
+  inference and embeddings. Unknown stays blank, including unknown cost.
+- **Memory · errors & coverage:** operational failures and unfinished cases,
+  explicit inference no-change, format/citation checks, and labeled temporal,
+  scope and abstention mistakes. Correct facts with malformed citations remain
+  factually correct; a valid quotation does not prove semantic entailment.
+
+These presets filter to memory-usefulness reports, keep pilot/diagnostic scope
+visible and work with the existing sorting, filters, shared URLs, exports and
+mobile cards. All memory fields, including input/label/prompt/config identities,
+are available in the column chooser. **Latest only** also distinguishes memory
+input/settings digests, budget, scorer and AKM build fingerprint. No memory
+views or columns are added when no such public reports exist. Synthetic browser
+fixtures are never published in `reports/`; collecting or publishing results is
+a separate action from adding presentation support.
+
 **Compare runs** provides the common quality and latency fields together.
 **Run settings** exposes recorded model routes, engine settings, versions and
 provenance. **All fields** exposes every field, including original timing
