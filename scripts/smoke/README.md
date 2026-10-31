@@ -51,6 +51,9 @@ The first run must also have no row error, no `aborted`, exit 0, and use every c
 ## What it skips
 
 `evals/agent-ab` and `benchmarks/terminal-bench` (Docker), `benchmarks/longmemeval` and `benchmarks/skillret` (they download a dataset).
+`evals/memory-utility` needs memory inference's explicit no-change counters (akm#1208), which the pinned release does not report:
+its inference arm fails on that build. Run its opt-in check against the akm under test instead:
+`AKM_EVAL_REAL_AKM=1 AKM_BIN=akm bun test evals/memory-utility/src/real.test.ts --timeout=120000`.
 
 ## CI
 
