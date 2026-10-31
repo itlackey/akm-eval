@@ -45,7 +45,7 @@ site/                 source of the public GitHub Pages results ledger
 generate-assets       makes the custom corpus of every eval in private/
 reports/              published results and notes (see reports/README.md)
 releases/             release notes
-private/, .cache/     your custom corpora and results; akm's embedding model, the semantic indexes and the Harbor setup cache (both gitignored)
+private/, .cache/     your custom corpora and results; akm's embedding model and ONNX Runtime, the semantic indexes and the Harbor setup cache (both gitignored)
 ```
 
 ## Set up with Docker
@@ -180,6 +180,12 @@ eval_docker scripts/check test         # bun test at the root
 ```
 
 The fixture tests use fake AKM/model processes. In the Docker workflow, the image provides all test dependencies. `.github/workflows/check.yml` runs `scripts/check` on every pull request and every push to main. `.github/workflows/akm-smoke.yml` runs `scripts/smoke/run` against real akm releases, nightly and on pull requests (the pinned release only): it runs each eval once on one case against a stub model, to see that akm still takes the evals' commands (see [`scripts/smoke/README.md`](scripts/smoke/README.md)). `.github/workflows/container.yml` builds/verifies the preinstalled runner and publishes the GHCR image on main. `.github/workflows/release.yml` publishes a release from `releases/v<version>.md`, by hand.
+
+## Work on the repository
+
+- **Run from a worktree.** A new worktree or clone has none of the gitignored local files. Copy or link `.env`, `models.json` and `private` (a folder or a link) into it from your main checkout. Without `models.json` the Harbor evals have no `limits` for the model: they warn, and their runs are not comparable with runs that had limits.
+- **Run akm by hand.** Set `AKM_BUNDLE_DIR`, `AKM_CONFIG_DIR`, `AKM_DATA_DIR`, `AKM_CACHE_DIR`, `AKM_STATE_DIR` and the `XDG_*` folders to temporary folders, as the evals do (`sandboxEnv` in `lib/akm/akm.ts`). With only the `XDG_*` folders set, akm still indexes your default stash, though its database goes to the temporary folder.
+- **gh.** `gh issue view`, `gh pr view` and `gh pr edit` can fail on this repository with a GraphQL error about the deprecation of Projects (classic). The `--json` forms of the view commands and `gh api repos/itlackey/akm-eval/...` work (`gh api --method PATCH repos/itlackey/akm-eval/pulls/N` in place of `gh pr edit`).
 
 ## Custom corpora
 

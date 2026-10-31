@@ -12,4 +12,4 @@ createServer(async (request, response) => {
     const body = await readFile(path);
     response.writeHead(200, { 'Content-Type': types[extname(path)] || 'text/plain', 'Cache-Control': 'no-store' }); response.end(body);
   } catch { response.writeHead(404); response.end('Not found'); }
-}).listen(4173, '127.0.0.1');
+}).listen(Number(process.env.LEDGER_PORT || 4173), '127.0.0.1');

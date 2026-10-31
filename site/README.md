@@ -146,6 +146,9 @@ filters, sorting, resizing, column controls, pagination, exports and mobile
 swipe scrolling, card sorting and phone/tablet layouts. Unit tests cover projection, rounding boundaries and unequal paired
 sample sizes. GitHub Pages CI runs both suites before deployment.
 
+The local server listens on port 4173. If another process holds that port, set
+`LEDGER_PORT` to a free one, for example `LEDGER_PORT=4174`.
+
 Serve `.site-output/` with a static server. Relative paths support GitHub Pages'
 `/akm-eval/` project path and a local server root. Assets and data requests
 include the source revision to avoid mixing cached deployments. To build a

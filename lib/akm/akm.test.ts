@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, writeConfig } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -136,6 +136,38 @@ describe("createSandbox", () => {
     expect(sandbox.env.HF_HOME).toBe("/elsewhere");
   });
 
+  test("a semantic sandbox finds akm's ONNX Runtime in the repository's .cache through a link, which removing the sandbox leaves (#147)", () => {
+    const shared = join(import.meta.dir, "..", "..", ".cache", "onnxruntime");
+    const sandbox = createSandbox("lib-akm-test", { semantic: true });
+    sandboxes.push(sandbox);
+    const link = join(sandbox.dir, "cache", "onnxruntime");
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(link)).toBe(shared);
+    expect(sandbox.env.AKM_CACHE_DIR).toBe(join(sandbox.dir, "cache")); // the rest of akm's cache is the sandbox's own
+    // what akm fetches through the link outlives the sandbox, so the next sandbox finds it
+    const fetched = `lib-akm-test-${process.pid}`;
+    writeFileSync(join(link, fetched), "binding");
+    try {
+      removeSandbox(sandbox);
+      expect(existsSync(sandbox.dir)).toBe(false);
+      expect(readFileSync(join(shared, fetched), "utf8")).toBe("binding");
+    } finally {
+      rmSync(join(shared, fetched), { force: true });
+    }
+  });
+
+  test("a plain sandbox has no link to ONNX Runtime, and gets one when a config turns on the built-in embedder (#147)", () => {
+    const sandbox = createSandbox("lib-akm-test");
+    sandboxes.push(sandbox);
+    expect(readdirSync(join(sandbox.dir, "cache"))).toEqual([]);
+    writeConfig(sandbox, semanticConfig());
+    const link = join(sandbox.dir, "cache", "onnxruntime");
+    expect(readlinkSync(link)).toBe(join(import.meta.dir, "..", "..", ".cache", "onnxruntime"));
+    expect(sandbox.env.HF_HOME).toBe(join(import.meta.dir, "..", "..", ".cache", "models"));
+    writeConfig(sandbox, semanticConfig()); // a second config leaves the link as it is
+    expect(readlinkSync(link)).toBe(join(import.meta.dir, "..", "..", ".cache", "onnxruntime"));
+  });
+
   test("runs akm, or the words of AKM_BIN", () => {
     const cmdFor = (bin: string | undefined) => {
       const sandbox = withEnv({ AKM_BIN: bin }, () => createSandbox("lib-akm-test"));
@@ -213,6 +245,7 @@ describe("createSandbox", () => {
       XDG_CONFIG_HOME: join(dir, "xdg-config"),
       XDG_DATA_HOME: join(dir, "xdg-data"),
       XDG_STATE_HOME: join(dir, "xdg-state"),
+      GIT_CEILING_DIRECTORIES: dir,
     });
     expect(plain.env).toEqual({ ...needed, ...own(plain.dir) });
     expect(keyed.env).toEqual({ ...needed, ...own(keyed.dir), MODEL_API_KEY: "SYNTH_MODEL" });
@@ -401,6 +434,51 @@ describe("sandboxIn", () => {
     const again = sandboxIn(dir, { semantic: true });
     expect(again.env).toEqual(sandbox.env);
     expect(JSON.parse(readFileSync(join(dir, "config", "config.json"), "utf8")).bundles).toEqual({ notes: { path: "/somewhere" } });
+  });
+
+  test("links ONNX Runtime again in a folder whose cache was removed, as index-cache.ts removes a kept index's, and leaves a folder in its place (#147)", () => {
+    const parent = mkdtempSync(join(tmpdir(), "lib-akm-test-"));
+    dirs.push(parent);
+    const shared = join(import.meta.dir, "..", "..", ".cache", "onnxruntime");
+    const dir = join(parent, "kept");
+    const link = join(dir, "cache", "onnxruntime");
+    sandboxIn(dir, { semantic: true });
+    const fetched = `lib-akm-test-${process.pid}`;
+    writeFileSync(join(link, fetched), "binding");
+    try {
+      rmSync(join(dir, "cache"), { recursive: true, force: true });
+      expect(readFileSync(join(shared, fetched), "utf8")).toBe("binding"); // the link went, and the files it pointed to stayed
+      sandboxIn(dir, { semantic: true }); // the folder has a config, so this is not writeConfig's link
+      expect(readlinkSync(link)).toBe(shared);
+      expect(readFileSync(join(link, fetched), "utf8")).toBe("binding");
+    } finally {
+      rmSync(join(shared, fetched), { force: true });
+    }
+    rmSync(link);
+    mkdirSync(link);
+    sandboxIn(dir, { semantic: true });
+    expect(lstatSync(link).isDirectory()).toBe(true);
+  });
+
+  // akm lists the files of a bundle that is in a git repository with this command, in the bundle's folder, and walks the folder itself when it fails.
+  test.skipIf(!Bun.which("git"))("does not let git climb out of the sandbox, so a repository above it that ignores its folder hides no asset from akm (#148)", () => {
+    const repo = mkdtempSync(join(tmpdir(), "lib-akm-test-"));
+    dirs.push(repo);
+    expect(Bun.spawnSync(["git", "init", "-q"], { cwd: repo }).exitCode).toBe(0);
+    writeFileSync(join(repo, ".gitignore"), "/tmp/\n"); // as a TMPDIR in a checkout's ignored folder
+    const sandbox = sandboxIn(join(repo, "tmp", "sb"));
+    expect(sandbox.env.GIT_CEILING_DIRECTORIES).toBe(sandbox.dir);
+    mkdirSync(join(sandbox.dir, "bundle", "skills", "a"), { recursive: true });
+    writeFileSync(join(sandbox.dir, "bundle", "skills", "a", "SKILL.md"), "a");
+    // LC_ALL=C: git says why in English, whatever the caller's locale
+    const list = (env: Record<string, string>) => Bun.spawnSync(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "."], { cwd: join(sandbox.dir, "bundle"), env: { ...env, LC_ALL: "C" }, stdout: "pipe", stderr: "pipe" });
+    const { GIT_CEILING_DIRECTORIES: _ceiling, ...without } = sandbox.env;
+    const climbed = list(without);
+    expect(climbed.exitCode).toBe(0);
+    expect(climbed.stdout.toString()).toBe(""); // the repository ignores the sandbox: akm would index nothing
+    const kept = list(sandbox.env);
+    expect(kept.exitCode).not.toBe(0);
+    expect(kept.stderr.toString()).toContain("not a git repository"); // so akm walks the bundle itself
   });
 });
 

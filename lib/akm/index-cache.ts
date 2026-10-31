@@ -23,8 +23,8 @@
 // build time, and embeddings.
 //
 // The index is in the repository's .cache/, which the repository ignores, and akm walks a bundle that is inside a git repository
-// with `git ls-files`, which leaves out what the repository ignores: it would find no asset. So git is not let climb out of the
-// index's folder, and akm walks the bundle itself.
+// with `git ls-files`, which leaves out what the repository ignores: it would find no asset. sandboxEnv of akm.ts does not let git
+// climb out of the folder of any sandbox, this one too, so akm walks the bundle itself.
 //
 // What the index was built from, and by which akm, is in state.json, which is written last, after akm has indexed and the
 // caller has checked the index. A folder without one holds an index that was not finished, and is removed.
@@ -197,10 +197,7 @@ export async function cachedIndex(spec: IndexSpec, build: (sandbox: Sandbox) => 
     const builder = digest([build.toString(), ...(spec.builder ?? []).map((path) => `${path}\0${digest(readFileSync(path))}`)].join("\0"));
     const key = digest([current.version, current.akm_bin, current.akm_build ?? "", SEMANTIC_MODEL, dir, spec.extra ?? "", builder, JSON.stringify(semanticConfig()), ...(current.akm_build_fingerprint ? [current.akm_build_fingerprint] : [])].join("\0"));
     const previous = readState(dir);
-    const sandbox = (): Sandbox => {
-      const sb = sandboxIn(dir, { semantic: true });
-      return { ...sb, env: { ...sb.env, GIT_CEILING_DIRECTORIES: dir }, ...(spec.cmd ? { cmd: spec.cmd } : {}) };
-    };
+    const sandbox = (): Sandbox => ({ ...sandboxIn(dir, { semantic: true }), ...(spec.cmd ? { cmd: spec.cmd } : {}) });
     const discard = () => rmSync(dir, { recursive: true, force: true });
     const same = (files: Record<string, string>) => Object.keys(files).length === Object.keys(spec.files).length && Object.entries(files).every(([path, sum]) => spec.files[path] === sum);
     let state: CachedIndex["state"] = "cold";
