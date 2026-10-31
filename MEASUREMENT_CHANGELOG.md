@@ -23,6 +23,8 @@ Add a release entry here when a version changes.
   denominators, complete-pair help/harm, conservative paired Hoeffding intervals, saved inference snapshots and phase usage.
   This is not LongMemEval and does not modify its protocol. Explicit rescoring preserves unfinished checkpoint rows via the
   optional Measurement.unfinished hook; existing measurements retain their prior completion behavior.
+  Its summary carries `n_cases` and `model_calls` (native inference) as the other evals' do, and saved akm JSON writes the
+  sandbox folder as `<sandbox>`, with rows and summary passed through `redactActors`; no score depends on either.
 
 - No eval changed version. Every akm sandbox sets `GIT_CEILING_DIRECTORIES` to its own folder, so a sandbox inside a git
   work tree (a TMPDIR in a checkout) no longer hides its bundle from akm's file walk (#148). Every published run had its
