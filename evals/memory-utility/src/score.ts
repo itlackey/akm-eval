@@ -1,6 +1,7 @@
 import type { ChatResult, CallUsage } from "../../../benchmarks/longmemeval/src/llm.ts";
 import { pairedDifference, rate } from "../../../benchmarks/longmemeval/src/metrics.ts";
 import type { ModelCalls } from "../../../lib/akm/usage.ts";
+import type { CallRow } from "../../nightly/src/collect.ts";
 import type { Case } from "./inputs.ts";
 import { ARMS, type ArmName, type Packed } from "./protocol.ts";
 
@@ -108,12 +109,14 @@ export function rawOf(row: Record<string, any>): { raw: Raw } | { missing: strin
 }
 const avg = (n: number[]): number | null => n.length ? n.reduce((a, b) => a + b, 0) / n.length : null;
 const total = (n: number[]): number => n.reduce((a, b) => a + b, 0);
-/**
- * The run's native-inference calls in the `model_calls` shape of every other eval (lib/akm/usage.ts), from each case's record. A case's
- * means are over its successful calls, so they are weighted by those; exact when every successful call reported its tokens.
- */
-export function runModelCalls(rows: Row[]): ModelCalls | null {
-  const cases = rows.map(r => r.raw.inference.model_calls as ModelCalls | null).filter((m): m is ModelCalls => !!m && typeof m.calls === "number");
+/** One reader call (or a call with its retries) as a `ModelCalls` record: a failed call has no successful means, as in lib/akm/usage.ts. */
+const readerCall = (u: CallUsage): ModelCalls => ({ calls: 1 + u.retries, errors: u.retries + (u.failed ? 1 : 0), prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens,
+  seconds: u.seconds, output_tokens_per_second: u.completion_tokens !== null && u.seconds > 0 ? u.completion_tokens / u.seconds : null });
+/** The reader's calls of every arm: each answer's usage, or the usage of a failed attempt. */
+const readerUsages = (rows: Row[]): CallUsage[] => rows.flatMap(r => ARMS.flatMap(a => r.raw.arms[a].answer ? [r.raw.arms[a].answer!.usage] : r.raw.arms[a].failed_usage ? [r.raw.arms[a].failed_usage!] : []));
+const nativeCalls = (rows: Row[]): ModelCalls[] => rows.map(r => r.raw.inference.model_calls as ModelCalls | null).filter((m): m is ModelCalls => !!m && typeof m.calls === "number");
+/** The calls the run made to the model, native inference and the reader's, in the `model_calls` shape of every other eval (lib/akm/usage.ts). */
+function combine(cases: ModelCalls[]): ModelCalls | null {
   if (!cases.length) return null;
   const ok = (m: ModelCalls) => m.calls - m.errors, round = (x: number, digits: number) => Number(x.toFixed(digits));
   const mean = (pick: (m: ModelCalls) => number | null, digits: number) => {
@@ -124,6 +127,20 @@ export function runModelCalls(rows: Row[]): ModelCalls | null {
   const generated = total(timed.map(m => m.completion_tokens! * ok(m))), seconds = total(timed.map(m => m.completion_tokens! * ok(m) / m.output_tokens_per_second!));
   return { calls: total(cases.map(m => m.calls)), errors: total(cases.map(m => m.errors)), prompt_tokens: mean(m => m.prompt_tokens, 1), completion_tokens: mean(m => m.completion_tokens, 1),
     seconds: mean(m => m.seconds, 2) ?? 0, output_tokens_per_second: seconds > 0 ? round(generated / seconds, 1) : null };
+}
+/**
+ * Every model call of the run: akm's native inference (each case's record) and the reader's answers. A case's means are over its
+ * successful calls, so they are weighted by those; exact when every successful call reported its tokens. `calls_by` splits the run by
+ * who called the model, as nightly's does, with token totals: the reader's are the provider's reported sums, native inference's are
+ * each case's per-call mean times its successful calls.
+ */
+export function runModelCalls(rows: Row[]): { model_calls: ModelCalls | null; calls_by: CallRow[] } {
+  const native = nativeCalls(rows), reader = readerUsages(rows).map(readerCall);
+  const models = [...new Set(rows.flatMap(r => ARMS.map(a => r.raw.arms[a].answer?.model)).filter((m): m is string => !!m))].sort().join(", ");
+  const sums = (calls: ModelCalls[], tokens: (m: ModelCalls) => number | null) => Math.round(total(calls.map(m => (tokens(m) ?? 0) * (m.calls - m.errors))));
+  const by = (process: string, calls: ModelCalls[]): CallRow[] => calls.length ? [{ process, model: models, calls: total(calls.map(m => m.calls)), failures: total(calls.map(m => m.errors)),
+    prompt_tokens: sums(calls, m => m.prompt_tokens), completion_tokens: sums(calls, m => m.completion_tokens) }] : [];
+  return { model_calls: combine([...native, ...reader]), calls_by: [...by("native inference", native), ...by("reader", reader)] };
 }
 export function summarize(rows: Row[]) {
   function pair(before: ArmName, after: ArmName, evaluatedOnly: boolean, supported = false) {
@@ -164,7 +181,7 @@ export function summarize(rows: Row[]) {
     }];
   }));
   return { n_cases: rows.length, n_selected: rows.length, n_run: rows.filter(r => r.raw.inference.outcome !== "not-run" || ARMS.some(a => r.raw.arms[a].state !== "not-run")).length, n_scored: rows.filter(r => ARMS.every(a => r.arms[a].evaluated)).length, n_errored: rows.filter(errored).length, n_unfinished: rows.filter(unfinished).length,
-    model_calls: runModelCalls(rows), observed_models: [...new Set(rows.flatMap(r => ARMS.map(a => r.raw.arms[a].answer?.model)).filter(Boolean))].sort(),
+    ...runModelCalls(rows), observed_models: [...new Set(rows.flatMap(r => ARMS.map(a => r.raw.arms[a].answer?.model)).filter(Boolean))].sort(),
     metrics: { arms, persistent_memory: { failure_inclusive: pair("none", "source", false), complete_pairs: pair("none", "source", true) },
       memory_inference: { failure_inclusive: pair("source", "inferred", false), complete_pairs: pair("source", "inferred", true) },
       cited_correct_deltas: { persistent_memory: pair("none", "source", false, true), memory_inference: pair("source", "inferred", false, true) },
