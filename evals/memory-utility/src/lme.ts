@@ -26,6 +26,27 @@ export const PRIMARY_BUDGET = 4096;
 /** The larger budget at which the original notes are read in the one cross-budget comparison: inferred at the primary budget against source here. */
 export const NOTES_BUDGET = 8192;
 
+/** The judge as PREREGISTRATION.md names it: the model a summary records as `judge_model`, and the settings of its chat calls that the file states. Other settings of its models.json line, such as the reasoning effort, are not stated there. */
+export const PREREGISTERED_JUDGE = { model: "fast/qwen3.6-35b-a3b", temperature: 0, chat: { max_tokens: 64 } };
+
+/**
+ * How a held-out run's settings differ from the pre-registration's, one line each (none when it matches). The constants are the ones the
+ * pre-registration test holds the file to. The primary endpoint (inferred minus source at the primary budget, and at it against source at the
+ * larger one) follows from the budgets, so they are held to the pre-registered pair.
+ */
+export function preregistrationDifferences(run: { budgets: number[]; haystack: number; sampleSeed: number; judgeModel: string; judgeChat?: object }): string[] {
+  const chat = (run.judgeChat ?? {}) as Record<string, unknown>;
+  const differences: string[] = [];
+  const check = (name: string, got: unknown, wanted: unknown) => { if (JSON.stringify(got) !== JSON.stringify(wanted)) differences.push(`${name} ${JSON.stringify(got)} (pre-registered ${JSON.stringify(wanted)})`); };
+  check("budgets, which fix the primary endpoint,", run.budgets, DEFAULT_BUDGETS);
+  check("haystack", run.haystack, DEFAULT_HAYSTACK);
+  check("sample seed", run.sampleSeed, DEFAULT_SAMPLE_SEED);
+  check("judge model", run.judgeModel, PREREGISTERED_JUDGE.model);
+  check("judge temperature", chat.temperature ?? 0, PREREGISTERED_JUDGE.temperature);
+  for (const [key, wanted] of Object.entries(PREREGISTERED_JUDGE.chat)) check(`judge chat.${key}`, chat[key], wanted);
+  return differences;
+}
+
 export type Split = "dev" | "heldout-a" | "heldout-b";
 export const SPLITS: Split[] = ["dev", "heldout-a", "heldout-b"];
 export const isHeldout = (split: Split): boolean => split !== "dev";

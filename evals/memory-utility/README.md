@@ -116,7 +116,9 @@ evals/memory-utility/run --model my-model --semantic --split dev --limit 40 --ju
   default**: `--split heldout-a` or `--split heldout-b` is explicit (there is no bare `heldout`; a run names its half) and runs only on
   the rewrite (`--corpus custom`, made by `./generate-assets --only longmemeval`), never on the public data. The first decision uses half
   A, the next half B, and a half is spent once akm is tuned on its failures. Read [PREREGISTRATION.md](PREREGISTRATION.md), committed
-  before any held-out run.
+  before any held-out run. A held-out run is **held to the pre-registration**: it refuses to start, before any akm or model setup, when
+  `--budgets`, `--haystack`, `--sample-seed` or the judge (its model, temperature and `chat.max_tokens`) differ from the pre-registered
+  values, and says which. Dev runs may use any settings.
 - **Arms and budgets.** The same three arms. Inference runs once per case over its sessions; each arm is indexed and searched once; the
   shown text of the hits is packed at every `--budgets` value (default `4096,8192`, estimated tokens as characters/4;
   4096 is the primary comparison and must be among them; 8192 still fits the 35B's 32k context) and the reader answers once per distinct packed text. The 24 cases keep

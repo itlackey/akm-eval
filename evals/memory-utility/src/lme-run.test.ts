@@ -93,6 +93,36 @@ describe("memory-utility --split", () => {
     expect(without.out).not.toContain("primary comparisons");
   }, 120_000);
 
+  test("a held-out half runs only with the pre-registered settings, and the refusal comes before any akm call; dev runs are free", async () => {
+    const held = ["--split", "heldout-a", "--cases", join(work, "cases"), "--corpus", "custom", "--label", `${label}-held`];
+    const registered = ["--judge-model", "fast/qwen3.6-35b-a3b"];
+    const log = () => existsSync(join(work, "akm.log")) ? readFileSync(join(work, "akm.log"), "utf8") : "", before = log();
+    for (const [args, message] of [
+      [["--judge-model", "fake-judge"], 'judge model "fake-judge" (pre-registered "fast/qwen3.6-35b-a3b")'],
+      [[...registered, "--haystack", "8"], "haystack 8 (pre-registered 16)"],
+      [[...registered, "--budgets", "4096"], "budgets, which fix the primary endpoint, [4096] (pre-registered [4096,8192])"],
+      [[...registered, "--budgets", "2048,4096,8192"], "budgets, which fix the primary endpoint, [2048,4096,8192]"],
+      [[...registered, "--sample-seed", "7"], "sample seed 7 (pre-registered 42)"],
+      [["--judge-model", "fake-judge", "--haystack", "1", "--budgets", "250,4096", "--sample-seed", "1"], "judge model"],
+    ] as [string[], string][]) {
+      const r = await run(...held, ...args);
+      expect(r.code).not.toBe(0);
+      expect(r.err).toContain("--split heldout-a runs only with the pre-registered settings");
+      expect(r.err).toContain(message);
+      expect(r.out).not.toContain("Results:");
+      expect(r.out).not.toContain("Reader/inference destination");
+    }
+    expect(log()).toBe(before); // akm was not called
+    // With the pre-registered flags only the judge's line settings are left to differ (no models.json line sets them here), so only they are named.
+    const flags = await run(...held, ...registered);
+    expect(flags.code).not.toBe(0);
+    expect(flags.err).toContain("judge chat.max_tokens undefined (pre-registered 64)");
+    for (const named of ["haystack", "budgets", "sample seed", "judge model"]) expect(flags.err).not.toContain(named);
+    // The same other settings on dev are not refused.
+    const dev = await run("--split", "dev", "--cases", join(work, "cases"), "--judge-model", "fake-judge", "--budgets", "250,4096", "--haystack", "1", "--sample-seed", "7", "--limit", "1", "--label", `${label}-devfree`);
+    expect(dev.code).toBe(0);
+  }, 120_000);
+
   test("refuses to resume a run that is not there", async () => {
     const r = await run(...base, "--resume", join(work, "nothing"));
     expect(r.code).not.toBe(0);

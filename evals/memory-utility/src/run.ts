@@ -19,7 +19,7 @@ import { collect, configFor, pending, type Options } from "./collect.ts";
 import { ARMS, PROMPT, readerSettings } from "./protocol.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { makeRow, summarize } from "./score.ts";
-import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, NOTES_BUDGET, PRIMARY_BUDGET, HALVES_SALT, SPLIT_SALT, SPLITS, isHeldout, isLmeCase, lmeCases, type LmeCase, type Split } from "./lme.ts";
+import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, NOTES_BUDGET, PRIMARY_BUDGET, HALVES_SALT, SPLIT_SALT, SPLITS, isHeldout, isLmeCase, lmeCases, preregistrationDifferences, type LmeCase, type Split } from "./lme.ts";
 import { lmeCollect, lmePending, type LmeOptions } from "./lme-collect.ts";
 import { makeLmeRow, isLmeRow } from "./lme-score.ts";
 
@@ -132,6 +132,11 @@ async function main() {
   if (lme) for (const c of corpora) if (c.name === "custom" && !existsSync(join(c.folder, DATA_FILE))) fail(c.rewrite ? `the custom assets are missing. Make them with: ./generate-assets --only longmemeval` : `${c.flag} needs ${DATA_FILE} in its folder`);
   useAkm(v, fail); const model = useModel(v, fail); const baseLabel = resultsLabel(v.label, model.name);
   const judge = lme ? useJudge(v, fail, process.env, undefined, { baseUrl: model.baseUrl, apiKey: model.apiKey }) : null;
+  // A held-out half is run only as pre-registered: this refuses before anything is announced, probed or collected. Dev runs are free.
+  if (judge && isHeldout(split)) {
+    const different = preregistrationDifferences({ budgets, haystack, sampleSeed, judgeModel: judge.name, judgeChat: judge.chat });
+    if (different.length) fail(`--split ${split} runs only with the pre-registered settings (evals/memory-utility/PREREGISTRATION.md), and this run has ${different.join("; ")}. Run a dev split to try other settings.`);
+  }
   await announceCases(v, [{ role: "model", name: model.name, baseUrl: model.baseUrl }, ...(judge ? [{ role: "judge" as const, name: judge.name, baseUrl: judge.baseUrl }] : [])]);
   const contextTokens = lme ? PRIMARY_BUDGET : positive(v["context-tokens"], 1024, "--context-tokens");
   const o: Options = { endpoint: { baseUrl: model.baseUrl, apiKey: model.apiKey, model: model.name, chat: model.chat }, provider: model.provider,

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Question } from "../../../benchmarks/longmemeval/src/dataset.ts";
 import { caseDigests } from "../../../lib/manifest.ts";
-import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, DEV_QUESTIONS, HALVES_SALT, PRIMARY_BUDGET, SPLIT_SALT, buildLmeCase, distractorSeed, lmeCases, lmePrompt, splitQuestions } from "./lme.ts";
+import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, DEV_QUESTIONS, HALVES_SALT, PREREGISTERED_JUDGE, PRIMARY_BUDGET, SPLIT_SALT, buildLmeCase, distractorSeed, lmeCases, lmePrompt, preregistrationDifferences, splitQuestions } from "./lme.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { pack, sourceFiles } from "./protocol.ts";
 
@@ -76,6 +76,25 @@ function question(id = "q-split", answer = "GOLD-ANSWER-7731"): Question {
     answer_session_ids: ["answer_EVID4", "answer_EVID21"], haystack_dates: sessions.map((_, i) => `2023/05/${String(1 + (i % 28)).padStart(2, "0")} (Mon) 10:00`), haystack_session_ids, haystack_sessions: sessions };
 }
 
+describe("the pre-registered settings a held-out run is held to", () => {
+  const registered: Parameters<typeof preregistrationDifferences>[0] = { budgets: [4096, 8192], haystack: 16, sampleSeed: 42, judgeModel: "fast/qwen3.6-35b-a3b", judgeChat: { max_tokens: 64 } };
+  test("a run with those settings passes, whatever else the judge's line sets", () => {
+    expect(preregistrationDifferences(registered)).toEqual([]);
+    expect(preregistrationDifferences({ ...registered, judgeChat: { max_tokens: 64, temperature: 0, reasoning_effort: "none" } })).toEqual([]);
+  });
+  test("each setting that differs is named, with its pre-registered value", () => {
+    const text = (change: Partial<typeof registered>) => preregistrationDifferences({ ...registered, ...change }).join("\n");
+    expect(text({ budgets: [1024, 4096] })).toContain("budgets, which fix the primary endpoint, [1024,4096] (pre-registered [4096,8192])");
+    expect(text({ haystack: 8 })).toContain("haystack 8 (pre-registered 16)");
+    expect(text({ sampleSeed: 1 })).toContain("sample seed 1 (pre-registered 42)");
+    expect(text({ judgeModel: "other/model" })).toContain('judge model "other/model" (pre-registered "fast/qwen3.6-35b-a3b")');
+    expect(text({ judgeChat: { max_tokens: 512 } })).toContain("judge chat.max_tokens 512 (pre-registered 64)");
+    expect(text({ judgeChat: undefined })).toContain("judge chat.max_tokens undefined");
+    expect(text({ judgeChat: { max_tokens: 64, temperature: 0.7 } })).toContain("judge temperature 0.7 (pre-registered 0)");
+    expect(preregistrationDifferences({ ...registered, haystack: 8, sampleSeed: 1 })).toHaveLength(2);
+  });
+});
+
 describe("LongMemEval cases", () => {
   test("hold the evidence sessions and exactly K distractors, whole, in history order", () => {
     const c = buildLmeCase(question(), 16, 42);
@@ -142,6 +161,7 @@ describe("LongMemEval cases", () => {
     expect(block.budgets).toEqual(DEFAULT_BUDGETS);
     expect(block.primary_budget).toBe(PRIMARY_BUDGET);
     expect(block.sample_seed).toBe(DEFAULT_SAMPLE_SEED);
+    expect(block.judge).toMatchObject({ model: PREREGISTERED_JUDGE.model, temperature: PREREGISTERED_JUDGE.temperature, chat: PREREGISTERED_JUDGE.chat }); // the constants a held-out run is held to
     expect(distractorSeed(DEFAULT_SAMPLE_SEED, "q")).toBe(parseInt(createHash("sha256").update(`${DEFAULT_SAMPLE_SEED}:q`).digest("hex").slice(0, 8), 16)); // "the first 32 bits of sha256(sample_seed:question_id)"
   });
 });

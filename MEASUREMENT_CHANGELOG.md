@@ -67,6 +67,10 @@ Add a release entry here when a version changes.
     the pre-registered "reaches the notes' accuracy at the larger budget", which a point estimate could have declared. It is the one
     pre-registered comparison, not a pairing of arbitrary budgets, and is absent when 8192 is not run. Console, compare and the ledger
     show it with the Holm-adjusted p-values.
+  - **Held-out runs are locked to the pre-registration.** `--split heldout-a|heldout-b` refuses to start, before any akm or model setup,
+    when the budgets, `--haystack`, `--sample-seed` or the judge (model, temperature, `chat.max_tokens`) differ from the pre-registered
+    values (the constants `src/lme.test.ts` holds `PREREGISTRATION.md` to). No score changes; a held-out run can no longer be made with
+    other settings by mistake. Dev runs are free.
   - Ledger and compare gain the p-value, and a column per standard budget (`memory_b<budget>_*`) with a `Memory · by budget` view.
   - The pre-registration for held-out runs is `evals/memory-utility/PREREGISTRATION.md`. No held-out run has been made.
 

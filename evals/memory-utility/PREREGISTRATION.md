@@ -68,6 +68,10 @@ after the adjustment (`metrics.primary_comparisons`). `source - none` at 4096 is
 - Dev (100 questions) is for pilots, debugging and estimating discordance; akm tuning may look at dev failures only.
 - Held-out runs once per decision, on the rewrite, on a whole half of 200 questions. `--split heldout-a` and `--split heldout-b` are
   never a default, there is no bare `heldout`, and the runner refuses both on the public data.
+- The runner holds a held-out run to this file. `--split heldout-a` and `--split heldout-b` refuse to start, before any akm or model
+  setup, when the budgets (which fix the primary endpoint), the haystack, the sample seed, or the judge (its model, temperature and
+  `chat.max_tokens`) differ from the values in the block above. The constants are the ones `src/lme.test.ts` holds this file to. Dev
+  runs are free.
 - The first decision uses half A and the next uses half B. Once an akm change is shaped by looking at the failures of a half, that half is
   spent; a later decision uses the other half, and when both are spent there is no held-out data left for this dataset and split.
 - The data is public, so the discipline is procedural: this file, the committed split, and every held-out run recorded in the ledger.
