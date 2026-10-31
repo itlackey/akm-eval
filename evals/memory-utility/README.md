@@ -63,6 +63,8 @@ budget or remove cases after seeing which treatment wins.
 These are public development fixtures, **not held-out data** and not a balanced
 estimate of real users' task distribution. Add independently authored held-out
 cases for release decisions. Renaming public cases does not make them held out.
+Until such cases exist this eval is opt-in research, not part of the per-release comparison round (reflect,
+distill, extract, judge-gate, bakeoff, consolidate, promotion, nightly, retrieval, SkillRet, agent-ab).
 
 For private/custom cases, use `--cases DIR` with a `cases.json` in the same
 format. The runner prints the model destination before collection and custom
