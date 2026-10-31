@@ -1,5 +1,6 @@
 import type { ChatResult, CallUsage } from "../../../benchmarks/longmemeval/src/llm.ts";
 import { pairedDifference, rate } from "../../../benchmarks/longmemeval/src/metrics.ts";
+import type { ModelCalls } from "../../../lib/akm/usage.ts";
 import type { Case } from "./inputs.ts";
 import { ARMS, type ArmName, type Packed } from "./protocol.ts";
 
@@ -106,6 +107,24 @@ export function rawOf(row: Record<string, any>): { raw: Raw } | { missing: strin
   return missing.length ? { missing } : { raw: r as Raw };
 }
 const avg = (n: number[]): number | null => n.length ? n.reduce((a, b) => a + b, 0) / n.length : null;
+const total = (n: number[]): number => n.reduce((a, b) => a + b, 0);
+/**
+ * The run's native-inference calls in the `model_calls` shape of every other eval (lib/akm/usage.ts), from each case's record. A case's
+ * means are over its successful calls, so they are weighted by those; exact when every successful call reported its tokens.
+ */
+export function runModelCalls(rows: Row[]): ModelCalls | null {
+  const cases = rows.map(r => r.raw.inference.model_calls as ModelCalls | null).filter((m): m is ModelCalls => !!m && typeof m.calls === "number");
+  if (!cases.length) return null;
+  const ok = (m: ModelCalls) => m.calls - m.errors, round = (x: number, digits: number) => Number(x.toFixed(digits));
+  const mean = (pick: (m: ModelCalls) => number | null, digits: number) => {
+    const known = cases.filter(m => pick(m) !== null && ok(m) > 0), weight = total(known.map(ok));
+    return weight ? round(total(known.map(m => pick(m)! * ok(m))) / weight, digits) : null;
+  };
+  const timed = cases.filter(m => m.completion_tokens !== null && m.output_tokens_per_second && ok(m) > 0);
+  const generated = total(timed.map(m => m.completion_tokens! * ok(m))), seconds = total(timed.map(m => m.completion_tokens! * ok(m) / m.output_tokens_per_second!));
+  return { calls: total(cases.map(m => m.calls)), errors: total(cases.map(m => m.errors)), prompt_tokens: mean(m => m.prompt_tokens, 1), completion_tokens: mean(m => m.completion_tokens, 1),
+    seconds: mean(m => m.seconds, 2) ?? 0, output_tokens_per_second: seconds > 0 ? round(generated / seconds, 1) : null };
+}
 export function summarize(rows: Row[]) {
   function pair(before: ArmName, after: ArmName, evaluatedOnly: boolean, supported = false) {
     const subset = evaluatedOnly ? rows.filter(r => r.arms[before].evaluated && r.arms[after].evaluated) : rows;
@@ -144,8 +163,8 @@ export function summarize(rows: Row[]) {
       mean_retrieval_seconds: avg(evaluated.map(r => r.raw.arms[a].seconds.retrieval)), mean_answer_seconds: avg(evaluated.map(r => r.raw.arms[a].seconds.answer)),
     }];
   }));
-  return { n_selected: rows.length, n_run: rows.filter(r => r.raw.inference.outcome !== "not-run" || ARMS.some(a => r.raw.arms[a].state !== "not-run")).length, n_scored: rows.filter(r => ARMS.every(a => r.arms[a].evaluated)).length, n_errored: rows.filter(errored).length, n_unfinished: rows.filter(unfinished).length,
-    observed_models: [...new Set(rows.flatMap(r => ARMS.map(a => r.raw.arms[a].answer?.model)).filter(Boolean))].sort(),
+  return { n_cases: rows.length, n_selected: rows.length, n_run: rows.filter(r => r.raw.inference.outcome !== "not-run" || ARMS.some(a => r.raw.arms[a].state !== "not-run")).length, n_scored: rows.filter(r => ARMS.every(a => r.arms[a].evaluated)).length, n_errored: rows.filter(errored).length, n_unfinished: rows.filter(unfinished).length,
+    model_calls: runModelCalls(rows), observed_models: [...new Set(rows.flatMap(r => ARMS.map(a => r.raw.arms[a].answer?.model)).filter(Boolean))].sort(),
     metrics: { arms, persistent_memory: { failure_inclusive: pair("none", "source", false), complete_pairs: pair("none", "source", true) },
       memory_inference: { failure_inclusive: pair("source", "inferred", false), complete_pairs: pair("source", "inferred", true) },
       cited_correct_deltas: { persistent_memory: pair("none", "source", false, true), memory_inference: pair("source", "inferred", false, true) },

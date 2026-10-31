@@ -60,3 +60,14 @@ test("saved akm JSON names the sandbox folder, not the host path", () => {
   expect(sandboxRelative(found, dir)).toEqual({ hits: [{ ref: "memories/m1", path: "<sandbox>/bundle/memories/m1.md" }], note: "see <sandbox>" });
   expect(sandboxRelative("Error: failed in C:\\t\\x", "C:\\t")).toBe("Error: failed in <sandbox>\\x");
 });
+
+test("summary model_calls combines the cases' native inference calls in the shared shape", async () => {
+  const { runModelCalls } = await import("./score.ts");
+  const row = (model_calls: unknown) => ({ raw: { inference: { model_calls } } }) as any;
+  expect(runModelCalls([row(null)])).toBeNull();
+  expect(runModelCalls([
+    row({ calls: 1, errors: 0, prompt_tokens: 600, completion_tokens: 200, seconds: 2, output_tokens_per_second: 100 }),
+    row({ calls: 3, errors: 1, prompt_tokens: 300, completion_tokens: 50, seconds: 1, output_tokens_per_second: 50 }),
+    row(null),
+  ])).toEqual({ calls: 4, errors: 1, prompt_tokens: 400, completion_tokens: 100, seconds: 1.33, output_tokens_per_second: 75 });
+});
