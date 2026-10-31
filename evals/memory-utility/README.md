@@ -116,8 +116,8 @@ evals/memory-utility/run --model my-model --semantic --split dev --limit 40 --ju
   (`--corpus custom`, made by `./generate-assets --only longmemeval`), never on the public data. Read
   [PREREGISTRATION.md](PREREGISTRATION.md), committed before any held-out run.
 - **Arms and budgets.** The same three arms. Inference runs once per case over its sessions; each arm is indexed and searched once; the
-  shown text of the hits is packed at every `--budgets` value (default `256,512,1024,2048,4096`, estimated tokens as characters/4;
-  1024 is the primary comparison and must be among them) and the reader answers once per distinct packed text. The 24 cases keep
+  shown text of the hits is packed at every `--budgets` value (default `4096,8192`, estimated tokens as characters/4;
+  4096 is the primary comparison and must be among them; 8192 still fits the 35B's 32k context) and the reader answers once per distinct packed text. The 24 cases keep
   `--context-tokens`. The citation protocol is dropped here: the answer is free-form.
 - **Scoring is judged.** The reader's answer, without its reasoning, is graded yes or no by the benchmark's own judge prompts for the
   question's type (`--judge-model` is required, never taken from `.env`). The judge sees the answer and the key, never the arm. An answer

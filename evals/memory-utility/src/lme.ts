@@ -18,9 +18,9 @@ export const DEV_QUESTIONS = 100;
 export const DEFAULT_SAMPLE_SEED = 42;
 /** Distractor sessions per question, and the memory budgets (estimated tokens) every case is read at. */
 export const DEFAULT_HAYSTACK = 16;
-export const DEFAULT_BUDGETS = [256, 512, 1024, 2048, 4096];
+export const DEFAULT_BUDGETS = [4096, 8192];
 /** The budget of the primary comparison. The others are secondary. */
-export const PRIMARY_BUDGET = 1024;
+export const PRIMARY_BUDGET = 4096;
 
 export type Split = "dev" | "heldout";
 

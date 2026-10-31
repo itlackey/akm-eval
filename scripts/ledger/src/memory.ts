@@ -37,8 +37,8 @@ for (const [key, name] of [["persistent_memory", "Notes − none"], ["memory_inf
   }
   add(`${key}_cited_gain`, `${name} · cited gain (pp)`, `metrics.cited_correct_deltas.${key}.value`, "diagnostics", "All-selected paired difference in cited-correct answers. Exact quotations are not semantic entailment.", "pp", 2);
 }
-// LongMemEval cases are read at several memory budgets. The unsuffixed columns above are the primary budget; these give every standard budget.
-export const MEMORY_BUDGETS = [256, 512, 1024, 2048, 4096];
+// LongMemEval cases are read at several memory budgets. The unsuffixed columns above are the primary budget (4096); these give each standard budget, 4096 and 8192.
+export const MEMORY_BUDGETS = [4096, 8192];
 for (const budget of MEMORY_BUDGETS) {
   const at = `metrics.by_budget.${budget}`;
   for (const [arm, name] of [["none", "No memory"], ["source", "Original notes"], ["inferred", "Inferred memory"]]) {

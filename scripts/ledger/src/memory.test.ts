@@ -45,16 +45,16 @@ test("LongMemEval budgets give columns per standard budget, with exact p-values,
   const budget = (a: number, b: number, c: number, tokens: number, gain: number, p: number) => ({
     arms: { none: { failure_inclusive_accuracy: { rate: a }, mean_context_estimated_tokens: 0 }, source: { failure_inclusive_accuracy: { rate: b }, mean_context_estimated_tokens: tokens }, inferred: { failure_inclusive_accuracy: { rate: c }, mean_context_estimated_tokens: tokens - 10 } },
     persistent_memory: { failure_inclusive: { value: b - a, ci95: [0, 1], p_value: 0.001 } }, memory_inference: { failure_inclusive: { value: gain, ci95: [gain - .2, gain + .2], p_value: p } } });
-  const summary = { eval: "memory-utility", metrics: { by_budget: { "256": budget(.1, .4, .3, 250, -.1, .3), "1024": budget(.1, .6, .5, 900, -.1, .21875) } },
-    manifest: { eval_settings: { case_source: "longmemeval", split: "dev", haystack: 16, budgets: "256,1024", judge_model: "judge", sample_seed: 42 } } };
+  const summary = { eval: "memory-utility", metrics: { by_budget: { "8192": budget(.1, .4, .3, 250, -.1, .3), "4096": budget(.1, .6, .5, 900, -.1, .21875) } },
+    manifest: { eval_settings: { case_source: "longmemeval", split: "dev", haystack: 16, budgets: "4096,8192", judge_model: "judge", sample_seed: 42 } } };
   const f = memoryFields(summary);
-  expect([f.memory_b1024_none_accuracy, f.memory_b1024_source_accuracy, f.memory_b1024_inferred_accuracy]).toEqual([10, 60, 50]);
-  expect([f.memory_b1024_source_tokens, f.memory_b1024_inferred_tokens, f.memory_b256_source_tokens]).toEqual([900, 890, 250]);
-  expect([f.memory_b1024_memory_inference_gain, f.memory_b1024_memory_inference_p_value]).toEqual([-10, 0.21875]);
-  expect(f.memory_b1024_memory_inference_ci_low).toBeCloseTo(-30);
-  expect(f.memory_b512_source_accuracy).toBeNull();
+  expect([f.memory_b4096_none_accuracy, f.memory_b4096_source_accuracy, f.memory_b4096_inferred_accuracy]).toEqual([10, 60, 50]);
+  expect([f.memory_b4096_source_tokens, f.memory_b4096_inferred_tokens, f.memory_b8192_source_tokens]).toEqual([900, 890, 250]);
+  expect([f.memory_b4096_memory_inference_gain, f.memory_b4096_memory_inference_p_value]).toEqual([-10, 0.21875]);
+  expect(f.memory_b4096_memory_inference_ci_low).toBeCloseTo(-30);
+  expect(memoryFields({ ...summary, metrics: { by_budget: { "4096": summary.metrics.by_budget["4096"] } } }).memory_b8192_source_accuracy).toBeNull(); // a budget the run did not record
   expect([f.memory_split, f.memory_case_source, f.memory_judge_model, f.memory_haystack, f.memory_sample_seed]).toEqual(["dev", "longmemeval", "judge", 16, 42]);
-  const column = memoryColumns().find(c => c.key === "memory_b1024_memory_inference_p_value")!;
-  expect(column).toMatchObject({ label: "Inferred − notes @ 1024 p-value", group: "Memory · budgets" });
+  const column = memoryColumns().find(c => c.key === "memory_b4096_memory_inference_p_value")!;
+  expect(column).toMatchObject({ label: "Inferred − notes @ 4096 p-value", group: "Memory · budgets" });
   expect(memoryColumns().map(c => c.key).sort()).toEqual(Object.keys(f).sort());
 });

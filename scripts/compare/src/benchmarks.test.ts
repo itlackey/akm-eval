@@ -42,13 +42,13 @@ test("memory usefulness on LongMemEval cases compares every budget, apart and by
   const budget = (source: number, inferred: number, gain: number, p: number) => ({
     arms: { none: { failure_inclusive_accuracy: { rate: .1 }, mean_context_estimated_tokens: 0 }, source: { failure_inclusive_accuracy: { rate: source }, mean_context_estimated_tokens: 250 }, inferred: { failure_inclusive_accuracy: { rate: inferred }, mean_context_estimated_tokens: 240 } },
     persistent_memory: { failure_inclusive: { value: source - .1, p_value: .01 } }, memory_inference: { failure_inclusive: { value: gain, ci95: [gain - .2, gain + .2], p_value: p } } });
-  const make = (inferred1024: number) => manifested({ eval: "memory-utility", corpus: "public", status: "complete", model: "example", case_source: "longmemeval", split: "dev",
-    metrics: { primary_budget: 1024, by_budget: { "256": budget(.4, .3, -.1, .3), "1024": budget(.6, inferred1024, inferred1024 - .6, .5) } } }, ["one", "two"]);
+  const make = (inferredPrimary: number) => manifested({ eval: "memory-utility", corpus: "public", status: "complete", model: "example", case_source: "longmemeval", split: "dev",
+    metrics: { primary_budget: 4096, by_budget: { "8192": budget(.4, .3, -.1, .3), "4096": budget(.6, inferredPrimary, inferredPrimary - .6, .5) } } }, ["one", "two"]);
   const a = { dir: "a", summary: make(.5), rows: [{ id: "one" }, { id: "two" }] }, b = { dir: "b", summary: make(.7), rows: [{ id: "one" }, { id: "two" }] };
   const report = comparePair(a, b);
-  expect(report.rows.find(r => r.key === "memory_b1024_inferred_accuracy")).toMatchObject({ label: "Inferred memory @ 1024 (%)", group: "Memory · budgets", a: 50, b: 70 });
-  expect(report.rows.find(r => r.key === "memory_b256_memory_inference_p_value")).toMatchObject({ label: "Inferred − notes @ 256 p-value", a: .3, b: .3, delta: 0 });
-  expect(report.rows.find(r => r.key === "memory_b1024_source_tokens")).toMatchObject({ a: 250 });
-  expect(report.rows.find(r => r.key === "metrics.by_budget.1024.memory_inference.failure_inclusive.ci95.1")).toBeDefined(); // the raw stored value is kept too
-  expect(report.rows.some(r => r.key === "memory_b512_inferred_accuracy")).toBe(false); // a budget the runs did not record is not a row
+  expect(report.rows.find(r => r.key === "memory_b4096_inferred_accuracy")).toMatchObject({ label: "Inferred memory @ 4096 (%)", group: "Memory · budgets", a: 50, b: 70 });
+  expect(report.rows.find(r => r.key === "memory_b8192_memory_inference_p_value")).toMatchObject({ label: "Inferred − notes @ 8192 p-value", a: .3, b: .3, delta: 0 });
+  expect(report.rows.find(r => r.key === "memory_b4096_source_tokens")).toMatchObject({ a: 250 });
+  expect(report.rows.find(r => r.key === "metrics.by_budget.4096.memory_inference.failure_inclusive.ci95.1")).toBeDefined(); // the raw stored value is kept too
+  expect(report.rows.some(r => r.key === "memory_b2048_inferred_accuracy")).toBe(false); // a budget the runs did not record is not a row
 });

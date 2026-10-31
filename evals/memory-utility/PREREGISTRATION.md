@@ -15,14 +15,21 @@ version of this file, committed before the run it applies to.
   "arm_order_seed": "1",
   "distractor_seed": "the first 32 bits of sha256(sample_seed:question_id)",
   "haystack": 16,
-  "budgets": [256, 512, 1024, 2048, 4096],
-  "primary_budget": 1024,
+  "budgets": [4096, 8192],
+  "primary_budget": 4096,
   "judge": "eval-judge-35b",
   "reader_and_inference": "the model under test, temperature 0, as --model names it",
   "primary_endpoint": "inferred minus source accuracy at the primary budget, over all selected cases, tested with the exact McNemar test (two-sided, alpha 0.05)",
   "heldout_runs": "on the rewrite (--corpus custom), 200 questions drawn with --limit 200 under the sample seed; the next decision draws 200 from the questions not yet drawn"
 }
 ```
+
+## Budgets: the owner's decision
+
+Only 4096 and 8192 estimated tokens, with 4096 the primary comparison. The first plan had five budgets from 256 to 4096 with the primary
+at 1024. An aborted 30-case dev pilot (K=16, 35B, akm 0.10.261022) showed that 1024, 512 and 256 sit at the floor: a LongMemEval session
+is about 10.5k characters at the median, so one raw session fills 4,096 characters whole. At 1024 the evidence turn was shown for 18 of
+56 evidence sessions (35 of 56 at 4096), and `source` was right on 1 of 30 cases against `none` 1 of 30. The pilot was dev data only.
 
 ## What is measured
 
@@ -35,17 +42,17 @@ or the reader.
 
 ## The primary question
 
-Does native memory inference beat keeping the original notes, at a matched budget? The primary comparison is `inferred - source` at 1024
+Does native memory inference beat keeping the original notes, at a matched budget? The primary comparison is `inferred - source` at 4096
 estimated tokens, over every selected case (an errored arm is a wrong answer), reported with the exact McNemar p-value and the exact
-paired interval. `source - none` at 1024 is a secondary, and so is every other budget.
+paired interval. `source - none` at 4096 is a secondary, and so is 8192.
 
 ## The reading rule
 
 - Inferred wins only if it is better than source at a matched budget (a primary result with p < 0.05 and a positive difference, ideally
-  also positive at the neighbouring budgets), or if it reaches the original notes' accuracy at a smaller budget.
+  also positive at 8192), or if inferred at 4096 reaches the original notes' accuracy at 8192, the larger budget.
 - A difference whose interval includes zero is no result, not a tie. Do not read a non-significant gain as support, or a non-significant
   loss as safety.
-- The budgets other than 1024 are secondary and are not searched for the one where inference wins.
+- 8192 is secondary and is not searched for the one where inference wins.
 - Abstention questions are reported apart (`abstention`): inferred memory must not make the reader invent an answer there.
 - The diagnostic says where the evidence went (shown, retrieval missed, packing cut, summary dropped). A loss attributed to the summary
   is an upper bound, since a faithful paraphrase has no verbatim turn.

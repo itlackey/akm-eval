@@ -26,7 +26,7 @@ export function memorySummary() {
       persistent_memory: { failure_inclusive: pair(.25), complete_pairs: pair(.3333, true) },
       memory_inference: { failure_inclusive: pair(.25), complete_pairs: pair(.3333, true) },
       cited_correct_deltas: { persistent_memory: pair(.25), memory_inference: pair(.25) },
-      by_budget: { "256": budgetResult([1, 2, 1], 250, -.25, 0.5), "1024": budgetResult([1, 2, 3], 900, .25, 0.25) },
+      by_budget: { "8192": budgetResult([1, 2, 1], 250, -.25, 0.5), "4096": budgetResult([1, 2, 3], 900, .25, 0.25) },
       inference: { output: 2, no_change: 1, errors: 1, not_run: 0, mean_seconds: 7, mean_index_seconds: 2 } } };
 }
 export function memoryDataset() {
@@ -36,6 +36,7 @@ export function memoryDataset() {
   Object.assign(b.metrics.arms.inferred.reported_usage.cost_usd, { total_reported: 0, reporting_count: 4 });
   b.metrics.memory_inference = { failure_inclusive: pair(-.25), complete_pairs: pair(-.3333, true) };
   b.metrics.cited_correct_deltas.memory_inference = pair(-.25);
+  delete (b.metrics.by_budget as Record<string, unknown>)["8192"]; // this run records only the primary budget
   const runs = [a, b].map((summary, index) => presentRun({ summary, samples: ["a", "b", "c", "d"].map(id => ({ id })), path: `fixture-memory-${index}`, sourceRevision: "fixture" })!);
   return { source_revision: "fixture", runs, columns: comparisonColumns(runs) };
 }

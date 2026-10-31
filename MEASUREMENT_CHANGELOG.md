@@ -48,7 +48,7 @@ Add a release entry here when a version changes.
   - **LongMemEval case source (`--split dev|heldout`).** New inputs and a second scoring path beside the exact one. A case is one
     LongMemEval question with its evidence sessions and `--haystack` (default 16) seeded distractor sessions from its history, every
     session whole as one memory. Native inference runs once per case; each arm is indexed and searched once and the shown text is packed
-    at each `--budgets` value (default 256, 512, 1024, 2048, 4096 estimated tokens; 1024 is primary), the reader answering once per
+    at each `--budgets` value (default 4096 and 8192 estimated tokens; 4096 is primary, 8192 secondary: a median LongMemEval session is about 10k characters, so budgets under 4096 hold only the prefix of one raw session), the reader answering once per
     distinct packed text. The longmemeval benchmark's judge prompts grade each free-form answer yes or no (`--judge-model`, required);
     the citation protocol is dropped for these cases. The split into 100 dev and 400 held-out questions is a salted hash of the
     question id, stratified by type. Summaries gain `case_source`, `split`, `haystack`, `budgets`, `primary_budget`, `sample_seed`,

@@ -14,7 +14,7 @@ const usage = (prompt: number) => ({ prompt_tokens: prompt, completion_tokens: 5
 const judgeUsage = () => ({ ...usage(40), completion_tokens: 1 });
 
 /** A raw whose answers are right or wrong as given, per arm and budget, as if the reader and the judge had been asked. */
-function scripted(ok: Record<"none" | "source" | "inferred", boolean[]>, budgets = [256, 1024], tokens = 600): LmeRaw {
+function scripted(ok: Record<"none" | "source" | "inferred", boolean[]>, budgets = [2048, 4096], tokens = 3000): LmeRaw {
   const raw = lmePending(0, "1", budgets);
   raw.inference = { outcome: "output", report: null, error: null, index_seconds: 1, seconds: 5, model_calls: { calls: 3, errors: 0, prompt_tokens: 500, completion_tokens: 100, seconds: 2, output_tokens_per_second: 50 } };
   for (const arm of ["none", "source", "inferred"] as const) {
@@ -30,7 +30,7 @@ function scripted(ok: Record<"none" | "source" | "inferred", boolean[]>, budgets
 const rows = (specs: { c?: number; ok: Record<"none" | "source" | "inferred", boolean[]> }[]) => specs.map((s, i) => makeLmeRow(buildLmeCase({ ...tiny[s.c ?? 0]!, question_id: `${tiny[s.c ?? 0]!.question_id}-${i}` }, 1, 1), scripted(s.ok)));
 
 describe("summarizing LongMemEval rows", () => {
-  // inferred beats source in 1 case and loses in 5 at 1024: the discordant counts of the McNemar worked example (1 against 5).
+  // inferred beats source in 1 case and loses in 5 at 4096: the discordant counts of the McNemar worked example (1 against 5).
   const losing = rows([
     { ok: { none: [false, false], source: [false, false], inferred: [true, true] } },
     ...Array.from({ length: 5 }, () => ({ ok: { none: [false, false], source: [true, true], inferred: [false, false] } })),
@@ -38,11 +38,11 @@ describe("summarizing LongMemEval rows", () => {
   ]);
   const s = summarizeLme(losing);
   test("gives each budget its own arms and paired differences, and the primary budget at the top", () => {
-    expect(s.metrics.budgets).toEqual([256, 1024]);
-    expect(Object.keys(s.metrics.by_budget)).toEqual(["256", "1024"]);
-    expect(s.metrics.primary_budget).toBe(1024);
-    expect(s.metrics.arms.source.failure_inclusive_accuracy).toEqual(s.metrics.by_budget["1024"]!.arms.source.failure_inclusive_accuracy);
-    expect(s.metrics.memory_inference).toEqual(s.metrics.by_budget["1024"]!.memory_inference);
+    expect(s.metrics.budgets).toEqual([2048, 4096]);
+    expect(Object.keys(s.metrics.by_budget)).toEqual(["2048", "4096"]);
+    expect(s.metrics.primary_budget).toBe(4096);
+    expect(s.metrics.arms.source.failure_inclusive_accuracy).toEqual(s.metrics.by_budget["4096"]!.arms.source.failure_inclusive_accuracy);
+    expect(s.metrics.memory_inference).toEqual(s.metrics.by_budget["4096"]!.memory_inference);
   });
   test("tests the paired difference with the exact McNemar test over the discordant pairs", () => {
     const d = s.metrics.memory_inference.failure_inclusive;
@@ -52,10 +52,10 @@ describe("summarizing LongMemEval rows", () => {
     expect(s.metrics.persistent_memory.failure_inclusive).toMatchObject({ helps: 15, harms: 0, p_value: 0.0000610352 });
   });
   test("reports the mean packed tokens and the reader's prompt tokens per arm and budget", () => {
-    expect(s.metrics.by_budget["256"]!.arms.source.mean_context_estimated_tokens).toBeLessThanOrEqual(256);
-    expect(s.metrics.by_budget["1024"]!.arms.source.mean_context_estimated_tokens).toBeGreaterThan(s.metrics.by_budget["256"]!.arms.source.mean_context_estimated_tokens!);
-    expect(s.metrics.by_budget["1024"]!.arms.none.mean_context_estimated_tokens).toBe(0);
-    expect(s.metrics.by_budget["1024"]!.arms.source.mean_reported_prompt_tokens).toBe(200 + 1024);
+    expect(s.metrics.by_budget["2048"]!.arms.source.mean_context_estimated_tokens).toBeLessThanOrEqual(2048);
+    expect(s.metrics.by_budget["4096"]!.arms.source.mean_context_estimated_tokens).toBeGreaterThan(s.metrics.by_budget["2048"]!.arms.source.mean_context_estimated_tokens!);
+    expect(s.metrics.by_budget["4096"]!.arms.none.mean_context_estimated_tokens).toBe(0);
+    expect(s.metrics.by_budget["4096"]!.arms.source.mean_reported_prompt_tokens).toBe(200 + 4096);
   });
   test("counts every call, the judge's too, and a reused answer none", () => {
     expect(s.model_calls!.calls).toBe(16 * (3 + 6 + 6)); // 3 inference calls, 3 arms x 2 budgets of reader answers and as many verdicts
@@ -75,7 +75,7 @@ describe("summarizing LongMemEval rows", () => {
   });
   test("an unanswered arm is wrong in the failure-inclusive difference and left out of the complete pairs", () => {
     const raw = scripted({ none: [false, false], source: [true, true], inferred: [true, true] });
-    raw.arms.inferred.budgets["1024"]!.state = "error"; raw.arms.inferred.budgets["1024"]!.error = "reader down"; raw.arms.inferred.state = "error";
+    raw.arms.inferred.budgets["4096"]!.state = "error"; raw.arms.inferred.budgets["4096"]!.error = "reader down"; raw.arms.inferred.state = "error";
     const t = summarizeLme([makeLmeRow(buildLmeCase(tiny[0]!, 1, 1), raw)]);
     expect(t).toMatchObject({ n_cases: 1, n_errored: 1, n_scored: 0 });
     expect(t.metrics.memory_inference.failure_inclusive).toMatchObject({ n: 1, value: -1, only_without_akm: 1, incomplete_pairs: 1, harms: 0 });
@@ -90,8 +90,8 @@ describe("saved LongMemEval rows", () => {
     const reread = lmeRawOf(JSON.parse(JSON.stringify(row)));
     expect("raw" in reread && MEASUREMENT.score(c, reread.raw)).toEqual(row);
     expect(MEASUREMENT.rawOf(JSON.parse(JSON.stringify(row)))).toHaveProperty("raw");
-    const broken = JSON.parse(JSON.stringify(row)); broken.raw.arms.source.budgets["256"].context = null;
-    expect(lmeRawOf(broken)).toEqual({ missing: ["raw.arms.source.budgets.256 (invalid)"] });
+    const broken = JSON.parse(JSON.stringify(row)); broken.raw.arms.source.budgets["2048"].context = null;
+    expect(lmeRawOf(broken)).toEqual({ missing: ["raw.arms.source.budgets.2048 (invalid)"] });
   });
   test("their cases are rebuilt from the settings the summary records, for scoring again", () => {
     const root = mkdtempSync(join(tmpdir(), "memlme-root-"));

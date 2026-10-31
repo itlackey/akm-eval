@@ -108,7 +108,7 @@ describe("LongMemEval cases", () => {
     expect(block.split_sizes).toEqual({ dev: 100, heldout: 400 });
     expect(block.haystack).toBe(16);
     expect(block.budgets).toEqual(DEFAULT_BUDGETS);
-    expect(block.primary_budget).toBe(1024);
+    expect(block.primary_budget).toBe(4096);
     expect(block.sample_seed).toBe(42);
     expect(block.judge).toBe("eval-judge-35b");
   });

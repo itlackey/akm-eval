@@ -26,7 +26,7 @@ async function run(...args: string[]) {
   if (dir && !results.includes(dir)) results.push(dir);
   return { out, err, code, dir };
 }
-const base = ["--split", "dev", "--cases", join(work, "cases"), "--judge-model", "fake-judge", "--budgets", "250,1024", "--haystack", "1", "--label", label];
+const base = ["--split", "dev", "--cases", join(work, "cases"), "--judge-model", "fake-judge", "--budgets", "250,4096", "--haystack", "1", "--label", label];
 const improves = () => (existsSync(join(work, "akm.log")) ? readFileSync(join(work, "akm.log"), "utf8").split("\n").filter(l => l === "improve").length : 0);
 const summaryOf = (dir: string) => JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
 const rowsOf = (dir: string) => readFileSync(join(dir, "samples.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
@@ -38,8 +38,8 @@ describe("memory-utility --split", () => {
     expect(first.code).toBe(0);
     const dir = first.dir!;
     let s = summaryOf(dir);
-    expect(s).toMatchObject({ eval: "memory-utility", case_source: "longmemeval", split: "dev", haystack: 1, budgets: [250, 1024], primary_budget: 1024, judge_model: "fake-judge", model: "fake", n_cases: 3, n_scored: 0, n_errored: 3, status: "complete" });
-    expect(s.manifest.eval_settings).toMatchObject({ case_source: "longmemeval", split: "dev", haystack: 1, budgets: "250,1024", primary_budget: 1024, sample_seed: 42, judge_model: "fake-judge", reader_model: "fake", context_tokens_estimated: 1024 });
+    expect(s).toMatchObject({ eval: "memory-utility", case_source: "longmemeval", split: "dev", haystack: 1, budgets: [250, 4096], primary_budget: 4096, judge_model: "fake-judge", model: "fake", n_cases: 3, n_scored: 0, n_errored: 3, status: "complete" });
+    expect(s.manifest.eval_settings).toMatchObject({ case_source: "longmemeval", split: "dev", haystack: 1, budgets: "250,4096", primary_budget: 4096, sample_seed: 42, judge_model: "fake-judge", reader_model: "fake", context_tokens_estimated: 4096 });
     expect(s.manifest.engines.judge).toMatchObject({ model: "fake-judge", endpoint: "<MODEL_BASE_URL>" });
     expect(JSON.stringify(s)).not.toContain("localhost"); // the model's address is not saved
     expect(rowsOf(dir)).toHaveLength(3);
@@ -63,8 +63,8 @@ describe("memory-utility --split", () => {
     // The answers are judged: the source arm sees the evidence and the none arm does not.
     const rows = rowsOf(dir);
     const secret = rows.find(r => r.id === "q-secret")!;
-    expect(secret.arms.none["1024"]).toEqual({ evaluated: true, correct: false });
-    expect(secret.arms.source["1024"]).toEqual({ evaluated: true, correct: true });
+    expect(secret.arms.none["4096"]).toEqual({ evaluated: true, correct: false });
+    expect(secret.arms.source["4096"]).toEqual({ evaluated: true, correct: true });
     expect(s.calls_by.map((r: any) => r.process)).toEqual(["reader", "judge"]); // the fake akm records no inference calls
     // No host path or login is saved.
     for (const file of ["samples.jsonl", "summary.json"]) {
