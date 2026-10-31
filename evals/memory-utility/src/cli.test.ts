@@ -49,3 +49,28 @@ test("--label is kept as given, as in every other eval, and checked before AKM o
   expect(result.err).not.toContain("ENOENT");
   expect(result.out).toBe("");
 });
+
+test("LongMemEval flags are checked before AKM or model setup: --split selects the cases, held-out is never a default", () => {
+  const cases: [string[], string][] = [
+    [["--haystack", "3"], "--haystack is for the LongMemEval cases: add --split dev"],
+    [["--budgets", "256,1024"], "--budgets is for the LongMemEval cases: add --split dev"],
+    [["--judge-model", "j"], "--judge-model is for the LongMemEval cases: add --split dev"],
+    [["--split", "dev"], "--split needs --judge-model"],
+    [["--split", "all", "--judge-model", "j"], '--split must be dev or heldout, not "all"'],
+    [["--split", "heldout", "--judge-model", "j"], "held-out questions run on the rewrite, not the public data"],
+    [["--split", "heldout", "--judge-model", "j", "--corpus", "all"], "held-out questions run on the rewrite, not the public data"],
+    [["--split", "dev", "--judge-model", "j", "--budgets", "256,512"], "--budgets must include 1024, the primary comparison"],
+    [["--split", "dev", "--judge-model", "j", "--budgets", "1024,1024"], "--budgets must be distinct positive integers"],
+    [["--split", "dev", "--judge-model", "j", "--context-tokens", "512"], "--context-tokens is for the 24 public cases"],
+    [["--split", "dev", "--judge-model", "j", "--haystack", "0"], "--haystack must be a positive integer"],
+    [["--split", "heldout", "--judge-model", "j", "--cases", "/nonexistent-memory-utility-dir"], "needs longmemeval_s_cleaned.json in its folder"],
+    [["--resume", "somewhere", "--repeat", "2"], "--resume carries on one run, so it does not go with --repeat"],
+  ];
+  for (const [args, error] of cases) {
+    const result = run(...args);
+    expect(result.code).toBe(2);
+    expect(result.err).toContain(error);
+    expect(result.err).not.toContain("ENOENT");
+    expect(result.out).toBe("");
+  }
+});
