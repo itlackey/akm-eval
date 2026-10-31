@@ -203,9 +203,9 @@ limits; that is not secretly replaced with a shortened evaluator prompt.
   accuracy and complete-pair deltas appear separately. Never interpret missing
   pairs as meaningful ties or a quality improvement.
 - **Uncertainty:** each paired difference carries an **exact McNemar test** (two-sided exact binomial test on the discordant pairs,
-  the cases where only one arm was right) and an **exact 95% interval**: the Clopper-Pearson interval of the share of discordant pairs
-  the later arm won, scaled by the discordant pairs' share of all pairs. The interval is conditional on that share. It is null with
-  fewer than two cases, zero complete pairs or no discordant pair, where the data say nothing about the size of a difference. Repeats
+  the cases where only one arm was right) and an **exact 95% interval**: Fay and Lumbard's (2021) melded interval for a paired difference,
+  which leaves out zero exactly when the McNemar test is significant at 0.05 and counts the uncertainty of both the share of
+  discordant pairs and which arm wins them. It is null with fewer than two cases or zero complete pairs. Repeats
   and arms are not extra independent cases; multiple queries sharing one history would require clustering and are outside this
   protocol. The 24 cases and the LongMemEval cases use the same statistics (measurement 0.2 replaced the Hoeffding bound of 0.1; the
   longmemeval benchmark keeps its own Wald interval).

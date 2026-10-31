@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clopperPearson, exactPairedInterval, mcnemarP, pairSummary } from "./stats.ts";
+import { exactPairedInterval, mcnemarP, pairSummary } from "./stats.ts";
 
 describe("exact McNemar test", () => {
   test("matches binomial values worked out by hand", () => {
@@ -21,29 +21,33 @@ describe("exact McNemar test", () => {
 });
 
 describe("exact paired interval", () => {
-  test("Clopper-Pearson matches the published values", () => {
-    const [lo, hi] = clopperPearson(5, 10);
-    expect(lo).toBeCloseTo(0.1871, 4); expect(hi).toBeCloseTo(0.8129, 4);
-    const [zero, upper] = clopperPearson(0, 10);
-    expect(zero).toBe(0); expect(upper).toBeCloseTo(0.3085, 4);
-    const [l1, h1] = clopperPearson(1, 6);
-    expect(l1).toBeCloseTo(0.0042, 4); expect(h1).toBeCloseTo(0.6412, 4);
-    expect(clopperPearson(10, 10)[1]).toBe(1);
+  test("matches Fay and Lumbard's worked example", () => {
+    // Their Table 1: 86 pairs, 16 won only by one arm and 8 only by the other. They report (-0.030, 0.214) for a difference of 8/86.
+    expect(exactPairedInterval(8, 16, 86)).toEqual([-0.0302, 0.2145]);
   });
-  test("scales the discordant interval by the share of discordant pairs", () => {
-    // 5 and 5 discordant of 10 pairs: [0.1871, 0.8129] on theta gives [-0.6258, 0.6258] on the difference.
-    expect(exactPairedInterval(5, 5, 10)).toEqual([-0.6258, 0.6258]);
-    // The same discordant pairs among 50 pairs are a fifth as wide.
-    expect(exactPairedInterval(5, 5, 50)).toEqual([-0.1252, 0.1252]);
+  test("with no discordant pair it is the closed form around zero: 1 - 0.025^(1/n) either side", () => {
+    const half = Number((1 - 0.025 ** (1 / 40)).toFixed(4));
+    expect(exactPairedInterval(0, 0, 40)).toEqual([-half, half]);
   });
-  test("contains the point estimate, stays in [-1, 1], and is null with no discordant pair or fewer than two pairs", () => {
-    for (const [b, c, n] of [[0, 7, 20], [3, 1, 9], [0, 2, 2], [9, 0, 9]] as const) {
+  test("counts the uncertainty of the share of discordant pairs: a one-sided result is not capped at its own estimate", () => {
+    // 18 of 40 pairs won by one arm and none by the other: the difference is 0.45, and it could be larger.
+    const [lo, hi] = exactPairedInterval(0, 18, 40)!;
+    expect(lo).toBeGreaterThan(0); expect(hi).toBeGreaterThan(0.45);
+  });
+  test("leaves out zero exactly when the exact McNemar test is significant at 0.05", () => {
+    const n = 12;
+    for (let b = 0; b <= n; b++) for (let c = 0; b + c <= n; c++) {
+      const [lo, hi] = exactPairedInterval(b, c, n)!;
+      expect(lo > 0 || hi < 0).toBe(mcnemarP(b, c) < 0.05);
+    }
+  });
+  test("contains the point estimate, stays in [-1, 1], and is null with fewer than two pairs", () => {
+    for (const [b, c, n] of [[0, 7, 20], [3, 1, 9], [0, 2, 2], [9, 0, 9], [5, 5, 10]] as const) {
       const [lo, hi] = exactPairedInterval(b, c, n)!;
       const value = (c - b) / n;
       expect(lo).toBeLessThanOrEqual(value); expect(hi).toBeGreaterThanOrEqual(value);
       expect(lo).toBeGreaterThanOrEqual(-1); expect(hi).toBeLessThanOrEqual(1);
     }
-    expect(exactPairedInterval(0, 0, 24)).toBeNull();
     expect(exactPairedInterval(1, 0, 1)).toBeNull();
   });
 });
@@ -60,9 +64,9 @@ describe("pairSummary", () => {
     expect(pairSummary(cases(spec), false)).toMatchObject({ n: 3, only_without_akm: 1, only_with_akm: 1, helps: 1, harms: 0, ties: 1, incomplete_pairs: 1 });
     expect(pairSummary(cases(spec), true)).toMatchObject({ n: 2, only_without_akm: 0, only_with_akm: 1, complete_pairs: 2, incomplete_pairs: 0 });
   });
-  test("no pairs, no complete pair and no discordant pair have no interval", () => {
+  test("no pairs and no complete pair have no interval; no discordant pair has one around zero", () => {
     expect(pairSummary([], false)).toMatchObject({ n: 0, value: null, ci95: null, p_value: null });
-    expect(pairSummary(cases([[true, true, true], [false, false, true]]), false)).toMatchObject({ value: 0, ci95: null, p_value: 1 });
+    expect(pairSummary(cases([[true, true, true], [false, false, true]]), false)).toMatchObject({ value: 0, ci95: [-0.8419, 0.8419], p_value: 1 });
     expect(pairSummary(cases([[false, true, false], [false, true, false]]), true)).toMatchObject({ n: 0, ci95: null });
   });
 });

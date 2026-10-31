@@ -3,7 +3,7 @@
 import { pairedDifference } from "../../../benchmarks/longmemeval/src/metrics.ts";
 
 export const TEST_METHOD = "exact McNemar test (two-sided exact binomial test on the discordant pairs)";
-export const INTERVAL_METHOD = "exact 95% interval: Clopper-Pearson on the discordant pairs, scaled by their share of the pairs (conditional on that share)";
+export const INTERVAL_METHOD = "95% melded exact interval compatible with the exact McNemar test (Fay and Lumbard 2021)";
 
 /** log(n!) as a running sum: a case count is a few hundred at most. */
 const logFactorials: number[] = [0];
@@ -23,12 +23,11 @@ function cdf(n: number, k: number, p: number): number {
   for (let i = 0; i <= k; i++) sum += pmf(n, i, p);
   return Math.min(1, sum);
 }
-/** The p in [0, 1] at which `f`, which falls as p rises, equals `target`. */
-function crossing(f: (p: number) => number, target: number): number {
-  let lo = 0, hi = 1;
-  for (let i = 0; i < 80; i++) {
+/** The x in [lo, hi] at which `f`, which rises with x, reaches `target`. */
+function solve(f: (x: number) => number, target: number, lo: number, hi: number): number {
+  for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
-    if (f(mid) > target) lo = mid; else hi = mid;
+    if (f(mid) < target) lo = mid; else hi = mid;
   }
   return (lo + hi) / 2;
 }
@@ -39,23 +38,52 @@ export function mcnemarP(b: number, c: number): number {
   return n === 0 ? 1 : Math.min(1, 2 * cdf(n, Math.min(b, c), 0.5));
 }
 
-/** The Clopper-Pearson interval for x successes in n trials: the proportions that leave x out of neither tail of alpha / 2. */
-export function clopperPearson(x: number, n: number, alpha = 0.05): [number, number] {
-  return [x === 0 ? 0 : crossing(p => cdf(n, x - 1, p), 1 - alpha / 2), x === n ? 1 : crossing(p => cdf(n, x, p), alpha / 2)];
+/** A Beta(a, b) distribution with whole a, b >= 0, as Clopper-Pearson limits use: a = 0 is a point mass at 0, b = 0 one at 1. */
+type Beta = [number, number];
+/** P(B <= t). For whole a, b >= 1 it is P(Binomial(a + b - 1, t) >= a). */
+function betaCdf([a, b]: Beta, t: number): number {
+  if (t < 0) return 0;
+  if (t >= 1 || a === 0) return 1;
+  if (b === 0) return 0;
+  return 1 - cdf(a + b - 1, a - 1, t);
+}
+function betaQuantile(beta: Beta, q: number): number {
+  return beta[0] === 0 ? 0 : beta[1] === 0 ? 1 : solve(t => betaCdf(beta, t), q, 0, 1);
+}
+/** The q-quantile of T * (2B - 1) for independent T and B: the mean of B's distribution over a grid of T's quantiles. */
+function meldedQuantile(t: Beta, b: Beta, q: number): number {
+  if (b[0] === 0) return -betaQuantile(t, 1 - q); // B is 0: the value is -T
+  if (b[1] === 0) return betaQuantile(t, q); // B is 1: the value is T
+  const grid = Array.from({ length: 1000 }, (_, i) => betaQuantile(t, (i + 0.5) / 1000));
+  return solve(y => grid.reduce((sum, s) => sum + betaCdf(b, (1 + y / s) / 2), 0) / grid.length, q, -1, 1);
 }
 
 const round = (x: number): number => Number(x.toFixed(4));
 
 /**
- * The interval of the paired difference (cases only `after` got right, minus cases only `before` got right, over all pairs). Conditional on the
- * number of discordant pairs d out of n, the cases `after` won are Binomial(d, theta), so the Clopper-Pearson interval of theta gives
- * (d / n) * (2 * theta - 1). Null with no discordant pair, where the data say nothing about the size of a difference.
+ * The 95% interval of the paired difference (cases only `after` got right, minus cases only `before` got right, over all n pairs), by
+ * Fay and Lumbard (2021, Statistics in Medicine 40:1147), the interval that goes with the exact McNemar test: it leaves out zero exactly
+ * when that test's two-sided p is below 0.05. The difference is theta * (2 beta - 1), where theta is the chance that a pair is
+ * discordant and beta the chance that `after` wins a discordant pair. Each limit melds the one-sided Clopper-Pearson confidence
+ * distributions of theta and beta at 2.5%, so the uncertainty of the share of discordant pairs is counted too. With no discordant pair
+ * it is a narrow interval around zero; null with fewer than two pairs.
  */
 export function exactPairedInterval(onlyBefore: number, onlyAfter: number, n: number): [number, number] | null {
-  const d = onlyBefore + onlyAfter;
-  if (n < 2 || d === 0) return null;
-  const [lo, hi] = clopperPearson(onlyAfter, d);
-  return [round(Math.max(-1, (d / n) * (2 * lo - 1))), round(Math.min(1, (d / n) * (2 * hi - 1)))];
+  if (n < 2) return null;
+  const key = `${onlyBefore}/${onlyAfter}/${n}`; // a run summarizes at every checkpoint, and each interval takes up to a few tenths of a second
+  if (!intervals.has(key)) intervals.set(key, meldedInterval(onlyBefore, onlyAfter, n));
+  return [...intervals.get(key)!];
+}
+const intervals = new Map<string, [number, number]>();
+function meldedInterval(onlyBefore: number, onlyAfter: number, n: number): [number, number] {
+  const m = onlyBefore + onlyAfter, x = onlyAfter, tail = 0.025;
+  const thetaLow: Beta = [m, n - m + 1], thetaHigh: Beta = [m + 1, n - m];
+  const betaLow: Beta = [x, m - x + 1], betaHigh: Beta = [x + 1, m - x];
+  // The one-sided exact sign tests choose which limit of theta each limit of the difference takes.
+  const pLow = betaCdf(betaLow, 0.5), pHigh = 1 - betaCdf(betaHigh, 0.5);
+  const low = meldedQuantile(pLow <= tail ? thetaLow : thetaHigh, betaLow, tail);
+  const high = meldedQuantile(pHigh <= tail ? thetaLow : thetaHigh, betaHigh, 1 - tail);
+  return [round(Math.max(-1, low)), round(Math.min(1, high))];
 }
 
 /** One case seen by both arms of a pair. `evaluated` is true when both arms produced a scorable answer. */

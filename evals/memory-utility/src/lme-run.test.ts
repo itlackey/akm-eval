@@ -94,7 +94,7 @@ describe("memory-utility --split", () => {
     expect(s.case_source).toBeUndefined();
     expect(s.metrics.persistent_memory.failure_inclusive).toMatchObject({ n: 2, p_value: 1 });
     expect(s.metrics.persistent_memory.failure_inclusive.test).toContain("McNemar");
-    expect(s.metrics.persistent_memory.failure_inclusive.interval_method).toContain("Clopper-Pearson");
+    expect(s.metrics.persistent_memory.failure_inclusive.interval_method).toContain("Fay and Lumbard");
     expect(JSON.stringify(s)).not.toContain("Hoeffding");
     expect(rowsOf(first.dir!)).toHaveLength(2);
     expect(rowsOf(first.dir!)[0]).not.toHaveProperty("kind");

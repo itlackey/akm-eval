@@ -30,7 +30,7 @@ for (const [key, name] of [["persistent_memory", "Notes − none"], ["memory_inf
     const path = `metrics.${key}.${basis}`, prefix = `${key}_${basis}`;
     add(`${prefix}_gain`, `${name} · ${label} (pp)`, `${path}.value`, "quality", "Recorded paired accuracy difference in percentage points. Positive means more correct answers. All-selected results count missing/error arms as zero; complete-pair results exclude them.", "pp", 2);
     for (const [index, bound] of [[0, "low"], [1, "high"]])
-      add(`${prefix}_ci_${bound}`, `${name} · ${label} CI ${bound} (pp)`, `${path}.ci95.${index}`, "quality", "Recorded 95% paired interval: exact (Clopper-Pearson on the discordant pairs) for memory-utility 0.2 and later, a conservative paired-case Hoeffding bound before. Small samples have wide intervals.", "pp", 2);
+      add(`${prefix}_ci_${bound}`, `${name} · ${label} CI ${bound} (pp)`, `${path}.ci95.${index}`, "quality", "Recorded 95% paired interval: exact (Fay-Lumbard, compatible with the exact McNemar test) for memory-utility 0.2 and later, a conservative paired-case Hoeffding bound before. Small samples have wide intervals.", "pp", 2);
     add(`${prefix}_p_value`, `${name} · ${label} p-value`, `${path}.p_value`, "quality", "Recorded two-sided exact McNemar p-value over the discordant pairs of this comparison (memory-utility 0.2 and later). Not a multiplicity-adjusted result; the secondary budgets are not a search for a winner.", "", 4);
     for (const [field, title] of [["n", "denominator"], ["complete_pairs", "complete pairs"], ["incomplete_pairs", "incomplete pairs"], ["helps", "helps"], ["harms", "harms"], ["ties", "ties"]])
       add(`${prefix}_${field}`, `${name} · ${label} ${title}`, `${path}.${field}`, "quality", "Recorded paired coverage. Help/harm/ties count complete pairs only; incomplete pairs must not be interpreted as ties.");
@@ -48,8 +48,8 @@ for (const budget of MEMORY_BUDGETS) {
   for (const [key, name] of [["persistent_memory", "Notes − none"], ["memory_inference", "Inferred − notes"]]) {
     const path = `${at}.${key}.failure_inclusive`;
     add(`b${budget}_${key}_gain`, `${name} @ ${budget} (pp)`, `${path}.value`, "budgets", "Paired accuracy difference in percentage points over all selected cases.", "pp", 2);
-    add(`b${budget}_${key}_ci_low`, `${name} @ ${budget} CI low (pp)`, `${path}.ci95.0`, "budgets", "Exact 95% paired interval (Clopper-Pearson on the discordant pairs), lower bound.", "pp", 2);
-    add(`b${budget}_${key}_ci_high`, `${name} @ ${budget} CI high (pp)`, `${path}.ci95.1`, "budgets", "Exact 95% paired interval (Clopper-Pearson on the discordant pairs), upper bound.", "pp", 2);
+    add(`b${budget}_${key}_ci_low`, `${name} @ ${budget} CI low (pp)`, `${path}.ci95.0`, "budgets", "Exact 95% paired interval (Fay-Lumbard, compatible with the exact McNemar test), lower bound.", "pp", 2);
+    add(`b${budget}_${key}_ci_high`, `${name} @ ${budget} CI high (pp)`, `${path}.ci95.1`, "budgets", "Exact 95% paired interval (Fay-Lumbard, compatible with the exact McNemar test), upper bound.", "pp", 2);
     add(`b${budget}_${key}_p_value`, `${name} @ ${budget} p-value`, `${path}.p_value`, "budgets", "Two-sided exact McNemar p-value. Only the primary budget is the pre-registered comparison; the others are secondary.", "", 4);
   }
 }

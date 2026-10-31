@@ -41,9 +41,9 @@ Add a release entry here when a version changes.
   released or published, so there is nothing to compare 0.2 with except by rescoring a saved 0.1 run, which gives the new statistics.
   - **Statistics (a measurement change).** Every paired difference (`source - none`, `inferred - source`, exact and cited-correct) now
     carries an exact two-sided McNemar test (`p_value`, a binomial test on the discordant pairs) and an exact 95% interval in `ci95`:
-    Clopper-Pearson on the discordant pairs, scaled by their share of the pairs, so it is conditional on that share. It replaces the
-    conservative Hoeffding bound of 0.1, which ignored that most pairs tie. `ci95` is now null when no pair is discordant (Hoeffding
-    gave a wide interval there). `test` and `interval_method` name the method in each pair. The longmemeval benchmark keeps its own Wald
+    Fay and Lumbard's (2021) melded interval, which leaves out zero exactly when the McNemar test is significant at 0.05 and counts
+    the uncertainty of the share of discordant pairs. It replaces the conservative Hoeffding bound of 0.1, which ignored that most
+    pairs tie. With no discordant pair `ci95` is a narrow interval around zero. `test` and `interval_method` name the method in each pair. The longmemeval benchmark keeps its own Wald
     interval; the two conventions still differ.
   - **LongMemEval case source (`--split dev|heldout`).** New inputs and a second scoring path beside the exact one. A case is one
     LongMemEval question with its evidence sessions and `--haystack` (default 16) seeded distractor sessions from its history, every

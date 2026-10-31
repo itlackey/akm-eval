@@ -256,7 +256,7 @@ async function startLedger() {
     let text;
     if (memoryViews.includes(view)) {
       text = view === 'memory' ? 'Notes − none measures persistent-memory gain; Inferred − notes measures native-inference gain. Gains use all selected cases (errors/unrun = zero). Compare complete pairs and conservative 95% bounds; no winner is inferred.'
-        : view === 'memory-budgets' ? 'LongMemEval cases read at each memory budget (estimated tokens). The primary comparison is Inferred − notes at 4096; 8192 is secondary. p-values are exact McNemar; intervals are exact on the discordant pairs. — means the run did not record that budget.'
+        : view === 'memory-budgets' ? 'LongMemEval cases read at each memory budget (estimated tokens). The primary comparison is Inferred − notes at 4096; 8192 is secondary. p-values are exact McNemar; intervals are exact and agree with them (Fay-Lumbard). — means the run did not record that budget.'
         : view === 'memory-performance' ? 'Phase times include observed failed work. Reader token/cost totals exclude inference and embeddings; compare reporting counts and equal case counts. — means unknown, not zero.'
         : 'Factual accuracy, format compliance and citation checks are separate. Safety flags cover labeled cases only. Exact quotes do not prove entailment; literal anchors can miss valid paraphrases.';
       if (!active.length) text = 'No memory-usefulness results match these filters. ' + text;
