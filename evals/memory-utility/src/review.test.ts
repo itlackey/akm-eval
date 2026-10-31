@@ -1,7 +1,8 @@
 // Independent review regressions: measurement corruption must not become success.
 import { expect, test } from "bun:test";
+import { join } from "node:path";
 import { pending, sandboxRelative } from "./collect.ts";
-import type { Case } from "./inputs.ts";
+import { type Case, loadCases } from "./inputs.ts";
 import { pack, promptFor, sourceFiles } from "./protocol.ts";
 import { makeRow, rawOf, scoreArm } from "./score.ts";
 
@@ -84,4 +85,13 @@ test("summary model_calls counts the native inference calls and the reader's ans
     { process: "native inference", model: "m", calls: 2, failures: 0, prompt_tokens: 1200, completion_tokens: 400 },
     { process: "reader", model: "m", calls: 6, failures: 1, prompt_tokens: 1200, completion_tokens: 130 },
   ]);
+});
+
+test("a common-only control states its answer in the common document, with no exception clause", () => {
+  const controls = loadCases(join(import.meta.dir, "../assets")).filter(c => c.category === "common-only");
+  expect(controls.map(c => c.id)).toEqual(["case-14"]);
+  for (const c of controls) for (const f of Object.values(c.fields)) {
+    expect(f.values!.every(v => c.common.includes(v))).toBe(true);
+    expect(c.common).not.toMatch(/\bunless\b/i);
+  }
 });
