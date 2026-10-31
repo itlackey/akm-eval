@@ -152,8 +152,10 @@ limits; that is not secretly replaced with a shortened evaluator prompt.
   would require clustering and are outside this protocol.
 - **Cost:** inference/index/retrieval/reader phases separately, including total
   observed seconds for failed work. Reader provider token totals and reporting
-  counts are distinct from characters/4 context estimates. Native inference
-  `model_calls` provides available per-successful-call means, not exact totals.
+  counts are distinct from characters/4 context estimates. `model_calls` counts every
+  call the run made, native inference and the reader's answers, with per-successful-call
+  means, not exact totals; `calls_by` splits the calls and token totals into `native
+  inference` and `reader`.
   Unknown provider cost stays null; token estimates are not dollar savings.
 
 Every selected case gets a checkpoint row before work begins. Interruptions leave

@@ -72,6 +72,14 @@ test("nightly summary totals and agent trials use their recorded timing and toke
   expect(agent.cost_usd).toBeNull();
 });
 
+test("a memory-utility summary's model_calls and calls_by give the run's total calls and token totals", () => {
+  const fields = comparisonFields({ eval: "memory-utility", model_calls: { calls: 8, errors: 1, prompt_tokens: 342.9, completion_tokens: 75.7, seconds: 2.14, output_tokens_per_second: 35.3 }, calls_by: [
+    { process: "native inference", model: "m", calls: 2, failures: 0, prompt_tokens: 1200, completion_tokens: 400 },
+    { process: "reader", model: "m", calls: 6, failures: 1, prompt_tokens: 1200, completion_tokens: 130 },
+  ] }, [], []);
+  expect([fields.calls, fields.call_failures, fields.input_tokens, fields.output_tokens, fields.model_mean_input_tokens]).toEqual([8, 1, 2400, 530, 342.9]);
+});
+
 test("columns have unique IDs and projected settings cannot leak config credentials or endpoints", () => {
   const run = presentRun({ path: "v/suite/run", sourceRevision: "revision", samples: [], summary: {
     eval: "reflect", corpus: "public", status: "complete", model: "model", strategy: "reflect-only",

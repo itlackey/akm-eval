@@ -25,6 +25,16 @@ Add a release entry here when a version changes.
   optional Measurement.unfinished hook; existing measurements retain their prior completion behavior.
   Its summary carries `n_cases` and `model_calls` (native inference) as the other evals' do, and saved akm JSON writes the
   sandbox folder as `<sandbox>`, with rows and summary passed through `redactActors`; no score depends on either.
+  Changed after the first full 24-case run, before any memory-utility result was kept or published, so the version stays 0.1
+  (case digests record the changed input; a run made before this change has the old case-14 digest):
+  - case-14, the `common-only` control, now says the incident contact "applies to all projects, including Elm". It said "unless a
+    current explicit exception exists", so a reader with no notes could not rule an exception out, abstained, and `source - none`
+    counted the case as a gain from memory, though the note only restates that there is none. Its input changed.
+  - `model_calls` counts the reader's answers as well as native inference (it held inference only, so compare and the ledger
+    understated the run), and `calls_by` splits calls, failures and token totals into `native inference` and `reader` rows, as
+    nightly's does. No score depends on either.
+  - `--label` is kept as given (letters, digits, dot, dash, underscore), as in the other evals; it was slugged, so a label such as
+    `0.10.261022-full` became `0-10-261022-full`.
 
 - No eval changed version. Every akm sandbox sets `GIT_CEILING_DIRECTORIES` to its own folder, so a sandbox inside a git
   work tree (a TMPDIR in a checkout) no longer hides its bundle from akm's file walk (#148). Every published run had its
