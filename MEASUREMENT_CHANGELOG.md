@@ -60,6 +60,13 @@ Add a release entry here when a version changes.
     5 s each on the 35B, so a case of 18 sessions exceeds the 120 s default). This changes no score; it stops long cases from erroring.
     `--resume DIR` carries on a stopped run for either source. LongMemEval rows are appended as each case ends; the 24 cases still
     rewrite their rows at each checkpoint.
+  - **The second win path as a paired test (a measurement change).** With both 4096 and 8192 run, a LongMemEval summary carries one more
+    paired comparison, `metrics.cross_budget_inference`: inferred at 4096 against source at 8192 over the same cases, with the exact
+    McNemar test, the Fay-Lumbard interval and help/harm counts, as the other differences. `metrics.primary_comparisons` holds the
+    p-values of the two primary comparisons (inferred - source at 4096, and this one) as they are and after Holm's adjustment. It replaces
+    the pre-registered "reaches the notes' accuracy at the larger budget", which a point estimate could have declared. It is the one
+    pre-registered comparison, not a pairing of arbitrary budgets, and is absent when 8192 is not run. Console, compare and the ledger
+    show it with the Holm-adjusted p-values.
   - Ledger and compare gain the p-value, and a column per standard budget (`memory_b<budget>_*`) with a `Memory · by budget` view.
   - The pre-registration for held-out runs is `evals/memory-utility/PREREGISTRATION.md`. No held-out run has been made.
 

@@ -131,8 +131,13 @@ evals/memory-utility/run --model my-model --semantic --split dev --limit 40 --ju
 - **Results by budget.** `metrics.by_budget.<budget>` holds each budget's three arms (accuracy, mean packed tokens, mean reader prompt
   tokens), both paired differences with the McNemar p-value and interval, the split by question type, abstention questions apart from the
   rest, and the evidence diagnostic. The top-level `metrics.arms`, `persistent_memory` and `memory_inference` are the primary budget's,
-  so compare and the ledger read them as before. Reading rule: inferred beats the notes only if it is better at a matched budget, or
-  reaches the notes' accuracy at a smaller one.
+  so compare and the ledger read them as before. Reading rule: inferred wins only if either of two paired comparisons is significant in its
+  favour after Holm's adjustment at alpha 0.05, as [PREREGISTRATION.md](PREREGISTRATION.md) states.
+- **The two primary comparisons.** (a) inferred minus source at 4096, and (b) inferred at 4096 minus source at 8192 (`metrics.cross_budget_inference`: the
+  same cases, the original notes read at the larger budget). Both use the exact McNemar test and Fay and Lumbard's interval, with
+  help/harm counts, like every other difference. `metrics.primary_comparisons` holds each one's p-value as it is (`p_value`) and after
+  Holm's step-down adjustment for the pair (`p_holm`). They exist only when both 4096 and 8192 are run, and (b) is not a general pairing
+  of budgets: no other pair of budgets is compared. The console, compare and the ledger show (b) and the adjusted p-values beside the rest.
 - **Where the evidence went** (labels only, never prompted). For each evidence session with a `has_answer` turn, at each budget and for
   the source and inferred arms: `shown` (the whole turn is in the displayed text), `retrieval_missed` (no document of the session was a
   hit), `packing_cut` (a hit was cut or left out by the budget) or `summary_dropped` (every hit of the session was shown in full and the

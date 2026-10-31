@@ -23,6 +23,8 @@ export const DEFAULT_HAYSTACK = 16;
 export const DEFAULT_BUDGETS = [4096, 8192];
 /** The budget of the primary comparison. The others are secondary. */
 export const PRIMARY_BUDGET = 4096;
+/** The larger budget at which the original notes are read in the one cross-budget comparison: inferred at the primary budget against source here. */
+export const NOTES_BUDGET = 8192;
 
 export type Split = "dev" | "heldout-a" | "heldout-b";
 export const SPLITS: Split[] = ["dev", "heldout-a", "heldout-b"];

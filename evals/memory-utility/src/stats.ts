@@ -38,6 +38,14 @@ export function mcnemarP(b: number, c: number): number {
   return n === 0 ? 1 : Math.min(1, 2 * cdf(n, Math.min(b, c), 0.5));
 }
 
+/** Holm's step-down adjustment of p-values, in the order given: the i-th smallest is multiplied by (m - i + 1), made to never fall below the one before, and capped at 1. */
+export function holm(ps: number[]): number[] {
+  const adjusted: number[] = [];
+  let running = 0;
+  ps.map((p, i) => [p, i] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]).forEach(([p, i], k) => { running = Math.max(running, Math.min(1, (ps.length - k) * p)); adjusted[i] = Number(running.toPrecision(6)); });
+  return adjusted;
+}
+
 /** A Beta(a, b) distribution with whole a, b >= 0, as Clopper-Pearson limits use: a = 0 is a point mass at 0, b = 0 one at 1. */
 type Beta = [number, number];
 /** P(B <= t). For whole a, b >= 1 it is P(Binomial(a + b - 1, t) >= a). */

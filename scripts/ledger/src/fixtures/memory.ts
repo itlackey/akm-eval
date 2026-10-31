@@ -26,6 +26,8 @@ export function memorySummary() {
       persistent_memory: { failure_inclusive: pair(.25), complete_pairs: pair(.3333, true) },
       memory_inference: { failure_inclusive: pair(.25), complete_pairs: pair(.3333, true) },
       cited_correct_deltas: { persistent_memory: pair(.25), memory_inference: pair(.25) },
+      cross_budget_inference: { failure_inclusive: { ...pair(.25), p_value: 0.2 }, complete_pairs: pair(.3333, true) },
+      primary_comparisons: { method: "Holm", alpha: 0.05, comparisons: { matched_budget: { p_value: 0.25, p_holm: 0.4 }, cross_budget: { p_value: 0.2, p_holm: 0.4 } } },
       by_budget: { "8192": budgetResult([1, 2, 1], 250, -.25, 0.5), "4096": budgetResult([1, 2, 3], 900, .25, 0.25) },
       inference: { output: 2, no_change: 1, errors: 1, not_run: 0, mean_seconds: 7, mean_index_seconds: 2 } } };
 }

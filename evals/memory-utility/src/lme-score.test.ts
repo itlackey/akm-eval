@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildLmeCase, lmeCases, loadLmeCases } from "./lme.ts";
+import { holm, mcnemarP } from "./stats.ts";
 import { blankBudget, lmeRawOf, makeLmeRow, summarizeLme, type LmeRaw } from "./lme-score.ts";
 import { lmePending } from "./lme-collect.ts";
 import { pack } from "./protocol.ts";
@@ -80,6 +81,49 @@ describe("summarizing LongMemEval rows", () => {
     expect(t).toMatchObject({ n_cases: 1, n_errored: 1, n_scored: 0 });
     expect(t.metrics.memory_inference.failure_inclusive).toMatchObject({ n: 1, value: -1, only_without_akm: 1, incomplete_pairs: 1, harms: 0 });
     expect(t.metrics.memory_inference.complete_pairs).toMatchObject({ n: 0, value: null, ci95: null });
+  });
+});
+
+describe("the cross-budget comparison: inferred at 4096 against the original notes at 8192", () => {
+  type Ok = Record<"none" | "source" | "inferred", boolean[]>; // [4096, 8192]
+  const t = true, f = false;
+  const spec = (n: number, source: boolean[], inferred: boolean[]) => Array.from({ length: n }, () => ({ ok: { none: [f, f], source, inferred } as Ok }));
+  const at = (specs: ReturnType<typeof spec>) => specs.map((s, i) => makeLmeRow(buildLmeCase({ ...tiny[0]!, question_id: `${tiny[0]!.question_id}-${i}` }, 1, 1), scripted(s.ok, [4096, 8192])));
+  // matched at 4096: 9 helps and 2 harms; cross (source at 8192 against inferred at 4096): 6 helps and 1 harm. The cases C and D tell the two apart.
+  const mixed = [...spec(6, [f, f], [t, t]), ...spec(1, [t, t], [f, f]), ...spec(3, [f, t], [t, t]), ...spec(1, [t, f], [f, f]), ...spec(2, [t, t], [t, t])];
+  const s = summarizeLme(at(mixed));
+  test("pairs the source answer at 8192 with the inferred answer at 4096, over the same cases, with help and harm counts and the McNemar test", () => {
+    expect(s.metrics.cross_budget_inference!.failure_inclusive).toMatchObject({ n: 13, helps: 6, harms: 1, ties: 6, only_with_akm: 6, only_without_akm: 1, p_value: Number(mcnemarP(1, 6).toPrecision(6)) });
+    expect(s.metrics.cross_budget_inference!.failure_inclusive.value).toBeCloseTo(5 / 13);
+    expect(s.metrics.cross_budget_inference!.failure_inclusive.ci95![0]).toBeLessThan(5 / 13);
+    expect(s.metrics.cross_budget_inference!.failure_inclusive.interval_method).toContain("Fay and Lumbard");
+    expect(s.metrics.cross_budget_inference!.complete_pairs).toMatchObject({ n: 13, helps: 6, harms: 1 });
+    // The matched comparison at 4096 is the one that was already there, and the two differ.
+    expect(s.metrics.memory_inference.failure_inclusive).toMatchObject({ n: 13, helps: 9, harms: 2, p_value: Number(mcnemarP(2, 9).toPrecision(6)) });
+  });
+  test("holds the two primary p-values as they are and after Holm", () => {
+    const [matched, cross] = [mcnemarP(2, 9), mcnemarP(1, 6)].map(p => Number(p.toPrecision(6)));
+    expect(s.metrics.primary_comparisons).toMatchObject({ alpha: 0.05, comparisons: {
+      matched_budget: { label: "inferred - source at 4096", p_value: matched, p_holm: holm([matched!, cross!])[0] },
+      cross_budget: { label: "inferred at 4096 - source at 8192", p_value: cross, p_holm: holm([matched!, cross!])[1] } } });
+    expect(s.metrics.primary_comparisons!.comparisons.cross_budget.p_holm).toBeGreaterThanOrEqual(cross!);
+  });
+  test("an arm that failed at either budget is wrong in the pair and out of the complete pairs", () => {
+    const raw = scripted({ none: [f, f], source: [f, f], inferred: [t, t] }, [4096, 8192]);
+    raw.arms.source.budgets["8192"]!.state = "error"; raw.arms.source.state = "error";
+    const u = summarizeLme([...at(mixed), makeLmeRow(buildLmeCase(tiny[0]!, 1, 1), raw)]);
+    expect(u.metrics.cross_budget_inference!.failure_inclusive).toMatchObject({ n: 14, helps: 6, incomplete_pairs: 1 });
+    expect(u.metrics.cross_budget_inference!.complete_pairs).toMatchObject({ n: 13, helps: 6 });
+  });
+  test("is absent when 8192 is not run, as is the Holm pair, and is not made of any other pair of budgets", () => {
+    for (const budgets of [[4096], [2048, 4096], [4096, 16384]]) {
+      const r = summarizeLme([makeLmeRow(buildLmeCase(tiny[0]!, 1, 1), scripted({ none: budgets.map(() => f), source: budgets.map(() => f), inferred: budgets.map(() => t) }, budgets))]);
+      expect(r.metrics).not.toHaveProperty("cross_budget_inference");
+      expect(r.metrics).not.toHaveProperty("primary_comparisons");
+    }
+  });
+  test("has no Holm pair with no case, as there is no p-value to adjust", () => {
+    expect(summarizeLme([]).metrics.primary_comparisons).toBeNull();
   });
 });
 

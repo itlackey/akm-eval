@@ -9,9 +9,9 @@ import { QUESTION_TYPES } from "../../../benchmarks/longmemeval/src/dataset.ts";
 import { isYes } from "../../../benchmarks/longmemeval/src/score.ts";
 import type { ModelCalls } from "../../../lib/akm/usage.ts";
 import type { CallRow } from "../../nightly/src/collect.ts";
-import { DEFAULT_BUDGETS, PRIMARY_BUDGET, type LmeCase } from "./lme.ts";
+import { DEFAULT_BUDGETS, NOTES_BUDGET, PRIMARY_BUDGET, type LmeCase } from "./lme.ts";
 import { ARMS, type ArmName, type Packed, sourceFiles } from "./protocol.ts";
-import { pairSummary } from "./stats.ts";
+import { holm, pairSummary } from "./stats.ts";
 import { callsSummary, type Raw } from "./score.ts";
 
 /** One arm of a case read at one budget: the memory shown, the reader's answer and the judge's verdict on it. */
@@ -170,6 +170,25 @@ function atBudget(rows: LmeRow[], key: string) {
     evidence };
 }
 
+/** The one pre-registered comparison across budgets: inferred at the primary budget against the original notes at the larger one, over the same cases. */
+function crossBudget(rows: LmeRow[]) {
+  const [notes, inferred] = [String(NOTES_BUDGET), String(PRIMARY_BUDGET)];
+  const pair = (evaluatedOnly: boolean) => pairSummary(rows.map(r => ({ before: r.arms.source[notes]!.correct, after: r.arms.inferred[inferred]!.correct, evaluated: r.arms.source[notes]!.evaluated && r.arms.inferred[inferred]!.evaluated })), evaluatedOnly);
+  return { failure_inclusive: pair(false), complete_pairs: pair(true) };
+}
+
+/**
+ * The two primary comparisons, with the p-value of each as it is and after Holm's adjustment for the pair: inferred minus source at the
+ * primary budget, and inferred at the primary budget minus source at the larger one. Null when either has no p-value (no case).
+ */
+function primaryComparisons(matched: ReturnType<typeof pairSummary>, cross: ReturnType<typeof pairSummary>) {
+  if (matched.p_value === null || cross.p_value === null) return null;
+  const [pMatched, pCross] = holm([matched.p_value, cross.p_value]);
+  const one = (label: string, pair: ReturnType<typeof pairSummary>, p_holm: number | undefined) => ({ label, value: pair.value, p_value: pair.p_value, p_holm });
+  return { method: "Holm step-down over these two comparisons", alpha: 0.05,
+    comparisons: { matched_budget: one(`inferred - source at ${PRIMARY_BUDGET}`, matched, pMatched), cross_budget: one(`inferred at ${PRIMARY_BUDGET} - source at ${NOTES_BUDGET}`, cross, pCross) } };
+}
+
 /** Every reader and judge call of the run, and native inference's, as the summary's `model_calls`. Reused answers made no call. */
 function lmeModelCalls(rows: LmeRow[]) {
   const budgets = rows.flatMap(r => ARMS.flatMap(a => Object.values(r.raw.arms[a].budgets)));
@@ -185,6 +204,8 @@ export function summarizeLme(rows: LmeRow[]) {
   const primary = budgets.includes(PRIMARY_BUDGET) ? PRIMARY_BUDGET : budgets[0]!;
   const by_budget = Object.fromEntries(budgets.map(b => [String(b), atBudget(rows, String(b))]));
   const main = by_budget[String(primary)]!;
+  // Only when both budgets are run: this is the one pre-registered comparison across budgets, not a general pairing of budgets.
+  const cross = budgets.includes(PRIMARY_BUDGET) && budgets.includes(NOTES_BUDGET) ? crossBudget(rows) : null;
   const armLevel = Object.fromEntries(ARMS.map(a => {
     const seconds = (k: "index" | "retrieval" | "answer" | "judge") => sum(rows.map(r => r.raw.arms[a].seconds[k]));
     const usage = rows.flatMap(r => Object.values(r.raw.arms[a].budgets).flatMap(b => b.answer ? [b.answer.usage] : b.failed_usage ? [b.failed_usage] : []));
@@ -202,11 +223,12 @@ export function summarizeLme(rows: LmeRow[]) {
     reader_answers_reused: answered.filter(b => b.reused_from !== null).length, judge_undecidable: answered.filter(b => b.error?.startsWith("judge: undecidable")).length,
     ...lmeModelCalls(rows), observed_models: [...new Set(answered.map(b => b.answer?.model).filter(Boolean))].sort(),
     metrics: { budgets, primary_budget: primary, arms: Object.fromEntries(ARMS.map(a => [a, { ...main.arms[a], ...armLevel[a] }])), persistent_memory: main.persistent_memory, memory_inference: main.memory_inference,
+      ...(cross ? { cross_budget_inference: cross, primary_comparisons: primaryComparisons(main.memory_inference.failure_inclusive, cross.failure_inclusive) } : {}),
       by_budget, by_type: main.by_type, abstention: main.abstention,
       inference: { output: rows.filter(r => r.raw.inference.outcome === "output").length, no_change: rows.filter(r => r.raw.inference.outcome === "no-change").length, errors: rows.filter(r => r.raw.inference.outcome === "error").length, not_run: rows.filter(r => r.raw.inference.outcome === "not-run").length,
         mean_seconds: avg(rows.filter(started).map(r => r.raw.inference.seconds)), mean_index_seconds: avg(rows.filter(started).map(r => r.raw.inference.index_seconds)) } },
     notes: ["Accuracy is the benchmark's judge (yes/no on the free-form answer) over LongMemEval questions cut to their evidence sessions and seeded distractors, not the full 50-session history. Source and inferred are read from the same search depth packed to each budget; the none arm gets no memory.",
-      "Paired differences carry an exact McNemar p-value and an exact 95% interval (Fay-Lumbard, compatible with the McNemar test). The primary comparison is inferred minus source at the primary budget; the other budgets are secondary.",
+      `Paired differences carry an exact McNemar p-value and an exact 95% interval (Fay-Lumbard, compatible with the McNemar test). The primary comparison is inferred minus source at the primary budget; the other budgets are secondary. With both ${PRIMARY_BUDGET} and ${NOTES_BUDGET} run, the second primary comparison is inferred at ${PRIMARY_BUDGET} minus source at ${NOTES_BUDGET} (cross_budget_inference), and metrics.primary_comparisons holds the two p-values as they are and after Holm's adjustment.`,
       "A budget is characters/4, not a tokenizer. A raw session keeps the prefix that fits, and in LongMemEval the answer is usually in the first turn, which favours raw notes at small budgets; do not reorder the data to undo it.",
       "Where the answer went (metrics.by_budget.<budget>.evidence) is labels-only: a whole has_answer turn counted as shown, retrieval missed, packing cut, or summary dropped (an upper bound: a faithful paraphrase has no verbatim turn)."] };
 }

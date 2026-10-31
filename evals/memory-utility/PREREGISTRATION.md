@@ -21,7 +21,7 @@ version of this file, committed before the run it applies to.
   "primary_budget": 4096,
   "judge": { "model": "fast/qwen3.6-35b-a3b", "chat": { "max_tokens": 64 }, "temperature": 0, "recorded_as": "judge_model and eval_settings.judge_settings_sha256 in the summary" },
   "reader_and_inference": "the model under test, temperature 0, as --model names it",
-  "primary_endpoint": "inferred minus source accuracy at the primary budget, over all selected cases, tested with the exact McNemar test (two-sided, alpha 0.05)",
+  "primary_endpoint": "two paired comparisons over all selected cases, each tested with the exact McNemar test (two-sided): (a) inferred minus source at 4096, (b) inferred at 4096 minus source at 8192; Holm-adjusted over the two, alpha 0.05",
   "heldout_runs": "on the rewrite (--corpus custom), a whole half named by --split heldout-a or --split heldout-b: the first decision uses A, the next uses B, and a half is spent once akm is tuned on its failures"
 }
 ```
@@ -44,17 +44,19 @@ or the reader.
 
 ## The primary question
 
-Does native memory inference beat keeping the original notes, at a matched budget? The primary comparison is `inferred - source` at 4096
-estimated tokens, over every selected case (an errored arm is a wrong answer), reported with the exact McNemar p-value and the exact
-paired interval. `source - none` at 4096 is a secondary, and so is 8192.
+Does native memory inference beat keeping the original notes, at a matched budget? There are two primary comparisons, each over every
+selected case (an errored arm is a wrong answer) and reported with the exact McNemar p-value, the exact paired interval and the help and
+harm counts: (a) `inferred - source` at 4096 estimated tokens, and (b) inferred at 4096 against source at 8192, the same cases (the
+original notes given twice the room). They are Holm-adjusted together at alpha 0.05, and a summary records each p-value as it is and
+after the adjustment (`metrics.primary_comparisons`). `source - none` at 4096 is a secondary, and so is `inferred - source` at 8192.
 
 ## The reading rule
 
-- Inferred wins only if it is better than source at a matched budget (a primary result with p < 0.05 and a positive difference, ideally
-  also positive at 8192), or if inferred at 4096 reaches the original notes' accuracy at 8192, the larger budget.
+- Inferred wins if either primary comparison, (a) or (b), is significant in inferred's favour after Holm at alpha 0.05: its adjusted
+  p-value is below 0.05 and its difference is positive. Nothing else is a win, and no other pair of budgets is compared.
 - A difference whose interval includes zero is no result, not a tie. Do not read a non-significant gain as support, or a non-significant
   loss as safety.
-- 8192 is secondary and is not searched for the one where inference wins.
+- `inferred - source` at 8192 is secondary and is not searched for the one where inference wins.
 - Abstention questions are reported apart (`abstention`): inferred memory must not make the reader invent an answer there.
 - The diagnostic says where the evidence went (shown, retrieval missed, packing cut, summary dropped). A loss attributed to the summary
   is an upper bound, since a faithful paraphrase has no verbatim turn.

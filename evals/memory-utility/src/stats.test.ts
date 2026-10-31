@@ -1,5 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { exactPairedInterval, mcnemarP, pairSummary } from "./stats.ts";
+import { exactPairedInterval, holm, mcnemarP, pairSummary } from "./stats.ts";
+
+describe("Holm's adjustment", () => {
+  test("matches the values R's p.adjust(method = \"holm\") gives", () => {
+    expect(holm([0.01, 0.04, 0.03])).toEqual([0.03, 0.06, 0.06]);
+    expect(holm([0.02, 0.04])).toEqual([0.04, 0.04]);
+    expect(holm([0.03, 0.2])).toEqual([0.06, 0.2]);
+    expect(holm([0.2, 0.03])).toEqual([0.2, 0.06]); // in the order given
+    expect(holm([0.01, 0.011, 0.5])).toEqual([0.03, 0.03, 0.5]);
+  });
+  test("is capped at one, never below the raw p-value, and one p-value is unchanged", () => {
+    expect(holm([0.6, 0.8])).toEqual([1, 1]);
+    expect(holm([0.3])).toEqual([0.3]);
+    for (const ps of [[0.001, 0.2], [0.5, 0.5], [0, 1]]) holm(ps).forEach((p, i) => expect(p).toBeGreaterThanOrEqual(ps[i]!));
+  });
+});
 
 describe("exact McNemar test", () => {
   test("matches binomial values worked out by hand", () => {

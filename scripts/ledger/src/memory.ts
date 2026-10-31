@@ -53,6 +53,21 @@ for (const budget of MEMORY_BUDGETS) {
     add(`b${budget}_${key}_p_value`, `${name} @ ${budget} p-value`, `${path}.p_value`, "budgets", "Two-sided exact McNemar p-value. Only the primary budget is the pre-registered comparison; the others are secondary.", "", 4);
   }
 }
+// The second pre-registered comparison, only when both 4096 and 8192 are run: inferred at 4096 against the original notes at 8192.
+{
+  const name = "Inferred @ 4096 − notes @ 8192";
+  for (const [basis, label] of [["failure_inclusive", "all selected"], ["complete_pairs", "complete pairs"]]) {
+    const path = `metrics.cross_budget_inference.${basis}`, prefix = `cross_budget_inference_${basis}`;
+    add(`${prefix}_gain`, `${name} · ${label} (pp)`, `${path}.value`, "budgets", "Paired accuracy difference in percentage points, inferred memory at 4096 against the original notes at 8192, over the same cases. All-selected results count missing/error arms as zero; complete-pair results exclude them.", "pp", 2);
+    for (const [index, bound] of [[0, "low"], [1, "high"]])
+      add(`${prefix}_ci_${bound}`, `${name} · ${label} CI ${bound} (pp)`, `${path}.ci95.${index}`, "budgets", "Exact 95% paired interval (Fay-Lumbard, compatible with the exact McNemar test).", "pp", 2);
+    add(`${prefix}_p_value`, `${name} · ${label} p-value`, `${path}.p_value`, "budgets", "Two-sided exact McNemar p-value as it is, before the Holm adjustment over the two primary comparisons.", "", 4);
+    for (const [field, title] of [["n", "denominator"], ["complete_pairs", "complete pairs"], ["incomplete_pairs", "incomplete pairs"], ["helps", "helps"], ["harms", "harms"], ["ties", "ties"]])
+      add(`${prefix}_${field}`, `${name} · ${label} ${title}`, `${path}.${field}`, "budgets", "Recorded paired coverage. Help/harm/ties count complete pairs only; incomplete pairs must not be interpreted as ties.");
+  }
+  for (const [key, title] of [["matched_budget", "Inferred − notes @ 4096"], ["cross_budget", name]])
+    add(`holm_${key}_p`, `${title} · Holm-adjusted p-value`, `metrics.primary_comparisons.comparisons.${key}.p_holm`, "budgets", "The p-value of this primary comparison after Holm's step-down adjustment over the two pre-registered comparisons. Inferred wins if either is below 0.05 in inferred's favour.", "", 4);
+}
 for (const key of ["selected", "run", "scored", "errored", "unfinished"])
   add(key, `Memory cases · ${key}`, `n_${key}`, "diagnostics", "Recorded case count. Scored means all three arms answered, not that they were correct.");
 for (const key of ["output", "no_change", "errors", "not_run"])

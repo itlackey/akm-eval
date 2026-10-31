@@ -62,6 +62,10 @@ test('memory budgets show each standard budget with its accuracy, packed tokens 
   await expect(cells(page, 'memory_b4096_memory_inference_p_value').first()).toHaveText('0.2500');
   await expect(cells(page, 'memory_b4096_memory_inference_gain').first()).toHaveText('25.00');
   await expect(cells(page, 'memory_b8192_inferred_accuracy').nth(1)).toHaveText('—'); // the second run records no 8192 budget
+  await expect(cells(page, 'memory_cross_budget_inference_failure_inclusive_p_value').first()).toHaveText('0.2000');
+  await expect(cells(page, 'memory_cross_budget_inference_failure_inclusive_helps').first()).toHaveText('1');
+  await expect(cells(page, 'memory_holm_cross_budget_p').first()).toHaveText('0.4000');
+  await expect(page.locator('#view-context')).toContainText('Holm-adjusted p-values cover both primary comparisons');
   await expect(page.locator('#view-context')).toContainText('primary comparison is Inferred − notes at 4096');
   const rows = await exported(page);
   expect(rows[0].memory_b4096_memory_inference_p_value).toBe(0.25);

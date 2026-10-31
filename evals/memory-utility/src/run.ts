@@ -19,7 +19,7 @@ import { collect, configFor, pending, type Options } from "./collect.ts";
 import { ARMS, PROMPT, readerSettings } from "./protocol.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { makeRow, summarize } from "./score.ts";
-import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, PRIMARY_BUDGET, HALVES_SALT, SPLIT_SALT, SPLITS, isHeldout, isLmeCase, lmeCases, type LmeCase, type Split } from "./lme.ts";
+import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, NOTES_BUDGET, PRIMARY_BUDGET, HALVES_SALT, SPLIT_SALT, SPLITS, isHeldout, isLmeCase, lmeCases, type LmeCase, type Split } from "./lme.ts";
 import { lmeCollect, lmePending, type LmeOptions } from "./lme-collect.ts";
 import { makeLmeRow, isLmeRow } from "./lme-score.ts";
 
@@ -239,11 +239,16 @@ async function lmePlan(corpus: ResolvedCorpus, a: { split: Split; limit?: number
 function printLme(s: any): void {
   const m = s.metrics;
   console.log(`\nmemory-utility (${s.corpus}) LongMemEval ${s.split} | ${s.n_scored} scored, ${s.n_errored} errored of ${s.n_selected} | ${s.model} | judge ${s.judge_model} | AKM ${s.akm_version}`);
+  const d = (p: any) => `${points(p.value)} pp [${p.ci95 ? `${points(p.ci95[0])}, ${points(p.ci95[1])}` : "n/a"}] p=${p.p_value ?? "n/a"} (${p.helps}/${p.harms})`;
   for (const b of m.budgets) {
     const x = m.by_budget[String(b)], acc = (a: string) => `${x.arms[a].failure_inclusive_accuracy.correct}/${x.arms[a].failure_inclusive_accuracy.n} ${pct(x.arms[a].failure_inclusive_accuracy.rate)}`;
-    const d = (p: any) => `${points(p.value)} pp [${p.ci95 ? `${points(p.ci95[0])}, ${points(p.ci95[1])}` : "n/a"}] p=${p.p_value ?? "n/a"} (${p.helps}/${p.harms})`;
     console.log(`  ${String(b).padStart(4)}${b === m.primary_budget ? "*" : " "} none ${acc("none")} | source ${acc("source")} | inferred ${acc("inferred")} | inferred-source ${d(x.memory_inference.failure_inclusive)} | source-none ${d(x.persistent_memory.failure_inclusive)}`);
   }
   console.log("  (* primary budget; helps/harms are cases only the later arm / only the earlier arm got right)");
+  if (m.cross_budget_inference) {
+    console.log(`  inferred@${PRIMARY_BUDGET} - source@${NOTES_BUDGET} ${d(m.cross_budget_inference.failure_inclusive)}`);
+    const c = m.primary_comparisons?.comparisons;
+    if (c) console.log(`  primary comparisons, p raw -> Holm (alpha ${m.primary_comparisons.alpha}): ${Object.values<any>(c).map(x => `${x.label} ${x.p_value} -> ${x.p_holm}`).join(" | ")}`);
+  }
 }
 if (import.meta.main) main().catch(e => { console.error(String(e)); process.exitCode = 2; });

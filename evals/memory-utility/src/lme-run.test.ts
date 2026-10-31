@@ -78,6 +78,21 @@ describe("memory-utility --split", () => {
     expect(other.err).toContain("different eval settings");
   }, 120_000);
 
+  test("with 4096 and 8192 the summary and the console carry the cross-budget comparison and the Holm-adjusted p-values; without 8192 they do not", async () => {
+    const both = await run(...base.slice(0, base.indexOf("--budgets")), "--budgets", "4096,8192", "--haystack", "1", "--label", `${label}-cross`);
+    expect(both.code).toBe(0);
+    const m = summaryOf(both.dir!).metrics;
+    expect(m.cross_budget_inference.failure_inclusive).toMatchObject({ n: 3, test: expect.stringContaining("McNemar") });
+    expect(m.primary_comparisons.comparisons.matched_budget.p_holm).toBeGreaterThanOrEqual(m.primary_comparisons.comparisons.matched_budget.p_value);
+    expect(m.primary_comparisons.comparisons.cross_budget.p_holm).toBe(m.primary_comparisons.comparisons.matched_budget.p_holm); // two comparisons: both p_holm are at least the larger raw one's step
+    expect(both.out).toContain("inferred@4096 - source@8192");
+    expect(both.out).toContain("primary comparisons, p raw -> Holm (alpha 0.05)");
+    const without = await run(...base, "--label", `${label}-nocross`);
+    expect(without.code).toBe(0);
+    expect(summaryOf(without.dir!).metrics).not.toHaveProperty("cross_budget_inference");
+    expect(without.out).not.toContain("primary comparisons");
+  }, 120_000);
+
   test("refuses to resume a run that is not there", async () => {
     const r = await run(...base, "--resume", join(work, "nothing"));
     expect(r.code).not.toBe(0);

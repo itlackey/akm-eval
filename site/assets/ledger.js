@@ -256,7 +256,7 @@ async function startLedger() {
     let text;
     if (memoryViews.includes(view)) {
       text = view === 'memory' ? 'Notes − none measures persistent-memory gain; Inferred − notes measures native-inference gain. Gains use all selected cases (errors/unrun = zero). Compare complete pairs and conservative 95% bounds; no winner is inferred.'
-        : view === 'memory-budgets' ? 'LongMemEval cases read at each memory budget (estimated tokens). The primary comparison is Inferred − notes at 4096; 8192 is secondary. p-values are exact McNemar; intervals are exact and agree with them (Fay-Lumbard). — means the run did not record that budget.'
+        : view === 'memory-budgets' ? 'LongMemEval cases read at each memory budget (estimated tokens). The primary comparison is Inferred − notes at 4096; 8192 is secondary. p-values are exact McNemar; intervals are exact and agree with them (Fay-Lumbard). The second primary comparison is Inferred @ 4096 − notes @ 8192, and the Holm-adjusted p-values cover both primary comparisons. — means the run did not record that budget.'
         : view === 'memory-performance' ? 'Phase times include observed failed work. Reader token/cost totals exclude inference and embeddings; compare reporting counts and equal case counts. — means unknown, not zero.'
         : 'Factual accuracy, format compliance and citation checks are separate. Safety flags cover labeled cases only. Exact quotes do not prove entailment; literal anchors can miss valid paraphrases.';
       if (!active.length) text = 'No memory-usefulness results match these filters. ' + text;
@@ -324,7 +324,9 @@ async function startLedger() {
         ['n_evaluated', 'n_errors', 'n_not_run', 'protocol_correct', 'cited_correct', 'malformed_answers', 'missing_citation', 'outdated_answer', 'wrong_scope_answer', 'unsupported_unanswerable'].map(key => `memory_${arm}_${key}`))];
       const budgets = [4096, 8192].flatMap(budget => [...arms.map(arm => `memory_b${budget}_${arm}_accuracy`), ...arms.map(arm => `memory_b${budget}_${arm}_tokens`),
         ...pairs.flatMap(pair => ['gain', 'ci_low', 'ci_high', 'p_value'].map(key => `memory_b${budget}_${pair}_${key}`))]);
-      return ['model', 'suite', 'akm_version', 'role', ...(view === 'memory' ? [...quality, 'memory_memory_inference_failure_inclusive_p_value'] : view === 'memory-budgets' ? ['memory_split', 'memory_haystack', 'memory_judge_model', ...budgets] : view === 'memory-performance' ? performance : diagnostics), 'errors', 'measurement', 'scoring_version', 'label', 'date'];
+      const cross = ['gain', 'ci_low', 'ci_high', 'p_value', 'helps', 'harms'].map(key => `memory_cross_budget_inference_failure_inclusive_${key}`);
+      const holm = ['memory_holm_matched_budget_p', 'memory_holm_cross_budget_p'];
+      return ['model', 'suite', 'akm_version', 'role', ...(view === 'memory' ? [...quality, 'memory_memory_inference_failure_inclusive_p_value', ...cross, ...holm] : view === 'memory-budgets' ? ['memory_split', 'memory_haystack', 'memory_judge_model', ...budgets, ...cross, ...holm] : view === 'memory-performance' ? performance : diagnostics), 'errors', 'measurement', 'scoring_version', 'label', 'date'];
     }
     if (view === 'impact') return ['model', 'suite', 'akm_version', 'role', 'control_quality_percent', 'akm_quality_percent', 'akm_delta_pp', 'akm_gain_ci', 'paired_cases', 'control_p50_s', 'akm_p50_s', 'median_time_change_percent', 'control_timed', 'akm_timed', 'errors', 'collection', 'label', 'date'];
     if (view === 'performance') return ['model', 'suite', 'akm_version', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'input_tokens', 'output_tokens', 'cost_usd', 'cost_calls', 'usage_cases', 'usage_basis', 'run_wall_s', 'collection', 'label', 'date'];
