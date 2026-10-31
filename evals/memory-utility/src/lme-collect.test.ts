@@ -129,6 +129,8 @@ describe("where the evidence went", () => {
     // summary dropped: the session's child note is displayed in full and does not hold the turn
     const child = { ref: `${mine}.derived`, content: "Derived note: something else entirely." };
     expect(whereWentEvidence(c, arm([`${mine}.derived`]), budget([child], 1000))).toEqual({ [id]: "summary_dropped" });
+    // the parent is cut but its summary is shown in full: the reader has the summary only, so it is the summary that did not hold the turn
+    expect(whereWentEvidence(c, arm([`${mine}.derived`, mine]), budget([child, { ref: mine, content: `# Chat session\n\n${"x".repeat(2000)}${turn}` }], 120))).toEqual({ [id]: "summary_dropped" });
     // labels are not read for an arm that did not search
     expect(whereWentEvidence(c, { ...arm([]), search: null }, budget([], 100))).toBeNull();
   });

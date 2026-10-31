@@ -36,6 +36,32 @@ Add a release entry here when a version changes.
   - `--label` is kept as given (letters, digits, dot, dash, underscore), as in the other evals; it was slugged, so a label such as
     `0.10.261022-full` became `0-10-261022-full`.
 
+- memory-utility 0.2: LongMemEval cases, exact paired statistics and `--resume`. The 24 public cases keep their inputs, their exact
+  scoring and their collection, so their case digests are unchanged; only the paired statistics differ. memory-utility 0.1 was never
+  released or published, so there is nothing to compare 0.2 with except by rescoring a saved 0.1 run, which gives the new statistics.
+  - **Statistics (a measurement change).** Every paired difference (`source - none`, `inferred - source`, exact and cited-correct) now
+    carries an exact two-sided McNemar test (`p_value`, a binomial test on the discordant pairs) and an exact 95% interval in `ci95`:
+    Clopper-Pearson on the discordant pairs, scaled by their share of the pairs, so it is conditional on that share. It replaces the
+    conservative Hoeffding bound of 0.1, which ignored that most pairs tie. `ci95` is now null when no pair is discordant (Hoeffding
+    gave a wide interval there). `test` and `interval_method` name the method in each pair. The longmemeval benchmark keeps its own Wald
+    interval; the two conventions still differ.
+  - **LongMemEval case source (`--split dev|heldout`).** New inputs and a second scoring path beside the exact one. A case is one
+    LongMemEval question with its evidence sessions and `--haystack` (default 16) seeded distractor sessions from its history, every
+    session whole as one memory. Native inference runs once per case; each arm is indexed and searched once and the shown text is packed
+    at each `--budgets` value (default 256, 512, 1024, 2048, 4096 estimated tokens; 1024 is primary), the reader answering once per
+    distinct packed text. The longmemeval benchmark's judge prompts grade each free-form answer yes or no (`--judge-model`, required);
+    the citation protocol is dropped for these cases. The split into 100 dev and 400 held-out questions is a salted hash of the
+    question id, stratified by type. Summaries gain `case_source`, `split`, `haystack`, `budgets`, `primary_budget`, `sample_seed`,
+    `judge_model` and `dataset`, rows are `kind: longmemeval` with `arms.<arm>.<budget>`, and `metrics` gains `by_budget`, `by_type`,
+    `abstention` and, per budget, an `evidence` diagnostic (shown, retrieval missed, packing cut, summary dropped; labels only, never
+    prompted). `sessions_over_projection_limit` is recorded as in the benchmark. These cases are never pooled with the 24.
+  - **Collection.** `akm improve` may take 30 s per note when that exceeds `--timeout-ms` (one sequential model call per note, about
+    5 s each on the 35B, so a case of 18 sessions exceeds the 120 s default). This changes no score; it stops long cases from erroring.
+    `--resume DIR` carries on a stopped run for either source. LongMemEval rows are appended as each case ends; the 24 cases still
+    rewrite their rows at each checkpoint.
+  - Ledger and compare gain the p-value, and a column per standard budget (`memory_b<budget>_*`) with a `Memory · by budget` view.
+  - The pre-registration for held-out runs is `evals/memory-utility/PREREGISTRATION.md`. No held-out run has been made.
+
 - No eval changed version. Every akm sandbox sets `GIT_CEILING_DIRECTORIES` to its own folder, so a sandbox inside a git
   work tree (a TMPDIR in a checkout) no longer hides its bundle from akm's file walk (#148). Every published run had its
   sandboxes outside one: their index counts are the same on every akm version. Semantic sandboxes share akm's ONNX Runtime

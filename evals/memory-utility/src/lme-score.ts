@@ -77,8 +77,8 @@ const sessionOfRef = (files: Map<string, string>, ref: string): string | null =>
  * Where each evidence session's answer turn ended up in an arm's memory at one budget, from labels only (never prompted).
  *  - shown: the whole has_answer turn is in the displayed text.
  *  - retrieval_missed: no document of the session was among the search hits.
- *  - packing_cut: a document of the session was a hit, but the budget cut it or left it out.
- *  - summary_dropped: every hit of the session was displayed in full, yet the turn is not in the text. For the source arm this cannot
+ *  - packing_cut: a document of the session was a hit, but the budget cut every one of them or left them out.
+ *  - summary_dropped: a hit of the session was displayed in full (for the inferred arm that can be its summary alone), yet the turn is not in the text. For the source arm this cannot
  *    happen (a full session holds its turns), so a count there is a display problem. For the inferred arm it is a summary that does not
  *    quote the turn: the text test cannot tell a paraphrase that kept the answer from one that lost it, so this is an upper bound on loss.
  * Null when the arm did not search (no memory, or an error before the search).
@@ -92,7 +92,7 @@ export function whereWentEvidence(c: LmeCase, arm: LmeArm, b: LmeBudgetRaw, file
   return Object.fromEntries(Object.entries(c.evidence_turns).map(([id, turns]) => {
     if (turns.every(turn => text.some(t => t.includes(turn)))) return [id, "shown" as Where];
     const own = refs.filter(r => sessionOfRef(files, r) === id);
-    return [id, (!own.length ? "retrieval_missed" : own.every(full) ? "summary_dropped" : "packing_cut") as Where];
+    return [id, (!own.length ? "retrieval_missed" : own.some(full) ? "summary_dropped" : "packing_cut") as Where];
   }));
 }
 

@@ -22,7 +22,7 @@ not isolate child files alone. The controls have the same output schema, tools
 Use the repository's [Docker/native setup](../../README.md). The reader and
 native inference use `--model`/`models.json`/`.env`; the reader uses Chat
 Completions directly while AKM uses its native engine and prompts. They have
-separately recorded effective settings. No judge is used.
+separately recorded effective settings. The 24 public cases use no judge; the LongMemEval cases (`--split`) use one.
 
 ```sh
 evals/memory-utility/run --model my-model --semantic --limit 3 --label pilot
@@ -44,11 +44,19 @@ existing `chat` settings override temperature/output/reasoning settings.
 `--timeout-ms` bounds each command/request, not the whole run. Native engine
 retries remain AKM behavior and native usage evidence records observed calls.
 
+`--resume DIR` carries on a stopped run in its folder (any case source): it keeps the cases that were scored and asks the rest again,
+including the ones that errored. The manifest has to be the one of the stored run (eval and scoring versions, AKM build and config,
+reader and judge, every eval setting, and the digest of every case); otherwise it is refused, and so is a folder that a live process is
+still writing. It does not go with `--repeat`.
+
 Other settings: `--context-tokens` defaults to 1024, `--search-limit` to 10,
 `--seed` to `1`, and cases run sequentially. `--repeat N` creates separate saved
 collections, not additional independent samples in one confidence interval.
 Six arm permutations rotate across case ordinals; the seed offsets that order.
 It is deterministic counterbalancing, not random assignment or model RNG control.
+
+`akm improve` is one sequential model call per note inside one command, so `--timeout-ms` bounds it per command only up to 30 s a note:
+the command may take `max(--timeout-ms, 30 s × notes)`. A case with 18 long notes (about 5 s each on the 35B) needs about 90 s.
 
 ### Cases and controls
 
@@ -86,6 +94,55 @@ historical `notes`, later `question`, and named output `fields`. A field's
 `outdated` and `wrong_scope` optionally identify specific wrong answer values.
 Gold values, evidence anchors and safety labels are never sent to inference or
 the reader. Field **names** define the response shape, not answer options.
+
+### LongMemEval cases (`--split`)
+
+The 24 cases are small and synthetic. `--split dev|heldout` builds cases from [LongMemEval](../../benchmarks/longmemeval/README.md)
+instead, to ask the same question at a scale where the history is much larger than any budget:
+
+```sh
+evals/memory-utility/run --model my-model --semantic --split dev --limit 40 --judge-model eval-judge-35b
+evals/memory-utility/run --model my-model --semantic --split dev --limit 40 --judge-model eval-judge-35b --resume evals/memory-utility/results/<date>-<label>
+```
+
+- **A case** is one question with its evidence sessions (`answer_session_ids`, one to six) and `--haystack K` distractor sessions drawn
+  from the same history (default 16, so about 18 sessions and 50k estimated tokens), every session whole and in history order, one memory
+  per session as the benchmark writes them. The dataset, the draw of questions (`--limit N`, in proportion to type, under
+  `--sample-seed`, default 42) and the memory text are the longmemeval benchmark's own. Each question's distractors are drawn under a seed
+  derived from the sample seed and its id, so they do not depend on which other questions are drawn.
+- **Split.** The 500 questions are split once into 100 dev and 400 held-out by a salted hash of the question id, stratified by type. The
+  split depends on the id and type only, so it is the same on the public data and on its rewrite. Dev is for pilots, debugging and
+  estimating discordance. **Held-out is never a default**: `--split heldout` is explicit and runs only on the rewrite
+  (`--corpus custom`, made by `./generate-assets --only longmemeval`), never on the public data. Read
+  [PREREGISTRATION.md](PREREGISTRATION.md), committed before any held-out run.
+- **Arms and budgets.** The same three arms. Inference runs once per case over its sessions; each arm is indexed and searched once; the
+  shown text of the hits is packed at every `--budgets` value (default `256,512,1024,2048,4096`, estimated tokens as characters/4;
+  1024 is the primary comparison and must be among them) and the reader answers once per distinct packed text. The 24 cases keep
+  `--context-tokens`. The citation protocol is dropped here: the answer is free-form.
+- **Scoring is judged.** The reader's answer, without its reasoning, is graded yes or no by the benchmark's own judge prompts for the
+  question's type (`--judge-model` is required, never taken from `.env`). The judge sees the answer and the key, never the arm. An answer
+  the judge cannot read as yes or no is a grading error: the arm is unfinished at that budget and scores wrong in the failure-inclusive
+  result, as an error does. Published LongMemEval numbers use `gpt-4o-2024-08-06`; any other judge is not comparable to them, and the
+  35B judging its own model's answers has not been checked against a stronger judge.
+- **Labels never leave the scorer.** The answer, the evidence ids and the `has_answer` turn flags are never sent to inference or the
+  reader; the judge alone is sent the answer.
+- **Results by budget.** `metrics.by_budget.<budget>` holds each budget's three arms (accuracy, mean packed tokens, mean reader prompt
+  tokens), both paired differences with the McNemar p-value and interval, the split by question type, abstention questions apart from the
+  rest, and the evidence diagnostic. The top-level `metrics.arms`, `persistent_memory` and `memory_inference` are the primary budget's,
+  so compare and the ledger read them as before. Reading rule: inferred beats the notes only if it is better at a matched budget, or
+  reaches the notes' accuracy at a smaller one.
+- **Where the evidence went** (labels only, never prompted). For each evidence session with a `has_answer` turn, at each budget and for
+  the source and inferred arms: `shown` (the whole turn is in the displayed text), `retrieval_missed` (no document of the session was a
+  hit), `packing_cut` (a hit was cut or left out by the budget) or `summary_dropped` (every hit of the session was shown in full and the
+  turn is not in the text). The last is an upper bound on loss, since a faithful paraphrase has no verbatim turn; for the source arm it
+  must be zero.
+- **Known bias, stated and not corrected.** The answer turn is the user's in 94% of sessions and usually the first, and the packer keeps
+  the prefix of the last document that fits, so a raw session shows its answer at small budgets for a reason real notes may not share.
+  The data is not reordered. `sessions_over_projection_limit` counts the sessions longer than akm's 16,384-character keyword cut.
+- **Not pooled.** LongMemEval cases are never pooled with the 24 cases, which stay exact-scored.
+
+A run is one source: the options `--haystack`, `--budgets`, `--sample-seed` and `--judge-model` need `--split`, and `--context-tokens`
+does not go with it.
 
 ## What is collected
 
@@ -145,11 +202,13 @@ limits; that is not secretly replaced with a shortened evaluator prompt.
   cases stay in failure-inclusive accuracy (errors/unrun = zero); evaluated-only
   accuracy and complete-pair deltas appear separately. Never interpret missing
   pairs as meaningful ties or a quality improvement.
-- **Uncertainty:** a deterministic conservative 95% Hoeffding interval for the
-  mean independent paired difference in [-1,1]. It is intentionally broad on a
-  small pilot, null with fewer than two cases or zero complete pairs. Repeats and
-  arms are not extra independent cases; multiple queries sharing one history
-  would require clustering and are outside this protocol.
+- **Uncertainty:** each paired difference carries an **exact McNemar test** (two-sided exact binomial test on the discordant pairs,
+  the cases where only one arm was right) and an **exact 95% interval**: the Clopper-Pearson interval of the share of discordant pairs
+  the later arm won, scaled by the discordant pairs' share of all pairs. The interval is conditional on that share. It is null with
+  fewer than two cases, zero complete pairs or no discordant pair, where the data say nothing about the size of a difference. Repeats
+  and arms are not extra independent cases; multiple queries sharing one history would require clustering and are outside this
+  protocol. The 24 cases and the LongMemEval cases use the same statistics (measurement 0.2 replaced the Hoeffding bound of 0.1; the
+  longmemeval benchmark keeps its own Wald interval).
 - **Cost:** inference/index/retrieval/reader phases separately, including total
   observed seconds for failed work. Reader provider token totals and reporting
   counts are distinct from characters/4 context estimates. `model_calls` counts every
