@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
+import { resultsLabel } from "./run.ts";
 
 const run = (...args: string[]) => {
   const p = Bun.spawnSync([process.execPath, join(import.meta.dir, "run.ts"), ...args], {
@@ -36,4 +37,15 @@ test("custom/all destination is announced with shared text before the failing AK
     expect(result.err).toContain("ENOENT");
     expect(result.out).not.toContain("Results:");
   }
+});
+
+test("--label is kept as given, as in every other eval, and checked before AKM or model setup", () => {
+  expect(resultsLabel("0.10.261022-full", "fast/qwen3.6-35b-a3b")).toBe("0.10.261022-full");
+  expect(resultsLabel("Run_A.1-b", "m")).toBe("Run_A.1-b");
+  expect(resultsLabel(undefined, "fast/Qwen3.6-35B")).toBe("fast-qwen3-6-35b");
+  const result = run("--label", "bad label");
+  expect(result.code).toBe(2);
+  expect(result.err).toContain("--label may use letters, digits, dot, dash and underscore");
+  expect(result.err).not.toContain("ENOENT");
+  expect(result.out).toBe("");
 });
