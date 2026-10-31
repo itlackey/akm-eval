@@ -33,6 +33,12 @@ const usage = `Usage: evals/memory-utility/run [options]
   --repeat N           Separate independent collections (default one).
   --help               Show this help; no model or AKM calls.
 `;
+/** The results label, as every eval takes it: --label as given (letters, digits, dot, dash, underscore), else the model name as a slug. */
+export function resultsLabel(given: string | undefined, model: string): string {
+  const label = given ?? slug(model);
+  if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  return label;
+}
 function positive(text: string | undefined, fallback: number, name: string): number {
   if (text === undefined) return fallback;
   const n = Number(text); if (!Number.isInteger(n) || n < 1) fail(`${name} must be a positive integer`); return n;
@@ -45,7 +51,7 @@ async function main() {
   if (v.help) { console.log(usage); return; }
   const corpora = resolveCorpora({ eval: MEASUREMENT.eval, values: v, publicFolder: join(REPO_ROOT, "evals/memory-utility/assets"), rewrite: false, fail })
     .map(corpus => ({ ...corpus, cases: loadCases(corpus.folder).slice(0, positive(v.limit, Number.MAX_SAFE_INTEGER, "--limit")) }));
-  useAkm(v, fail); const model = useModel(v, fail);
+  useAkm(v, fail); const model = useModel(v, fail); const baseLabel = resultsLabel(v.label, model.name);
   await announceCases(v, [{ role: "model", name: model.name, baseUrl: model.baseUrl }]);
   const o: Options = { endpoint: { baseUrl: model.baseUrl, apiKey: model.apiKey, model: model.name, chat: model.chat }, provider: model.provider,
     overrides: parseOverrides(v, "", fail), semantic: !!v.semantic, contextTokens: positive(v["context-tokens"], 1024, "--context-tokens"), searchLimit: positive(v["search-limit"], 10, "--search-limit"), timeoutMs: positive(v["timeout-ms"], 120000, "--timeout-ms"), seed: v.seed ?? "1" };
@@ -62,7 +68,7 @@ async function main() {
     console.log(`memory-utility (${corpus}) | ${cases.length} cases × 3 arms | ${model.name} | AKM ${version} | ${o.semantic ? "semantic" : "keyword"} | ${o.contextTokens} estimated context tokens | one sequential case at a time`);
     const selected = cases.map(c => c.id), digests = caseDigests(MEASUREMENT, cases);
     const evalSettings = { context_tokens_estimated: o.contextTokens, search_limit: o.searchLimit, search_mode: o.semantic ? "semantic" : "keyword", reader_settings_sha256: sha256Json(readerSettings(model.chat)), reader_endpoint_sha256: endpointDigest(model.baseUrl), embedding_settings_sha256: sha256Json(redactConfig(config.embedding ?? null)), embedding_endpoint_sha256: endpointDigest(config.embedding?.endpoint), embedding_model: config.embedding?.model ?? config.embedding?.localModel ?? null, prompt_sha256: sha256Json(PROMPT), corpus_input_sha256: sha256Json(Object.fromEntries(Object.entries(digests).map(([id, d]) => [id, d.input_sha256]))), corpus_labels_sha256: sha256Json(Object.fromEntries(Object.entries(digests).map(([id, d]) => [id, d.label_sha256]))), ordering: "six counterbalanced permutations; seed offsets case ordinal" };
-    await repeatRuns(v.repeat ? positive(v.repeat, 1, "--repeat") : undefined, slug(v.label ?? model.name), async label => {
+    await repeatRuns(v.repeat ? positive(v.repeat, 1, "--repeat") : undefined, baseLabel, async label => {
       const resultParent = corpus === "public" ? join(REPO_ROOT, "evals/memory-utility/results") : join(REPO_ROOT, "private/memory-utility/results");
       const dir = makeResultsDir(resultParent, label), start = performance.now();
       const raw = cases.map((c, i) => pending(c, i, o.seed));
