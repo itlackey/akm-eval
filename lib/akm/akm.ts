@@ -105,7 +105,9 @@ const allowed = (name: string): boolean => ALLOWED_ENV.some((re) => re.test(name
 /**
  * The environment akm runs in: its own folders under `dir`, the variables of the caller that ALLOWED_ENV lists (none of its AKM_
  * settings among them), and those in `keep`. The ones the config names are added by writeConfig. A semantic sandbox keeps the
- * embedder's model in MODEL_CACHE.
+ * embedder's model in MODEL_CACHE. git is not let climb out of `dir` (GIT_CEILING_DIRECTORIES): akm lists the files of a bundle that
+ * is inside a git repository with `git ls-files`, which leaves out what the repository ignores, so a sandbox in an ignored folder, such
+ * as a TMPDIR in a checkout's .cache/, would index no asset. git finds no repository there, and akm walks the bundle itself.
  */
 function sandboxEnv(dir: string, keep: string[], semantic: boolean): Record<string, string> {
   const env: Record<string, string> = {};
@@ -120,6 +122,7 @@ function sandboxEnv(dir: string, keep: string[], semantic: boolean): Record<stri
     XDG_CONFIG_HOME: join(dir, "xdg-config"),
     XDG_DATA_HOME: join(dir, "xdg-data"),
     XDG_STATE_HOME: join(dir, "xdg-state"),
+    GIT_CEILING_DIRECTORIES: dir,
     ...(semantic ? { HF_HOME: MODEL_CACHE } : {}),
   };
 }

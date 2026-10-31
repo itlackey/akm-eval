@@ -213,6 +213,7 @@ describe("createSandbox", () => {
       XDG_CONFIG_HOME: join(dir, "xdg-config"),
       XDG_DATA_HOME: join(dir, "xdg-data"),
       XDG_STATE_HOME: join(dir, "xdg-state"),
+      GIT_CEILING_DIRECTORIES: dir,
     });
     expect(plain.env).toEqual({ ...needed, ...own(plain.dir) });
     expect(keyed.env).toEqual({ ...needed, ...own(keyed.dir), MODEL_API_KEY: "SYNTH_MODEL" });
@@ -401,6 +402,27 @@ describe("sandboxIn", () => {
     const again = sandboxIn(dir, { semantic: true });
     expect(again.env).toEqual(sandbox.env);
     expect(JSON.parse(readFileSync(join(dir, "config", "config.json"), "utf8")).bundles).toEqual({ notes: { path: "/somewhere" } });
+  });
+
+  // akm lists the files of a bundle that is in a git repository with this command, in the bundle's folder, and walks the folder itself when it fails.
+  test.skipIf(!Bun.which("git"))("does not let git climb out of the sandbox, so a repository above it that ignores its folder hides no asset from akm (#148)", () => {
+    const repo = mkdtempSync(join(tmpdir(), "lib-akm-test-"));
+    dirs.push(repo);
+    expect(Bun.spawnSync(["git", "init", "-q"], { cwd: repo }).exitCode).toBe(0);
+    writeFileSync(join(repo, ".gitignore"), "/tmp/\n"); // as a TMPDIR in a checkout's ignored folder
+    const sandbox = sandboxIn(join(repo, "tmp", "sb"));
+    expect(sandbox.env.GIT_CEILING_DIRECTORIES).toBe(sandbox.dir);
+    mkdirSync(join(sandbox.dir, "bundle", "skills", "a"), { recursive: true });
+    writeFileSync(join(sandbox.dir, "bundle", "skills", "a", "SKILL.md"), "a");
+    // LC_ALL=C: git says why in English, whatever the caller's locale
+    const list = (env: Record<string, string>) => Bun.spawnSync(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "."], { cwd: join(sandbox.dir, "bundle"), env: { ...env, LC_ALL: "C" }, stdout: "pipe", stderr: "pipe" });
+    const { GIT_CEILING_DIRECTORIES: _ceiling, ...without } = sandbox.env;
+    const climbed = list(without);
+    expect(climbed.exitCode).toBe(0);
+    expect(climbed.stdout.toString()).toBe(""); // the repository ignores the sandbox: akm would index nothing
+    const kept = list(sandbox.env);
+    expect(kept.exitCode).not.toBe(0);
+    expect(kept.stderr.toString()).toContain("not a git repository"); // so akm walks the bundle itself
   });
 });
 
