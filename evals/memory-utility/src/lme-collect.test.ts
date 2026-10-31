@@ -95,6 +95,23 @@ describe("collecting a LongMemEval case", () => {
     expect(s).toMatchObject({ n_cases: 1, n_errored: 1, n_scored: 0 });
     expect(s.metrics.memory_inference.failure_inclusive).toMatchObject({ n: 1, incomplete_pairs: 1 });
   });
+
+  test("a verdict that is not yes or no errors the arm, which stays in the failure-inclusive pairs as wrong", async () => {
+    const judge = Bun.serve({ port: 0, fetch: () => Response.json({ model: "fake-judge", choices: [{ message: { content: "maybe" }, finish_reason: "stop" }], usage: { prompt_tokens: 9, completion_tokens: 1 } }) });
+    try {
+      const c = buildLmeCase(secret, 1, 1);
+      const o = { ...options([250, 4000]), judge: { baseUrl: `http://localhost:${judge.port}/v1`, apiKey: "", model: "fake-judge" }, judgeCache: new Map() };
+      const raw = await lmeCollect(c, lmePending(0, "1", [250, 4000]), o);
+      for (const arm of ["none", "source", "inferred"] as const) {
+        expect(raw.arms[arm].state).toBe("error");
+        for (const b of Object.values(raw.arms[arm].budgets)) { expect(b.state).toBe("error"); expect(b.error).toMatch(/^judge: undecidable verdict: maybe/); }
+      }
+      const s = summarizeLme([makeLmeRow(c, raw)]);
+      expect(s).toMatchObject({ n_errored: 1, n_scored: 0 });
+      expect(s.judge_undecidable).toBe(6);
+      expect(s.metrics.memory_inference.failure_inclusive).toMatchObject({ n: 1, incomplete_pairs: 1, only_with_akm: 0, only_without_akm: 0 });
+    } finally { judge.stop(true); }
+  });
 });
 
 describe("the improve timeout", () => {
