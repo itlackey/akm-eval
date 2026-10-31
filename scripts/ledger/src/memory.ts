@@ -30,11 +30,28 @@ for (const [key, name] of [["persistent_memory", "Notes − none"], ["memory_inf
     const path = `metrics.${key}.${basis}`, prefix = `${key}_${basis}`;
     add(`${prefix}_gain`, `${name} · ${label} (pp)`, `${path}.value`, "quality", "Recorded paired accuracy difference in percentage points. Positive means more correct answers. All-selected results count missing/error arms as zero; complete-pair results exclude them.", "pp", 2);
     for (const [index, bound] of [[0, "low"], [1, "high"]])
-      add(`${prefix}_ci_${bound}`, `${name} · ${label} CI ${bound} (pp)`, `${path}.ci95.${index}`, "quality", "Recorded conservative 95% paired-case Hoeffding bound. Small samples have wide intervals. No statistical winner is inferred.", "pp", 2);
+      add(`${prefix}_ci_${bound}`, `${name} · ${label} CI ${bound} (pp)`, `${path}.ci95.${index}`, "quality", "Recorded 95% paired interval: exact (Clopper-Pearson on the discordant pairs) for memory-utility 0.2 and later, a conservative paired-case Hoeffding bound before. Small samples have wide intervals.", "pp", 2);
+    add(`${prefix}_p_value`, `${name} · ${label} p-value`, `${path}.p_value`, "quality", "Recorded two-sided exact McNemar p-value over the discordant pairs of this comparison (memory-utility 0.2 and later). Not a multiplicity-adjusted result; the secondary budgets are not a search for a winner.", "", 4);
     for (const [field, title] of [["n", "denominator"], ["complete_pairs", "complete pairs"], ["incomplete_pairs", "incomplete pairs"], ["helps", "helps"], ["harms", "harms"], ["ties", "ties"]])
       add(`${prefix}_${field}`, `${name} · ${label} ${title}`, `${path}.${field}`, "quality", "Recorded paired coverage. Help/harm/ties count complete pairs only; incomplete pairs must not be interpreted as ties.");
   }
   add(`${key}_cited_gain`, `${name} · cited gain (pp)`, `metrics.cited_correct_deltas.${key}.value`, "diagnostics", "All-selected paired difference in cited-correct answers. Exact quotations are not semantic entailment.", "pp", 2);
+}
+// LongMemEval cases are read at several memory budgets. The unsuffixed columns above are the primary budget; these give every standard budget.
+export const MEMORY_BUDGETS = [256, 512, 1024, 2048, 4096];
+for (const budget of MEMORY_BUDGETS) {
+  const at = `metrics.by_budget.${budget}`;
+  for (const [arm, name] of [["none", "No memory"], ["source", "Original notes"], ["inferred", "Inferred memory"]]) {
+    add(`b${budget}_${arm}_accuracy`, `${name} @ ${budget} (%)`, `${at}.arms.${arm}.failure_inclusive_accuracy.rate`, "budgets", `Judged accuracy over every selected LongMemEval case, with the memory packed to ${budget} estimated tokens (characters/4). Errors count as wrong.`, "%", 2);
+    add(`b${budget}_${arm}_tokens`, `${name} @ ${budget} · mean packed tokens`, `${at}.arms.${arm}.mean_context_estimated_tokens`, "budgets", "Mean estimated tokens of the memory text actually shown to the reader (characters/4), over answered cases.", "tokens", 1);
+  }
+  for (const [key, name] of [["persistent_memory", "Notes − none"], ["memory_inference", "Inferred − notes"]]) {
+    const path = `${at}.${key}.failure_inclusive`;
+    add(`b${budget}_${key}_gain`, `${name} @ ${budget} (pp)`, `${path}.value`, "budgets", "Paired accuracy difference in percentage points over all selected cases.", "pp", 2);
+    add(`b${budget}_${key}_ci_low`, `${name} @ ${budget} CI low (pp)`, `${path}.ci95.0`, "budgets", "Exact 95% paired interval (Clopper-Pearson on the discordant pairs), lower bound.", "pp", 2);
+    add(`b${budget}_${key}_ci_high`, `${name} @ ${budget} CI high (pp)`, `${path}.ci95.1`, "budgets", "Exact 95% paired interval (Clopper-Pearson on the discordant pairs), upper bound.", "pp", 2);
+    add(`b${budget}_${key}_p_value`, `${name} @ ${budget} p-value`, `${path}.p_value`, "budgets", "Two-sided exact McNemar p-value. Only the primary budget is the pre-registered comparison; the others are secondary.", "", 4);
+  }
 }
 for (const key of ["selected", "run", "scored", "errored", "unfinished"])
   add(key, `Memory cases · ${key}`, `n_${key}`, "diagnostics", "Recorded case count. Scored means all three arms answered, not that they were correct.");
@@ -44,6 +61,8 @@ add("inference_mean_s", "Inference · mean time (s)", "metrics.inference.mean_se
 add("inference_index_mean_s", "Inference · mean index (s)", "metrics.inference.mean_index_seconds", "performance", "Recorded inference-index mean over started cases, including failed work.", "s", 2);
 add("context_budget", "Memory context budget (estimated tokens)", "manifest.eval_settings.context_tokens_estimated", "settings", "Fixed memory budget estimated as characters/4, not a tokenizer count.");
 add("search_limit", "Memory search depth", "manifest.eval_settings.search_limit", "settings", "Candidate hits before packing shown documents into the memory context.");
+add("haystack", "Memory distractor sessions (K)", "manifest.eval_settings.haystack", "settings", "LongMemEval cases only: distractor sessions drawn with the evidence sessions of each question.");
+add("sample_seed", "Memory sample seed", "manifest.eval_settings.sample_seed", "settings", "LongMemEval cases only: the seed of the draw of questions and distractors.");
 for (const [key, path, label] of [
   ["input_digest", "manifest.eval_settings.corpus_input_sha256", "Memory input digest"],
   ["labels_digest", "manifest.eval_settings.corpus_labels_sha256", "Memory labels digest"],
@@ -53,6 +72,10 @@ for (const [key, path, label] of [
   ["embedding_model", "manifest.eval_settings.embedding_model", "Memory embedding model"],
   ["collector_fingerprint", "collector_fingerprint", "Memory collector fingerprint"],
   ["akm_fingerprint", "manifest.akm.build_fingerprint", "Memory AKM build fingerprint"],
+  ["case_source", "manifest.eval_settings.case_source", "Memory case source"],
+  ["split", "manifest.eval_settings.split", "Memory split (dev or heldout)"],
+  ["budgets", "manifest.eval_settings.budgets", "Memory budgets"],
+  ["judge_model", "manifest.eval_settings.judge_model", "Memory judge"],
 ]) fields.push({ column: { key: `memory_${key}`, label: label!, kind: "text", group: "Memory · settings", description: "Recorded comparison identity. Hold corpus, labels, prompts, model and retrieval settings constant to isolate an AKM build change." }, path: path!, scale: 1 });
 
 // Arrays occur only in recorded confidence bounds. Missing/nonfinite numbers stay null.
