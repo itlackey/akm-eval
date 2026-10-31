@@ -37,8 +37,9 @@ RUN harbor_version="$(bun lib/harbor/pin.ts harbor)" \
     && uv run --no-project --python 3.12 --with pytest --with pyyaml python -c 'import pytest, yaml' \
     && chmod -R a+rwX /opt/uv-cache
 COPY docker/warm-model.ts ./docker/warm-model.ts
-# Local embeddings only: this makes no reader, judge or benchmark calls.
-RUN bun docker/warm-model.ts && mv .cache/models /opt/akm-models && rmdir .cache
+# Local embeddings only: this makes no reader, judge or benchmark calls. The image's akm runs ONNX Runtime from its npm
+# dependencies, so .cache/onnxruntime, which lib/akm makes for an akm that fetches it, is empty.
+RUN bun docker/warm-model.ts && mv .cache/models /opt/akm-models && rmdir .cache/onnxruntime .cache
 COPY . .
 ARG VCS_REF=unknown
 RUN printf '%s\n' "$VCS_REF" > .akm-eval-revision

@@ -45,7 +45,7 @@ site/                 source of the public GitHub Pages results ledger
 generate-assets       makes the custom corpus of every eval in private/
 reports/              published results and notes (see reports/README.md)
 releases/             release notes
-private/, .cache/     your custom corpora and results; akm's embedding model, the semantic indexes and the Harbor setup cache (both gitignored)
+private/, .cache/     your custom corpora and results; akm's embedding model and ONNX Runtime, the semantic indexes and the Harbor setup cache (both gitignored)
 ```
 
 ## Set up with Docker

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SEMANTIC_MODEL, type Sandbox, akmBuild, commandLine, semanticConfig } from "./akm.ts";
@@ -114,6 +114,7 @@ describe("cachedIndex", () => {
     expect(existsSync(join(s.folder, "data", "state.db"))).toBe(false);
     expect(existsSync(join(s.folder, "state", "events.jsonl"))).toBe(false);
     expect(existsSync(join(s.folder, "cache", "logs"))).toBe(false);
+    expect(lstatSync(join(s.folder, "cache", "onnxruntime")).isSymbolicLink()).toBe(true); // the cache went, and the link to the shared ONNX Runtime is back
   });
 
   test("builds a new index from nothing when a file changed, is gone or is new, because akm does not update an index to what a new one is", async () => {

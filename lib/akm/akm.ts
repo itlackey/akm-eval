@@ -29,7 +29,7 @@
 // config says.
 
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { tallyCalls } from "./usage.ts";
@@ -67,7 +67,7 @@ const plainConfig = () => ({ configVersion: "0.9.0", semanticSearchMode: "off", 
 /** The model of akm's built-in embedder, bge-small-en-v1.5, which runs in the akm process: no model service. It is akm 0.9.26's default. */
 export const SEMANTIC_MODEL = "Xenova/bge-small-en-v1.5";
 
-/** What the repository keeps between runs, in its gitignored .cache/: akm's embedding model, and the semantic indexes of index-cache.ts. */
+/** What the repository keeps between runs, in its gitignored .cache/: akm's embedding model and ONNX Runtime, and the semantic indexes of index-cache.ts. */
 const CACHE = join(import.meta.dir, "..", "..", ".cache");
 
 /**
@@ -75,6 +75,14 @@ const CACHE = join(import.meta.dir, "..", "..", ".cache");
  * index is built with embeddings, and reads it from here after that.
  */
 const MODEL_CACHE = join(CACHE, "models");
+
+/**
+ * Where every sandbox finds ONNX Runtime, which runs the embedding model. akm from 0.10.261015 loads it from its own cache folder,
+ * <AKM_CACHE_DIR>/onnxruntime/<version>-<platform>-<arch>/, and fetches it (86 MB, from the npm registry) when it is not there. A
+ * sandbox has a cache folder of its own, so its onnxruntime is a link to this folder (see linkOnnxRuntime), and akm fetches it once
+ * for all of them. akm writes each file by temp file and rename, so sandboxes that fetch it at the same time do not clash.
+ */
+const ONNXRUNTIME_CACHE = join(CACHE, "onnxruntime");
 
 /** The folder of the semantic indexes that are kept between runs. */
 export const INDEX_CACHE = join(CACHE, "akm-index");
@@ -237,13 +245,16 @@ export function useAkm(values: { akm?: string }, fail: (message: string) => neve
  * line such as `bun /path/to/akm/src/cli.ts` (see parseCommand), or `akm`. akm gets only the variables the top of this file lists, and
  * MODEL_API_KEY only if the config names it as $MODEL_API_KEY, as engineConfig does, or `keepModelKey` is set. The config starts plain, keyword search
  * only: replace it with writeConfig. With `semantic`, it starts as keyword search fused with the vectors of akm's built-in
- * embedder, whose model is kept in the repository's .cache/ and downloaded once. akm answers such a query with
+ * embedder, whose model and ONNX Runtime are kept in the repository's .cache/ and downloaded once. akm answers such a query with
  * searchMode "semantic", and an eval that scores it has to check that.
  */
 export function sandboxIn(dir: string, opts: { keepModelKey?: boolean; semantic?: boolean } = {}): Sandbox {
   for (const folder of FOLDERS) mkdirSync(join(dir, folder), { recursive: true });
   const semantic = opts.semantic ?? false;
-  if (semantic) mkdirSync(MODEL_CACHE, { recursive: true });
+  if (semantic) {
+    mkdirSync(MODEL_CACHE, { recursive: true });
+    linkOnnxRuntime(dir); // writeConfig does too, but not for a folder with a config: a kept index, whose cache index-cache.ts removed
+  }
   const keep = opts.keepModelKey ? ["MODEL_API_KEY"] : [];
   const sandbox: Sandbox = { dir, cmd: akmCommand(), env: sandboxEnv(dir, keep, semantic), keep };
   const path = join(dir, "config", "config.json");
@@ -270,6 +281,20 @@ export function createSandbox(name: string, opts: { keepModelKey?: boolean; sema
 export function removeSandbox(sandbox: Sandbox): void {
   tallyCalls(sandbox.env.AKM_DATA_DIR); // its model calls, for the run's summary (see usage.ts)
   rmSync(sandbox.dir, { recursive: true, force: true });
+}
+
+/**
+ * Makes the sandbox's cache/onnxruntime a link to ONNXRUNTIME_CACHE, so akm finds ONNX Runtime there, or fetches it there once, as
+ * HF_HOME has it find the model in MODEL_CACHE. A link or a folder already in its place stays. Removing the sandbox, or its cache
+ * folder, removes the link and not the folder it points to.
+ */
+function linkOnnxRuntime(dir: string): void {
+  mkdirSync(ONNXRUNTIME_CACHE, { recursive: true });
+  try {
+    symlinkSync(ONNXRUNTIME_CACHE, join(dir, "cache", "onnxruntime"));
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+  }
 }
 
 /** The variables a config names as $NAME or ${NAME} in any string of it, at any depth, each once. */
@@ -309,6 +334,7 @@ export function writeConfig(sandbox: Sandbox, config: unknown): void {
   if ((config as { embedding?: { localModel?: unknown } })?.embedding?.localModel === SEMANTIC_MODEL) {
     mkdirSync(MODEL_CACHE, { recursive: true });
     sandbox.env.HF_HOME = MODEL_CACHE;
+    linkOnnxRuntime(sandbox.dir);
   }
 }
 
