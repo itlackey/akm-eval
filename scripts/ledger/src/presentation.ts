@@ -24,6 +24,7 @@ const tests: Record<string, [string, string]> = {
   retrieval: ["Library search", "How well does AKM rank relevant assets for queries with human relevance judgments?"],
   skillret: ["Skill search", "How well does keyword or semantic search rank relevant skills across the SkillRet benchmark?"],
   longmemeval: ["Long-term memory", "Can AKM retrieve evidence from long conversation histories and help answer questions about them?"],
+  "memory-utility": ["Memory usefulness", "Do original notes help later answers, and does native memory inference add value beyond those notes?"],
   "agent-ab": ["Agent tasks", "Does giving a coding agent access to AKM help it finish benchmark tasks?"],
   "terminal-bench": ["Terminal tasks", "Does giving a terminal agent access to AKM help it finish Terminal-Bench tasks?"],
 };
@@ -129,6 +130,10 @@ export function scores(summary: Record<string, unknown>): Score[] {
       }
       break;
     }
+    case "memory-utility":
+      for (const [arm, label] of [["inferred", "Native inference"], ["source", "Original notes"], ["none", "No episodic memory"]])
+        ratio(label, `arms.${arm}.failure_inclusive_accuracy.rate`, `arms.${arm}.failure_inclusive_accuracy.correct`, `arms.${arm}.failure_inclusive_accuracy.n`, "Exact structured-answer accuracy over every selected case, including operational failures and unrun cases as zero.");
+      break;
     case "longmemeval":
       if (summary.retrieval_only || summary.mode === "retrieval-only") {
         metric("Evidence found in top 5", "retrieval.hit_rate", "Evidence questions with at least one relevant conversation retrieved in the first 5 results.");

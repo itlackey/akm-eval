@@ -49,3 +49,14 @@ test("latest results retain distinct versions, tests, models and collections wit
   ]).map(row=>row.id).sort()`);
   expect(Array.from(result)).toEqual(['beta', 'books', 'model', 'new', 'test']);
 });
+
+test("memory latest-only retains distinct inputs, budgets and AKM builds within one version", () => {
+  const result = run(`latestRuns([
+    {id:'old',suite:'memory-utility',date:'2026-10-01',memory_input_digest:'a',memory_context_budget:1024},
+    {id:'new',suite:'memory-utility',date:'2026-10-02',memory_input_digest:'a',memory_context_budget:1024},
+    {id:'budget',suite:'memory-utility',date:'2026-10-01',memory_input_digest:'a',memory_context_budget:2048},
+    {id:'inputs',suite:'memory-utility',date:'2026-10-01',memory_input_digest:'b',memory_context_budget:1024},
+    {id:'build',suite:'memory-utility',date:'2026-10-01',memory_input_digest:'a',memory_context_budget:1024,memory_akm_fingerprint:'other'}
+  ]).map(row=>row.id).sort()`);
+  expect(Array.from(result)).toEqual(['budget', 'build', 'inputs', 'new']);
+});

@@ -5,8 +5,9 @@ import { canonical, redactConfig } from "../../../lib/provenance.ts";
 import { evalSettingsOf } from "../../../lib/manifest.ts";
 import { comparisonFields, coreColumns, scoreColumns, type Cell } from "../../ledger/src/comparison.ts";
 import { scores } from "../../ledger/src/presentation.ts";
+import { memoryColumns } from "../../ledger/src/memory.ts";
 
-export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret"];
+export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret", "memory-utility"];
 type Row = Record<string, any>;
 export interface Run { dir: string; summary: Row; rows: Row[]; samplesMissing?: boolean; running?: boolean }
 export class CompareError extends Error {}
@@ -81,7 +82,8 @@ export function comparePair(a: Run, b: Run): PairReport {
       warnings.push(`${run.dir}: status ${run.summary.status}${run.summary.aborted_reason ? `: ${run.summary.aborted_reason}` : ""}.`);
   }
   const av = values(a, am), bv = values(b, bm);
-  const columns = [...coreColumns, ...scoreColumns([a, b].map(r => ({ scores: scores(r.summary) })))];
+  const columns = [...coreColumns, ...scoreColumns([a, b].map(r => ({ scores: scores(r.summary) }))),
+    ...([a, b].some(r => r.summary.eval === "memory-utility") ? memoryColumns() : [])]; // the ledger's labels for the memory_* fields
   const columnMap = new Map(columns.map(c => [c.key, c]));
   const rows: ComparisonRow[] = [];
   for (const key of new Set([...columns.map(c => c.key), ...Object.keys(av), ...Object.keys(bv)])) {
