@@ -1,9 +1,10 @@
 import type { ChatResult, CallUsage } from "../../../benchmarks/longmemeval/src/llm.ts";
-import { pairedDifference, rate } from "../../../benchmarks/longmemeval/src/metrics.ts";
+import { rate } from "../../../benchmarks/longmemeval/src/metrics.ts";
 import type { ModelCalls } from "../../../lib/akm/usage.ts";
 import type { CallRow } from "../../nightly/src/collect.ts";
 import type { Case } from "./inputs.ts";
 import { ARMS, type ArmName, type Packed } from "./protocol.ts";
+import { pairSummary } from "./stats.ts";
 
 export interface RawArm {
   common: string;
@@ -144,17 +145,8 @@ export function runModelCalls(rows: Row[]): { model_calls: ModelCalls | null; ca
 }
 export function summarize(rows: Row[]) {
   function pair(before: ArmName, after: ArmName, evaluatedOnly: boolean, supported = false) {
-    const subset = evaluatedOnly ? rows.filter(r => r.arms[before].evaluated && r.arms[after].evaluated) : rows;
-    const complete = subset.filter(r => r.arms[before].evaluated && r.arms[after].evaluated);
     const correct = (r: Row, arm: ArmName) => supported ? r.arms[arm].cited_correct : r.arms[arm].correct;
-    const difference = pairedDifference(subset.map(r => ({ without: correct(r, before), with: correct(r, after) })));
-    const half = Math.sqrt(2 * Math.log(2 / 0.05) / subset.length);
-    const ci95 = subset.length < 2 || !complete.length || difference.value === null ? null : [Math.max(-1, difference.value - half), Math.min(1, difference.value + half)];
-    return { ...difference, ci95, interval_method: "paired-case Hoeffding bound, range [-1,1], conservative 95%",
-      complete_pairs: complete.length, incomplete_pairs: subset.length - complete.length,
-      helps: complete.filter(r => !correct(r, before) && correct(r, after)).length,
-      harms: complete.filter(r => correct(r, before) && !correct(r, after)).length,
-      ties: complete.filter(r => correct(r, before) === correct(r, after)).length };
+    return pairSummary(rows.map(r => ({ before: correct(r, before), after: correct(r, after), evaluated: r.arms[before].evaluated && r.arms[after].evaluated })), evaluatedOnly);
   }
   const arms = Object.fromEntries(ARMS.map(a => {
     const evaluated = rows.filter(r => r.arms[a].evaluated);
@@ -186,5 +178,5 @@ export function summarize(rows: Row[]) {
       memory_inference: { failure_inclusive: pair("source", "inferred", false), complete_pairs: pair("source", "inferred", true) },
       cited_correct_deltas: { persistent_memory: pair("none", "source", false, true), memory_inference: pair("source", "inferred", false, true) },
       inference: { output: rows.filter(r => r.raw.inference.outcome === "output").length, no_change: rows.filter(r => r.raw.inference.outcome === "no-change").length, errors: rows.filter(r => r.raw.inference.outcome === "error").length, not_run: rows.filter(r => r.raw.inference.outcome === "not-run").length, mean_seconds: avg(rows.filter(r => r.raw.inference.outcome !== "not-run").map(r => r.raw.inference.seconds)), mean_index_seconds: avg(rows.filter(r => r.raw.inference.outcome !== "not-run").map(r => r.raw.inference.index_seconds)) } },
-    notes: ["Accuracy is exact structured-answer correctness on synthetic cases, not a general semantic quality score.", "Evidence and safety flags are finite literal/label checks, not semantic entailment or authorization guarantees.", "95% conservative Hoeffding intervals use independent cases; small samples are diagnostic. Failure-inclusive errors score zero; incomplete pairs are not help/harm/ties. No interval for fewer than two cases or zero complete pairs.", "Context estimates are characters/4, not measured model tokens. duplicate_refs means exact-content duplicates only. Raw provider usage, failures and all phase timings remain in samples.jsonl. Dollar costs are unknown unless the provider reports them."] };
+    notes: ["Accuracy is exact structured-answer correctness on synthetic cases, not a general semantic quality score.", "Evidence and safety flags are finite literal/label checks, not semantic entailment or authorization guarantees.", "Paired differences carry an exact McNemar p-value and an exact 95% interval (Clopper-Pearson on the discordant pairs, conditional on their share of the pairs) over independent cases; small samples are diagnostic. Failure-inclusive errors score zero; incomplete pairs are not help/harm/ties. No interval for fewer than two cases, zero complete pairs or no discordant pair.", "Context estimates are characters/4, not measured model tokens. duplicate_refs means exact-content duplicates only. Raw provider usage, failures and all phase timings remain in samples.jsonl. Dollar costs are unknown unless the provider reports them."] };
 }
