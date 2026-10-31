@@ -17,6 +17,12 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- No eval changed version. Every akm sandbox sets `GIT_CEILING_DIRECTORIES` to its own folder, so a sandbox inside a git
+  work tree (a TMPDIR in a checkout) no longer hides its bundle from akm's file walk (#148). Every published run had its
+  sandboxes outside one: their index counts are the same on every akm version. Semantic sandboxes share akm's ONNX Runtime
+  through a link to `.cache/onnxruntime` (#147), so on akm 0.10.261015 or later an index no longer fetches it (about 86 MB)
+  once per sandbox; the 0.10.261018-beta round seeded it the same way by hand. Saved runs compare as before.
+
 - bakeoff collection and scoring 0.4 (was 0.3). Four new memory-inference inputs bring the corpus to 55 cases (23 memory
   inference): nested and flat scope, an observation date only in metadata, and an undated observation with a file `updated` date.
   They use AKM's existing source-context/scope contract (akm#1209 / PR #1222); no prompt is duplicated in the evaluator.
