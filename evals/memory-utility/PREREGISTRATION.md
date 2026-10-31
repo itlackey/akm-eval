@@ -17,7 +17,7 @@ version of this file, committed before the run it applies to.
   "haystack": 16,
   "budgets": [4096, 8192],
   "primary_budget": 4096,
-  "judge": "eval-judge-35b",
+  "judge": { "model": "fast/qwen3.6-35b-a3b", "chat": { "max_tokens": 64 }, "temperature": 0, "recorded_as": "judge_model and eval_settings.judge_settings_sha256 in the summary" },
   "reader_and_inference": "the model under test, temperature 0, as --model names it",
   "primary_endpoint": "inferred minus source accuracy at the primary budget, over all selected cases, tested with the exact McNemar test (two-sided, alpha 0.05)",
   "heldout_runs": "on the rewrite (--corpus custom), 200 questions drawn with --limit 200 under the sample seed; the next decision draws 200 from the questions not yet drawn"
@@ -70,5 +70,6 @@ paired interval. `source - none` at 4096 is a secondary, and so is 8192.
 ## Pending at the time of writing
 
 - No held-out run has been made.
-- The judge is the 35B judging its own model's answers, blind to the arm. A one-time agreement check of 50 dev answers against a
+- The judge is the lab 35B judging its own model's answers, blind to the arm (the owner's local `models.json` line `eval-judge-35b`,
+  which a summary records by its model name, not by that line's name). A one-time agreement check of 50 dev answers against a
   stronger judge has not been done.

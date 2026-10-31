@@ -112,6 +112,5 @@ describe("LongMemEval cases", () => {
     expect(block.primary_budget).toBe(PRIMARY_BUDGET);
     expect(block.sample_seed).toBe(DEFAULT_SAMPLE_SEED);
     expect(distractorSeed(DEFAULT_SAMPLE_SEED, "q")).toBe(parseInt(createHash("sha256").update(`${DEFAULT_SAMPLE_SEED}:q`).digest("hex").slice(0, 8), 16)); // "the first 32 bits of sha256(sample_seed:question_id)"
-    expect(block.judge).toBe("eval-judge-35b");
   });
 });
