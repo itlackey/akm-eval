@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Question } from "../../../benchmarks/longmemeval/src/dataset.ts";
 import { caseDigests } from "../../../lib/manifest.ts";
-import { DEFAULT_BUDGETS, SPLIT_SALT, buildLmeCase, distractorSeed, lmeCases, lmePrompt, splitQuestions } from "./lme.ts";
+import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, DEV_QUESTIONS, PRIMARY_BUDGET, SPLIT_SALT, buildLmeCase, distractorSeed, lmeCases, lmePrompt, splitQuestions } from "./lme.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { pack, sourceFiles } from "./protocol.ts";
 
@@ -104,12 +104,14 @@ describe("LongMemEval cases", () => {
   test("the pre-registration holds the constants the code uses", () => {
     const text = readFileSync(join(import.meta.dir, "../PREREGISTRATION.md"), "utf8");
     const block = JSON.parse(/```json\n([\s\S]*?)```/.exec(text)![1]!);
+    // Each value is held to the constant the code runs with, not to a copy of it here.
     expect(block.split_salt).toBe(SPLIT_SALT);
-    expect(block.split_sizes).toEqual({ dev: 100, heldout: 400 });
-    expect(block.haystack).toBe(16);
+    expect(block.split_sizes).toEqual({ dev: DEV_QUESTIONS, heldout: ids.length - DEV_QUESTIONS });
+    expect(block.haystack).toBe(DEFAULT_HAYSTACK);
     expect(block.budgets).toEqual(DEFAULT_BUDGETS);
-    expect(block.primary_budget).toBe(4096);
-    expect(block.sample_seed).toBe(42);
+    expect(block.primary_budget).toBe(PRIMARY_BUDGET);
+    expect(block.sample_seed).toBe(DEFAULT_SAMPLE_SEED);
+    expect(distractorSeed(DEFAULT_SAMPLE_SEED, "q")).toBe(parseInt(createHash("sha256").update(`${DEFAULT_SAMPLE_SEED}:q`).digest("hex").slice(0, 8), 16)); // "the first 32 bits of sha256(sample_seed:question_id)"
     expect(block.judge).toBe("eval-judge-35b");
   });
 });
