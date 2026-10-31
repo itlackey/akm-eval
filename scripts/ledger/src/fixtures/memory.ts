@@ -13,6 +13,10 @@ function arm(correct: number, reported: number, seconds: number) {
       completion_tokens: { total_reported: 42, reporting_count: 2, attempted_calls: 4 },
       cost_usd: { total_reported: null, reporting_count: 0, attempted_calls: 4 } } };
 }
+/** One LongMemEval budget: the three arms' accuracy and packed tokens, and both paired differences with an exact p-value. */
+const budgetResult = (accuracy: [number, number, number], tokens: number, gain: number, p: number) => ({
+  arms: Object.fromEntries(["none", "source", "inferred"].map((arm, i) => [arm, { failure_inclusive_accuracy: { n: 4, correct: accuracy[i]!, rate: accuracy[i]! / 4 }, mean_context_estimated_tokens: arm === "none" ? 0 : tokens }])),
+  persistent_memory: { failure_inclusive: { value: .25, ci95: [-.5, .75], p_value: 0.5 } }, memory_inference: { failure_inclusive: { value: gain, ci95: [gain - .5, gain + .5], p_value: p } } });
 export function memorySummary() {
   return { eval: "memory-utility", corpus: "public", status: "complete", label: "synthetic-ui-fixture-not-a-measurement", model: "fixture/model", akm_version: "fixture-v1", date: "2026-10-31T00:00:00Z", limit: 4,
     n_selected: 4, n_run: 4, n_scored: 3, n_errored: 1, n_unfinished: 0, wall_seconds: 90,
@@ -22,6 +26,7 @@ export function memorySummary() {
       persistent_memory: { failure_inclusive: pair(.25), complete_pairs: pair(.3333, true) },
       memory_inference: { failure_inclusive: pair(.25), complete_pairs: pair(.3333, true) },
       cited_correct_deltas: { persistent_memory: pair(.25), memory_inference: pair(.25) },
+      by_budget: { "256": budgetResult([1, 2, 1], 250, -.25, 0.5), "1024": budgetResult([1, 2, 3], 900, .25, 0.25) },
       inference: { output: 2, no_change: 1, errors: 1, not_run: 0, mean_seconds: 7, mean_index_seconds: 2 } } };
 }
 export function memoryDataset() {

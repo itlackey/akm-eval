@@ -51,6 +51,23 @@ test('memory quality exposes three controls, two contrasts, uncertainty and cove
   expect((await exported(page)).length).toBe(existing.runs.length + 2);
   expect(errors).toEqual([]);
 });
+test('memory budgets show each standard budget with its accuracy, packed tokens and exact p-value, and leave an unrecorded budget empty', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await open(page);
+  await page.locator('#view').selectOption('memory-budgets');
+  for (const [arm, value] of [['none', 25], ['source', 50], ['inferred', 75]])
+    await expect(cells(page, `memory_b1024_${arm}_accuracy`).first()).toContainText(`${value}.00`);
+  await expect(cells(page, 'memory_b256_inferred_accuracy').first()).toContainText('25.00');
+  await expect(cells(page, 'memory_b1024_source_tokens').first()).toHaveText('900.0');
+  await expect(cells(page, 'memory_b1024_memory_inference_p_value').first()).toHaveText('0.2500');
+  await expect(cells(page, 'memory_b1024_memory_inference_gain').first()).toHaveText('25.00');
+  await expect(cells(page, 'memory_b2048_inferred_accuracy').first()).toHaveText('—');
+  await expect(page.locator('#view-context')).toContainText('primary comparison is Inferred − notes at 1024');
+  const rows = await exported(page);
+  expect(rows[0].memory_b1024_memory_inference_p_value).toBe(0.25);
+  expect(rows[0].memory_b2048_inferred_accuracy).toBeNull();
+  expect(errors).toEqual([]);
+});
 test('memory usage and diagnostics preserve unknown/zero, partial reporting, filters, exports and URL restoration', async ({ page }, info) => {
   await open(page);
   await page.locator('#view').selectOption('memory-performance');

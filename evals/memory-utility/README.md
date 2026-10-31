@@ -121,8 +121,8 @@ evals/memory-utility/run --model my-model --semantic --split dev --limit 40 --ju
   `--context-tokens`. The citation protocol is dropped here: the answer is free-form.
 - **Scoring is judged.** The reader's answer, without its reasoning, is graded yes or no by the benchmark's own judge prompts for the
   question's type (`--judge-model` is required, never taken from `.env`). The judge sees the answer and the key, never the arm. An answer
-  the judge cannot read as yes or no is a grading error: the arm is unfinished at that budget and scores wrong in the failure-inclusive
-  result, as an error does. Published LongMemEval numbers use `gpt-4o-2024-08-06`; any other judge is not comparable to them, and the
+  the judge cannot read as yes or no is a grading error: that arm is errored (`n_errored`) and counts as wrong in the failure-inclusive
+  result, and is left out of the complete pairs. An empty answer is a wrong answer, not an error. Published LongMemEval numbers use `gpt-4o-2024-08-06`; any other judge is not comparable to them, and the
   35B judging its own model's answers has not been checked against a stronger judge.
 - **Labels never leave the scorer.** The answer, the evidence ids and the `has_answer` turn flags are never sent to inference or the
   reader; the judge alone is sent the answer.
