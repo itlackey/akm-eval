@@ -137,6 +137,14 @@ describe("saved LongMemEval rows", () => {
     const broken = JSON.parse(JSON.stringify(row)); broken.raw.arms.source.budgets["2048"].context = null;
     expect(lmeRawOf(broken)).toEqual({ missing: ["raw.arms.source.budgets.2048 (invalid)"] });
   });
+  test("keep the record that a case was asked again after an error, through scoring again", () => {
+    const raw = scripted({ none: [false, false], source: [true, true], inferred: [true, false] });
+    raw.retried = true;
+    const row = makeLmeRow(c, raw), reread = lmeRawOf(JSON.parse(JSON.stringify(row)));
+    expect(row.raw.retried).toBe(true);
+    expect("raw" in reread && MEASUREMENT.score(c, reread.raw)).toEqual(row);
+    expect(makeLmeRow(c, scripted({ none: [false, false], source: [true, true], inferred: [true, false] })).raw).not.toHaveProperty("retried");
+  });
   test("their cases are rebuilt from the settings the summary records, for scoring again", () => {
     const root = mkdtempSync(join(tmpdir(), "memlme-root-"));
     try {

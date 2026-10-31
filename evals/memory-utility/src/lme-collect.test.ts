@@ -171,8 +171,10 @@ describe("resuming", () => {
     };
     const same = manifest({ budgets: "250", haystack: 1 });
     write(same);
-    const kept = resumableRaws(dir, same, fail);
+    const { kept, retried } = resumableRaws(dir, same, fail);
     expect([...kept.keys()]).toEqual([c.id]); // the pending case is asked again
+    expect(done.arms.none.budgets["250"]!.verdict).toBe("no"); // the scored case has a wrong answer, and it is kept, not asked again
+    expect([...retried]).toEqual([]); // an unfinished case is carried on, not retried
     expect(kept.get(c.id)!.arms.source.budgets["250"].verdict).toBe(done.arms.source.budgets["250"]!.verdict);
     expect(() => resumableRaws(dir, manifest({ budgets: "250,1024", haystack: 1 }), fail)).toThrow(/different eval settings/);
     expect(() => resumableRaws(dir, buildManifest({ measurement: { ...MEASUREMENT, version: "9.9" }, corpus: "public", cases: caseDigests(MEASUREMENT, [c, c2]), eval_settings: { budgets: "250", haystack: 1 }, completion: { selected: [c.id, c2.id], scored: [], errored: [] } }), fail)).toThrow(/different version/);
@@ -182,6 +184,8 @@ describe("resuming", () => {
     // an errored case is asked again too
     done.arms.source.state = "error";
     write(same);
-    expect(resumableRaws(dir, same, fail).size).toBe(0);
+    const again = resumableRaws(dir, same, fail);
+    expect(again.kept.size).toBe(0);
+    expect([...again.retried]).toEqual([c.id]); // only the errored case is marked as retried
   });
 });

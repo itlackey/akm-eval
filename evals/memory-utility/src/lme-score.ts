@@ -51,6 +51,8 @@ export interface LmeRaw {
   rewritten_parents: string[];
   inference: Raw["inference"];
   arms: Record<ArmName, LmeArm>;
+  /** Set when the case had errored in a stopped run and `--resume` asked it again. Absent otherwise. */
+  retried?: true;
 }
 
 export const blankBudget = (context: Packed): LmeBudgetRaw => ({ state: "not-run", error: null, context, reused_from: null, prompt_sha256: null, answer: null, failed_usage: null,

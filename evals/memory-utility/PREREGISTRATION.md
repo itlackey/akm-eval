@@ -74,6 +74,9 @@ after the adjustment (`metrics.primary_comparisons`). `source - none` at 4096 is
   runs are free.
 - The first decision uses half A and the next uses half B. Once an akm change is shaped by looking at the failures of a half, that half is
   spent; a later decision uses the other half, and when both are spent there is no held-out data left for this dataset and split.
+- `--resume` re-asks errored cases and never wrong answers. A case in which any arm errored (a reader, judge, retrieval or inference
+  failure) is asked again with all its arms, so the pairs hold, each time the run is resumed; a case that was answered, right or wrong,
+  is kept as it was. Each sample of a case asked again carries `raw.retried: true`, so a retry is visible in the results.
 - The data is public, so the discipline is procedural: this file, the committed split, and every held-out run recorded in the ledger.
 
 ## Pending at the time of writing

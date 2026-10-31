@@ -49,6 +49,11 @@ including the ones that errored. The manifest has to be the one of the stored ru
 reader and judge, every eval setting, and the digest of every case); otherwise it is refused, and so is a folder that a live process is
 still writing. It does not go with `--repeat`.
 
+What a resume asks again is stated, and fixed: a case that **errored** (any arm: a reader, judge, retrieval or inference failure) is asked
+again with all its arms, so pairing holds, and as often as the run is resumed; a **wrong answer** is never asked again. Each sample of a
+case that was asked again after an error says so: `raw.retried` is `true` (absent on every other sample). The rule is in
+[PREREGISTRATION.md](PREREGISTRATION.md).
+
 Other settings: `--context-tokens` defaults to 1024, `--search-limit` to 10,
 `--seed` to `1`, and cases run sequentially. `--repeat N` creates separate saved
 collections, not additional independent samples in one confidence interval.

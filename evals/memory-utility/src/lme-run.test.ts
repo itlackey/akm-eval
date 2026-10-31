@@ -43,6 +43,7 @@ describe("memory-utility --split", () => {
     expect(s.manifest.engines.judge).toMatchObject({ model: "fake-judge", endpoint: "<MODEL_BASE_URL>" });
     expect(JSON.stringify(s)).not.toContain("localhost"); // the model's address is not saved
     expect(rowsOf(dir)).toHaveLength(3);
+    expect(rowsOf(dir).some(r => "retried" in r.raw)).toBe(false); // nothing was asked again yet
     expect(improves()).toBe(3);
 
     model.failing = false;
@@ -53,11 +54,13 @@ describe("memory-utility --split", () => {
     expect(s).toMatchObject({ n_scored: 3, n_errored: 0, resumed: true, status: "complete" });
     expect(improves()).toBe(6); // the three errored cases were asked again
     expect(rowsOf(dir)).toHaveLength(3);
+    expect(rowsOf(dir).map(r => r.raw.retried)).toEqual([true, true, true]); // each sample says so
 
     const third = await run(...base, "--resume", dir);
     expect(third.code).toBe(0);
     expect(third.out).toContain("resuming: 3 of 3 cases already scored");
-    expect(improves()).toBe(6); // nothing was asked again
+    expect(improves()).toBe(6); // nothing was asked again: a wrong answer is not an error, and the none arm is wrong on some cases
+    expect(rowsOf(dir).map(r => r.raw.retried)).toEqual([true, true, true]); // the record is kept
     expect(summaryOf(dir).metrics).toEqual(s.metrics);
 
     // The answers are judged: the source arm sees the evidence and the none arm does not.

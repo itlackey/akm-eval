@@ -23,6 +23,8 @@ export interface Raw {
   post_inference: Record<string, string> | null;
   inference: { outcome: "output" | "no-change" | "error" | "not-run"; report: unknown; error: string | null; index_seconds: number; seconds: number; model_calls: unknown };
   arms: Record<ArmName, RawArm>;
+  /** Set when the case had errored in a stopped run and `--resume` asked it again. Absent otherwise. */
+  retried?: true;
 }
 const normal = (s: string): string => s.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
 type Parsed = { answers: Record<string, string | null>; citations: Record<string, { ref: string; quote: string }[]> };

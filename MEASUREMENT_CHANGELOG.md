@@ -71,6 +71,8 @@ Add a release entry here when a version changes.
     when the budgets, `--haystack`, `--sample-seed` or the judge (model, temperature, `chat.max_tokens`) differ from the pre-registered
     values (the constants `src/lme.test.ts` holds `PREREGISTRATION.md` to). No score changes; a held-out run can no longer be made with
     other settings by mistake. Dev runs are free.
+  - **Resume retries are stated and recorded.** `--resume` re-asks a case that errored, with all its arms, and never a wrong answer. Each
+    sample of a case asked again carries `raw.retried: true` (absent otherwise). No score depends on it.
   - Ledger and compare gain the p-value, and a column per standard budget (`memory_b<budget>_*`) with a `Memory · by budget` view.
   - The pre-registration for held-out runs is `evals/memory-utility/PREREGISTRATION.md`. No held-out run has been made.
 

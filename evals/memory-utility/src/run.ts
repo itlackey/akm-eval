@@ -84,8 +84,12 @@ type AnyCase = Case | LmeCase;
 type Plan = { cases: AnyCase[]; pending: (c: AnyCase, i: number) => any; collect: (c: AnyCase, raw: any, checkpoint: () => void) => Promise<unknown>; row: (c: AnyCase, raw: any) => any;
   header: string; evalSettings: Record<string, string | number | boolean | null>; summaryExtra: Record<string, unknown>; progress: (row: any) => string };
 
-/** The raw output of every case of a stopped run that was scored (no error, nothing pending), by id, when its manifest is the one of this run. Otherwise a refusal. */
-export function resumableRaws(dir: string, now: RunManifest, failWith: (message: string) => never = fail): Map<string, any> {
+/**
+ * What `--resume` takes from a stopped run, when its manifest is the one of this run (otherwise a refusal): the raw output of every case that
+ * was scored (no error, nothing pending), by id, which is kept as it is, wrong answers included; and the ids of the cases that had errored,
+ * which are asked again with all their arms. A case that was only unfinished is carried on, not retried.
+ */
+export function resumableRaws(dir: string, now: RunManifest, failWith: (message: string) => never = fail): { kept: Map<string, any>; retried: Set<string> } {
   let pid = Number.NaN;
   try { pid = Number.parseInt(readFileSync(join(dir, RUNNING), "utf8"), 10); } catch { /* no marker: no run writes here */ }
   if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && isRunning(pid)) failWith(`${dir} is being written by a run that is still going (pid ${pid}). Stop it first, or remove ${join(dir, RUNNING)} if no run has that pid.`);
@@ -98,14 +102,15 @@ export function resumableRaws(dir: string, now: RunManifest, failWith: (message:
   const [different] = manifestDifferences(reading.manifest, now);
   if (different !== undefined) failWith(`${dir} was run with ${different}. Run again with the same settings, or without --resume.`);
   const lines = readFileSync(join(dir, "samples.jsonl"), "utf8").split("\n").filter(l => l.trim() !== "");
-  const raws = new Map<string, any>();
+  const raws = new Map<string, any>(), retried = new Set<string>();
   for (const [i, line] of lines.entries()) {
     let row: any;
     try { row = JSON.parse(line); } catch { if (i < lines.length - 1) failWith(`${join(dir, "samples.jsonl")} line ${i + 1} is not valid JSON`); continue; }
     const raw = MEASUREMENT.rawOf(row);
     if ("raw" in raw && !MEASUREMENT.errored(row) && !MEASUREMENT.unfinished?.(row)) raws.set(String(row.id), raw.raw);
+    else if ("raw" in raw && MEASUREMENT.errored(row)) retried.add(String(row.id));
   }
-  return raws;
+  return { kept: raws, retried };
 }
 
 const toEndpoint = (m: ModelSettings) => ({ baseUrl: m.baseUrl, apiKey: m.apiKey, model: m.name, ...(m.chat ? { chat: m.chat } : {}) });
@@ -171,12 +176,12 @@ async function main() {
       engines: { ...engineSettings(config).engines, reader: { model: model.name, endpoint: "<MODEL_BASE_URL>", endpoint_sha256: endpointDigest(model.baseUrl), temperature: readerSettings(model.chat).temperature, enableThinking: null, timeoutMs: o.timeoutMs },
         ...(judge ? { judge: { model: judge.name, endpoint: "<MODEL_BASE_URL>", endpoint_sha256: endpointDigest(judge.baseUrl), temperature: judge.chat?.temperature ?? 0, enableThinking: null, timeoutMs: 900_000, ...(judge.chat ? { chat: judge.chat } : {}) } } : {}) },
       settings: { strategy: "bakeoff-memory-inference", config_patch_sha256: o.overrides.configPatch?.sha256 ?? null, timeout_ms: o.timeoutMs, seed: o.seed }, eval_settings: evalSettings, completion });
-    const kept = v.resume === undefined ? new Map<string, any>() : resumableRaws(resolve(v.resume), manifestOf({ selected, scored: [], errored: [] }));
+    const { kept, retried } = v.resume === undefined ? { kept: new Map<string, any>(), retried: new Set<string>() } : resumableRaws(resolve(v.resume), manifestOf({ selected, scored: [], errored: [] }));
     await repeatRuns(v.repeat ? positive(v.repeat, 1, "--repeat") : undefined, baseLabel, async label => {
       const resultParent = corpusName === "public" ? join(REPO_ROOT, "evals/memory-utility/results") : join(REPO_ROOT, "private/memory-utility/results");
       const dir = v.resume === undefined ? makeResultsDir(resultParent, label) : resolve(v.resume), start = performance.now();
       if (v.resume !== undefined) markRunning(dir);
-      const raw = cases.map((c, i) => kept.get(c.id) ?? plan.pending(c, i));
+      const raw = cases.map((c, i) => kept.get(c.id) ?? { ...plan.pending(c, i), ...(retried.has(c.id) ? { retried: true } : {}) });
       // A case's row is built once when it is finished, and again only while it is the one being collected.
       const rows = cases.map((c, i) => plan.row(c, raw[i]));
       let current = -1, status = "running", abortedReason: string | null = null;
