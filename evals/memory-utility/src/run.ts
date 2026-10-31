@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { akmBuild, createSandbox, dirtyFingerprint, removeSandbox, runAkm, useAkm } from "../../../lib/akm/akm.ts";
 import { parseOverrides } from "../../../lib/akm/overrides.ts";
 import { buildManifest, caseDigests, corpusFolderOf, HARNESS_VERSION, REPO_ROOT } from "../../../lib/manifest.ts";
-import { endpointDigest, engineSettings, redactConfig, sha256Json } from "../../../lib/provenance.ts";
+import { endpointDigest, engineSettings, redactActors, redactConfig, sha256Json } from "../../../lib/provenance.ts";
 import { useModel } from "../../../lib/models.ts";
 import { fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { clearRunning, makeResultsDir } from "../../../lib/results.ts";
@@ -78,8 +78,9 @@ async function main() {
             engines: { ...engineSettings(config).engines, reader: { model: model.name, endpoint: "<MODEL_BASE_URL>", endpoint_sha256: endpointDigest(model.baseUrl), temperature: readerSettings(model.chat).temperature, enableThinking: null, timeoutMs: o.timeoutMs } },
             settings: { strategy: "bakeoff-memory-inference", config_patch_sha256: o.overrides.configPatch?.sha256 ?? null, timeout_ms: o.timeoutMs, seed: o.seed }, eval_settings: evalSettings,
             completion: { selected, scored: rows.filter(r => ARMS.every(a => r.arms[a].evaluated)).map(r => r.id), errored: rows.filter(r => ARMS.some(a => r.raw.arms[a].state === "error")).map(r => r.id) } }) };
-        writeFileSync(join(dir, "samples.jsonl"), rows.map(r => JSON.stringify(r)).join("\n") + "\n");
-        writeFileSync(join(dir, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
+        // akm stamps notes with the OS login (human:<login>); published results must not carry it, as in lib/run.ts.
+        writeFileSync(join(dir, "samples.jsonl"), rows.map(r => JSON.stringify(redactActors(r))).join("\n") + "\n");
+        writeFileSync(join(dir, "summary.json"), JSON.stringify(redactActors(summary), null, 2) + "\n");
         return { ...summary, results_dir: dir };
       };
       const stop = (signal: string) => { status = "aborted"; abortedReason = signal; save(); clearRunning(dir); process.exit(signal === "SIGINT" ? 130 : 143); };

@@ -54,6 +54,11 @@ function snapshot(s: Sandbox): Record<string, string> {
   walk(root, ""); return out;
 }
 const seconds = (start: number): number => (performance.now() - start) / 1000;
+/** akm's JSON names files by absolute path: saved results write the disposable sandbox folder as <sandbox>, so they name no host path or login. */
+export function sandboxRelative<T>(value: T, dir: string): T {
+  const escaped = JSON.stringify(dir).slice(1, -1);
+  return JSON.parse(JSON.stringify(value).replaceAll(escaped, "<sandbox>"));
+}
 async function index(s: Sandbox, o: Options): Promise<void> {
   const out = await runAkmJson<any>(s, ["index", "--full"], { timeoutMs: o.timeoutMs });
   if (!(out.totalEntries > 0)) throw new Error("AKM indexed no entries");
@@ -88,12 +93,12 @@ export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => v
     try { await index(generator, o); } finally { raw.inference.index_seconds = seconds(t); }
     t = performance.now();
     try {
-      raw.inference.report = await runAkmJson(generator, ["improve", "--strategy", STRATEGIES["memory-inference"], "--no-sync", "--require-engines", "--json-to-stdout"], { timeoutMs: o.timeoutMs });
+      raw.inference.report = sandboxRelative(await runAkmJson(generator, ["improve", "--strategy", STRATEGIES["memory-inference"], "--no-sync", "--require-engines", "--json-to-stdout"], { timeoutMs: o.timeoutMs }), generator.dir);
     } finally { raw.inference.seconds = seconds(t); }
     raw.post_inference = snapshot(generator);
     raw.inference.outcome = inferenceOutcome(raw.inference.report, raw.source, raw.post_inference);
   } catch (e) {
-    raw.inference.outcome = "error"; raw.inference.error = hideEndpoint(String(e), o.endpoint.baseUrl);
+    raw.inference.outcome = "error"; raw.inference.error = sandboxRelative(hideEndpoint(String(e), o.endpoint.baseUrl), generator.dir);
     try { raw.post_inference = snapshot(generator); } catch { /* the failure remains explicit */ }
   } finally {
     tallyCalls(generator.env.AKM_DATA_DIR); raw.inference.model_calls = takeModelCalls();
@@ -116,7 +121,7 @@ export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => v
         t = performance.now();
         try {
           const found = await runAkmJson<any>(s, ["search", "--limit", String(o.searchLimit), ...(await agentDetailArgs(s)), "--", c.question], { timeoutMs: o.timeoutMs });
-          arm.search = found;
+          arm.search = sandboxRelative(found, s.dir);
           if (o.semantic && found.searchMode !== "semantic") throw new Error(`search did not remain semantic: ${String(found.searchMode)}`);
           if (!Array.isArray(found.hits)) throw new Error("search returned no hits array");
           const docs: Document[] = [];
@@ -137,6 +142,7 @@ export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => v
       arm.state = "complete";
     } catch (e) {
       arm.state = "error"; arm.error = hideEndpoint(String(e), o.endpoint.baseUrl);
+      if (s) arm.error = sandboxRelative(arm.error, s.dir);
       if (e instanceof ChatError) arm.failed_usage = e.usage;
     } finally { try { checkpoint(); } finally { if (s) removeSandbox(s); } }
   }

@@ -1,6 +1,6 @@
 // Independent review regressions: measurement corruption must not become success.
 import { expect, test } from "bun:test";
-import { pending } from "./collect.ts";
+import { pending, sandboxRelative } from "./collect.ts";
 import type { Case } from "./inputs.ts";
 import { pack, promptFor, sourceFiles } from "./protocol.ts";
 import { makeRow, rawOf, scoreArm } from "./score.ts";
@@ -52,4 +52,11 @@ test("invalid numeric saved usage cannot silently survive as measured cost", () 
   const row = makeRow(fixture, completed());
   row.raw.arms.source.answer!.usage.completion_tokens = Number.NaN;
   expect(rawOf(row)).toHaveProperty("missing");
+});
+
+test("saved akm JSON names the sandbox folder, not the host path", () => {
+  const dir = "/home/someone/tmp/akm-eval-memory-utility-source-AbC123";
+  const found = { hits: [{ ref: "memories/m1", path: `${dir}/bundle/memories/m1.md` }], note: `see ${dir}` };
+  expect(sandboxRelative(found, dir)).toEqual({ hits: [{ ref: "memories/m1", path: "<sandbox>/bundle/memories/m1.md" }], note: "see <sandbox>" });
+  expect(sandboxRelative("Error: failed in C:\\t\\x", "C:\\t")).toBe("Error: failed in <sandbox>\\x");
 });
