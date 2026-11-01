@@ -38,7 +38,7 @@ The queries of the retrieval measurement (`../../README.md`, "Search and curate 
 |---|---|---|
 | `topic` | one for each duplicate (7) and triple (2) cluster | every note of the cluster is 3, none banned: they say the same, and which one akm retires is not known in advance |
 | `extra-claim` | one for each subsumed cluster (5) | about the claim only the bigger note holds: the bigger note 3, the smaller note 0 and banned |
-| `current` | one for each supersedes cluster (5) | in the words of the current value: the newer note 3, the older note 0 and banned |
+| `current` | one for each supersedes cluster (5) | asks for the value that changed, without naming it: the newer note 3, the older note 0 and banned |
 | `stale` | one for each supersedes cluster (5) | in the words of the old value, which the older note matches more closely: the newer note 3, the older note 0 and banned |
 | `control` | one for each note of an overlap (14), contradicts (4) and lookalike (6) cluster that holds a claim its sibling lacks, and one for each single (16) | the note that holds the claim 3, its sibling 1 (same topic, lacks the claim) |
 
