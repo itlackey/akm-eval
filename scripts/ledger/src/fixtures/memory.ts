@@ -13,6 +13,10 @@ function arm(correct: number, reported: number, seconds: number) {
       completion_tokens: { total_reported: 42, reporting_count: 2, attempted_calls: 4 },
       cost_usd: { total_reported: null, reporting_count: 0, attempted_calls: 4 } } };
 }
+/** One LongMemEval budget: the three arms' accuracy and packed tokens, and both paired differences with an exact p-value. */
+const budgetResult = (accuracy: [number, number, number], tokens: number, gain: number, p: number) => ({
+  arms: Object.fromEntries(["none", "source", "inferred"].map((arm, i) => [arm, { failure_inclusive_accuracy: { n: 4, correct: accuracy[i]!, rate: accuracy[i]! / 4 }, mean_context_estimated_tokens: arm === "none" ? 0 : tokens }])),
+  persistent_memory: { failure_inclusive: { value: .25, ci95: [-.5, .75], p_value: 0.5 } }, memory_inference: { failure_inclusive: { value: gain, ci95: [gain - .5, gain + .5], p_value: p } } });
 export function memorySummary() {
   return { eval: "memory-utility", corpus: "public", status: "complete", label: "synthetic-ui-fixture-not-a-measurement", model: "fixture/model", akm_version: "fixture-v1", date: "2026-10-31T00:00:00Z", limit: 4,
     n_selected: 4, n_run: 4, n_scored: 3, n_errored: 1, n_unfinished: 0, wall_seconds: 90,
@@ -22,6 +26,9 @@ export function memorySummary() {
       persistent_memory: { failure_inclusive: pair(.25), complete_pairs: pair(.3333, true) },
       memory_inference: { failure_inclusive: pair(.25), complete_pairs: pair(.3333, true) },
       cited_correct_deltas: { persistent_memory: pair(.25), memory_inference: pair(.25) },
+      cross_budget_inference: { failure_inclusive: { ...pair(.25), p_value: 0.2 }, complete_pairs: pair(.3333, true) },
+      primary_comparisons: { method: "Holm", alpha: 0.05, comparisons: { matched_budget: { p_value: 0.25, p_holm: 0.4 }, cross_budget: { p_value: 0.2, p_holm: 0.4 } } },
+      by_budget: { "8192": budgetResult([1, 2, 1], 250, -.25, 0.5), "4096": budgetResult([1, 2, 3], 900, .25, 0.25) },
       inference: { output: 2, no_change: 1, errors: 1, not_run: 0, mean_seconds: 7, mean_index_seconds: 2 } } };
 }
 export function memoryDataset() {
@@ -31,6 +38,7 @@ export function memoryDataset() {
   Object.assign(b.metrics.arms.inferred.reported_usage.cost_usd, { total_reported: 0, reporting_count: 4 });
   b.metrics.memory_inference = { failure_inclusive: pair(-.25), complete_pairs: pair(-.3333, true) };
   b.metrics.cited_correct_deltas.memory_inference = pair(-.25);
+  delete (b.metrics.by_budget as Record<string, unknown>)["8192"]; // this run records only the primary budget
   const runs = [a, b].map((summary, index) => presentRun({ summary, samples: ["a", "b", "c", "d"].map(id => ({ id })), path: `fixture-memory-${index}`, sourceRevision: "fixture" })!);
   return { source_revision: "fixture", runs, columns: comparisonColumns(runs) };
 }

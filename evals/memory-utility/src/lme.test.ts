@@ -1,0 +1,167 @@
+import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { Question } from "../../../benchmarks/longmemeval/src/dataset.ts";
+import { caseDigests } from "../../../lib/manifest.ts";
+import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, DEV_QUESTIONS, HALVES_SALT, PREREGISTERED_JUDGE, PRIMARY_BUDGET, SPLIT_SALT, buildLmeCase, distractorSeed, lmeCases, lmePrompt, preregistrationDifferences, splitQuestions } from "./lme.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { pack, sourceFiles } from "./protocol.ts";
+
+/** The id and type of the 500 questions of the pinned dataset. The split depends on nothing else. */
+const ids: [string, string][] = JSON.parse(readFileSync(join(import.meta.dir, "fixtures/longmemeval-ids.json"), "utf8"));
+const idsOnly = (): Question[] => ids.map(([question_id, question_type]) => ({ question_id, question_type }) as Question);
+const sha = (list: string[]) => createHash("sha256").update([...list].sort().join("\n")).digest("hex");
+
+describe("the dev / held-out split", () => {
+  const { dev, heldout } = splitQuestions(idsOnly());
+  test("is 100 dev and 400 held-out questions, stratified by type, covering the 500 once", () => {
+    expect(dev).toHaveLength(100); expect(heldout).toHaveLength(400);
+    expect(new Set([...dev, ...heldout].map(q => q.question_id)).size).toBe(500);
+    const per = (qs: Question[]) => Object.fromEntries([...new Set(ids.map(i => i[1]))].sort().map(t => [t, qs.filter(q => q.question_type === t).length]));
+    expect(per(dev)).toEqual({ "knowledge-update": 15, "multi-session": 27, "single-session-assistant": 11, "single-session-preference": 6, "single-session-user": 14, "temporal-reasoning": 27 });
+    expect(per(heldout)).toEqual({ "knowledge-update": 63, "multi-session": 106, "single-session-assistant": 45, "single-session-preference": 24, "single-session-user": 56, "temporal-reasoning": 106 });
+  });
+  test("is the same split every time: a pinned digest of the dev ids", () => {
+    expect(sha(dev.map(q => q.question_id))).toBe("31b89bba327b0ae23464fde264a16d84c6dcee8e76935baa9b9b663acbeabb4d");
+  });
+  test("does not depend on the order of the file, or on anything of a question but its id and type", () => {
+    const shuffled = [...idsOnly()].reverse().map(q => ({ ...q, question: "other text", answer: "other" }) as Question);
+    expect(sha(splitQuestions(shuffled).dev.map(q => q.question_id))).toBe(sha(dev.map(q => q.question_id)));
+    const devIds = new Set(dev.map(q => q.question_id));
+    expect(splitQuestions(shuffled).dev.map(q => q.question_id)).toEqual(shuffled.map(q => q.question_id).filter(id => devIds.has(id))); // each list keeps the order of its input
+  });
+  test("another salt is another split", () => {
+    expect(sha(splitQuestions(idsOnly(), `${SPLIT_SALT}/other`).dev.map(q => q.question_id))).not.toBe(sha(dev.map(q => q.question_id)));
+  });
+});
+
+describe("the two held-out halves", () => {
+  const split = splitQuestions(idsOnly());
+  const a = split["heldout-a"], b = split["heldout-b"];
+  const per = (qs: Question[]) => Object.fromEntries([...new Set(ids.map(i => i[1]))].sort().map(t => [t, qs.filter(q => q.question_type === t).length]));
+  test("are 200 questions each, with no question in both, and together exactly the 400 held-out ones (none of them dev)", () => {
+    expect(a).toHaveLength(200); expect(b).toHaveLength(200);
+    const inA = new Set(a.map(q => q.question_id));
+    expect(b.filter(q => inA.has(q.question_id))).toEqual([]);
+    expect([...a, ...b].map(q => q.question_id).sort()).toEqual(split.heldout.map(q => q.question_id).sort());
+    const dev = new Set(split.dev.map(q => q.question_id));
+    expect([...a, ...b].some(q => dev.has(q.question_id))).toBe(false);
+  });
+  test("are stratified by type: each type is split in half, to within the one question an odd count leaves over", () => {
+    expect(per(a)).toEqual({ "knowledge-update": 31, "multi-session": 53, "single-session-assistant": 23, "single-session-preference": 12, "single-session-user": 28, "temporal-reasoning": 53 });
+    expect(per(b)).toEqual({ "knowledge-update": 32, "multi-session": 53, "single-session-assistant": 22, "single-session-preference": 12, "single-session-user": 28, "temporal-reasoning": 53 });
+  });
+  test("are the same every time: pinned digests of each half's ids", () => {
+    expect(sha(a.map(q => q.question_id))).toBe("011ac13febd6701496cf4d5106fec25b278604f248bd9aec9300ec4dde9cd061");
+    expect(sha(b.map(q => q.question_id))).toBe("0663e9aad7e89d9805570019e9ff499245a817525b157c52911c5e3975ddfef7");
+  });
+  test("do not depend on the order of the file, and keep its order", () => {
+    const shuffled = [...idsOnly()].reverse();
+    const again = splitQuestions(shuffled);
+    expect(sha(again["heldout-a"].map(q => q.question_id))).toBe(sha(a.map(q => q.question_id)));
+    expect(sha(again["heldout-b"].map(q => q.question_id))).toBe(sha(b.map(q => q.question_id)));
+    const inA = new Set(a.map(q => q.question_id));
+    expect(again["heldout-a"].map(q => q.question_id)).toEqual(shuffled.map(q => q.question_id).filter(id => inA.has(id)));
+  });
+});
+
+/** A question with 30 sessions: 2 evidence (one with a flagged turn) and 28 others. */
+function question(id = "q-split", answer = "GOLD-ANSWER-7731"): Question {
+  const sessions = Array.from({ length: 30 }, (_, i) => [{ role: "user", content: `Session ${i}: my favourite number is ${i}.` }, { role: "assistant", content: `Noted ${i}.` }]);
+  const haystack_session_ids = sessions.map((_, i) => i === 4 ? "answer_EVID4" : i === 21 ? "answer_EVID21" : `filler_${i}`);
+  (sessions[4]![0] as any).has_answer = true;
+  sessions[4]![0]!.content = `The detail I want you to remember is ${answer}.`;
+  return { question_id: id, question_type: "multi-session", question: "What is the detail?", question_date: "2023/05/30 (Tue) 23:40", answer,
+    answer_session_ids: ["answer_EVID4", "answer_EVID21"], haystack_dates: sessions.map((_, i) => `2023/05/${String(1 + (i % 28)).padStart(2, "0")} (Mon) 10:00`), haystack_session_ids, haystack_sessions: sessions };
+}
+
+describe("the pre-registered settings a held-out run is held to", () => {
+  const registered: Parameters<typeof preregistrationDifferences>[0] = { budgets: [4096, 8192], haystack: 16, sampleSeed: 42, judgeModel: "fast/qwen3.6-35b-a3b", judgeChat: { max_tokens: 64 } };
+  test("a run with those settings passes, whatever else the judge's line sets", () => {
+    expect(preregistrationDifferences(registered)).toEqual([]);
+    expect(preregistrationDifferences({ ...registered, judgeChat: { max_tokens: 64, temperature: 0, reasoning_effort: "none" } })).toEqual([]);
+  });
+  test("each setting that differs is named, with its pre-registered value", () => {
+    const text = (change: Partial<typeof registered>) => preregistrationDifferences({ ...registered, ...change }).join("\n");
+    expect(text({ budgets: [1024, 4096] })).toContain("budgets, which fix the primary endpoint, [1024,4096] (pre-registered [4096,8192])");
+    expect(text({ haystack: 8 })).toContain("haystack 8 (pre-registered 16)");
+    expect(text({ sampleSeed: 1 })).toContain("sample seed 1 (pre-registered 42)");
+    expect(text({ judgeModel: "other/model" })).toContain('judge model "other/model" (pre-registered "fast/qwen3.6-35b-a3b")');
+    expect(text({ judgeChat: { max_tokens: 512 } })).toContain("judge chat.max_tokens 512 (pre-registered 64)");
+    expect(text({ judgeChat: undefined })).toContain("judge chat.max_tokens undefined");
+    expect(text({ judgeChat: { max_tokens: 64, temperature: 0.7 } })).toContain("judge temperature 0.7 (pre-registered 0)");
+    expect(preregistrationDifferences({ ...registered, haystack: 8, sampleSeed: 1 })).toHaveLength(2);
+  });
+});
+
+describe("LongMemEval cases", () => {
+  test("hold the evidence sessions and exactly K distractors, whole, in history order", () => {
+    const c = buildLmeCase(question(), 16, 42);
+    expect(c.notes).toHaveLength(18);
+    expect(c.evidence_ids).toEqual(["answer_EVID4", "answer_EVID21"]);
+    expect(c.session_ids.filter(id => id.startsWith("filler_"))).toHaveLength(16);
+    const order = c.session_ids.map(id => question().haystack_session_ids.indexOf(id));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(c.notes[c.session_ids.indexOf("answer_EVID4")]).toContain("GOLD-ANSWER-7731"); // the notes are the sessions, the benchmark's memory text
+    expect(c.notes[0]).toMatch(/^# Chat session\n\nSession date: /);
+    expect(c.evidence_turns).toEqual({ answer_EVID4: ["user: The detail I want you to remember is GOLD-ANSWER-7731."] });
+  });
+  test("draw the same distractors for the same seed, other ones for another seed, whatever else is drawn", () => {
+    const a = buildLmeCase(question(), 16, 42), b = buildLmeCase(question(), 16, 42), other = buildLmeCase(question(), 16, 43);
+    expect(a.session_ids).toEqual(b.session_ids);
+    expect(other.session_ids).not.toEqual(a.session_ids);
+    expect(distractorSeed(42, "q-split")).toBe(distractorSeed(42, "q-split"));
+    expect(distractorSeed(42, "q-split")).not.toBe(distractorSeed(42, "q-split-2"));
+    expect(distractorSeed(42, "q-split")).not.toBe(distractorSeed(43, "q-split"));
+    const two = lmeCases([question("q-a"), question("q-split")], { split: "dev", haystack: 16, sampleSeed: 42 }).cases;
+    const alone = lmeCases([question("q-split")], { split: "dev", haystack: 16, sampleSeed: 42 }).cases;
+    expect(two.find(c => c.id === "q-split")!.session_ids).toEqual(alone[0]!.session_ids);
+  });
+  test("K sets the number of distractors, and a K beyond the history takes all of it", () => {
+    expect(buildLmeCase(question(), 4, 42).notes).toHaveLength(6);
+    expect(buildLmeCase(question(), 100, 42).notes).toHaveLength(30);
+    expect(buildLmeCase(question(), 28, 42).session_ids).toEqual(question().haystack_session_ids);
+  });
+  test("an evidence session missing from the haystack is refused", () => {
+    expect(() => buildLmeCase({ ...question(), answer_session_ids: ["nowhere"] }, 4, 1)).toThrow(/not in its haystack/);
+  });
+  test("the labels never reach inference, the arms' memories or the reader's prompt", () => {
+    const c = buildLmeCase(question(), 16, 42);
+    // The answer is in the evidence session by construction (the session is the memory). Everything else a label knows must be absent.
+    const written = Object.entries(sourceFiles(c));
+    expect(written).toHaveLength(c.notes.length);
+    for (const [file, text] of written) {
+      expect(file).toMatch(/^memories\/m[0-9a-f]{16}\.md$/);
+      for (const secret of ["answer_EVID", "has_answer", "filler_", "q-split"]) expect(`${file}\n${text}`).not.toContain(secret);
+    }
+    const prompt = lmePrompt(c, pack(c.notes.map((content, i) => ({ ref: `memories/${i}`, content })), 4096));
+    for (const secret of ["answer_EVID", "has_answer", "evidence", "q-split", "filler_"]) expect(prompt).not.toContain(secret);
+    // The gold answer is only in the prompt through the evidence session's own text; a case with no evidence text has none of it.
+    const blind = lmePrompt(c, pack([], 4096));
+    expect(blind).not.toContain("GOLD-ANSWER-7731");
+    expect(blind).toContain("(there are no chats)");
+    expect(blind).toContain("Current Date: 2023/05/30 (Tue) 23:40");
+  });
+  test("the digest of what a case presents does not move with its labels; the digest of its labels does", () => {
+    const first = lmeCases([question("q-a")], { split: "dev", haystack: 16, sampleSeed: 42 }).cases[0]!;
+    const relabelled = { ...first, answer: "SOMETHING ELSE", evidence_turns: {}, evidence_ids: [] };
+    const a = caseDigests(MEASUREMENT, [first])[first.id]!, b = caseDigests(MEASUREMENT, [relabelled])[first.id]!;
+    expect(b.input_sha256).toBe(a.input_sha256);
+    expect(b.label_sha256).not.toBe(a.label_sha256);
+  });
+  test("the pre-registration holds the constants the code uses", () => {
+    const text = readFileSync(join(import.meta.dir, "../PREREGISTRATION.md"), "utf8");
+    const block = JSON.parse(/```json\n([\s\S]*?)```/.exec(text)![1]!);
+    // Each value is held to the constant the code runs with, not to a copy of it here.
+    expect(block.split_salt).toBe(SPLIT_SALT);
+    expect(block.halves_salt).toBe(HALVES_SALT);
+    expect(block.split_sizes).toEqual({ dev: DEV_QUESTIONS, heldout_a: splitQuestions(idsOnly())["heldout-a"].length, heldout_b: splitQuestions(idsOnly())["heldout-b"].length });
+    expect(block.haystack).toBe(DEFAULT_HAYSTACK);
+    expect(block.budgets).toEqual(DEFAULT_BUDGETS);
+    expect(block.primary_budget).toBe(PRIMARY_BUDGET);
+    expect(block.sample_seed).toBe(DEFAULT_SAMPLE_SEED);
+    expect(block.judge).toMatchObject({ model: PREREGISTERED_JUDGE.model, temperature: PREREGISTERED_JUDGE.temperature, chat: PREREGISTERED_JUDGE.chat }); // the constants a held-out run is held to
+    expect(distractorSeed(DEFAULT_SAMPLE_SEED, "q")).toBe(parseInt(createHash("sha256").update(`${DEFAULT_SAMPLE_SEED}:q`).digest("hex").slice(0, 8), 16)); // "the first 32 bits of sha256(sample_seed:question_id)"
+  });
+});

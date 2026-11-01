@@ -31,7 +31,7 @@ export function configFor(o: Options): Record<string, any> {
   if (o.semantic !== (config.semanticSearchMode === "auto")) throw new Error("--semantic must agree with effective semanticSearchMode; no fallback is allowed");
   return config;
 }
-function place(s: Sandbox, files: Record<string, string>): void {
+export function place(s: Sandbox, files: Record<string, string>): void {
   for (const [file, text] of Object.entries(files)) {
     if (!/^memories\/[a-zA-Z0-9._-]+\.md$/.test(file)) throw new Error(`unexpected memory path: ${file}`);
     const path = join(s.dir, "bundle", file);
@@ -39,7 +39,7 @@ function place(s: Sandbox, files: Record<string, string>): void {
   }
 }
 /** Keep the exact corpus, including rewritten parent metadata. Never follow links out of an owned sandbox. */
-function snapshot(s: Sandbox): Record<string, string> {
+export function snapshot(s: Sandbox): Record<string, string> {
   const root = join(s.dir, "bundle");
   const out: Record<string, string> = {};
   function walk(path: string, relative: string) {
@@ -53,13 +53,19 @@ function snapshot(s: Sandbox): Record<string, string> {
   }
   walk(root, ""); return out;
 }
-const seconds = (start: number): number => (performance.now() - start) / 1000;
+export const seconds = (start: number): number => (performance.now() - start) / 1000;
+/**
+ * Native inference is one sequential model call per note inside a single `akm improve` command (about 5 s a LongMemEval-size session on the
+ * 35B). `--timeout-ms` alone would fail a case with many notes, so the command may take up to this long for each note, if that is more.
+ */
+export const IMPROVE_MS_PER_NOTE = 30_000;
+export const improveTimeoutMs = (timeoutMs: number, notes: number): number => Math.max(timeoutMs, notes * IMPROVE_MS_PER_NOTE);
 /** akm's JSON names files by absolute path: saved results write the disposable sandbox folder as <sandbox>, so they name no host path or login. */
 export function sandboxRelative<T>(value: T, dir: string): T {
   const escaped = JSON.stringify(dir).slice(1, -1);
   return JSON.parse(JSON.stringify(value).replaceAll(escaped, "<sandbox>"));
 }
-async function index(s: Sandbox, o: Options): Promise<void> {
+export async function index(s: Sandbox, o: Options): Promise<void> {
   const out = await runAkmJson<any>(s, ["index", "--full"], { timeoutMs: o.timeoutMs });
   if (!(out.totalEntries > 0)) throw new Error("AKM indexed no entries");
   if (o.semantic && (out.verification?.embeddingCount !== out.totalEntries || out.verification?.missingEmbeddings > 0)) throw new Error(`incomplete embedding coverage: ${out.verification?.embeddingCount ?? "unknown"}/${out.totalEntries}`);
@@ -83,9 +89,8 @@ export function pending(c: Case, ordinal: number, seed: string): Raw {
     inference: { outcome: "not-run", report: null, error: null, index_seconds: 0, seconds: 0, model_calls: null },
     arms: Object.fromEntries(ARMS.map(a => [a, blankArm(c.common)])) as Record<ArmName, RawArm> };
 }
-/** Persist after each phase/arm. All future-question labels stay in the caller, never in the inference sandbox. */
-export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => void = () => {}): Promise<Raw> {
-  const config = configFor(o);
+/** Native inference over the notes of `raw.source`, in a disposable sandbox: records the report, the snapshot and the outcome in `raw`. Never throws; a failure is `raw.inference.outcome === "error"`. */
+export async function runInference(raw: Pick<Raw, "source" | "post_inference" | "inference">, config: Record<string, any>, o: Options, checkpoint: () => void = () => {}): Promise<void> {
   const generator = createSandbox("memory-utility-inference");
   try {
     writeConfig(generator, config); place(generator, raw.source);
@@ -93,7 +98,7 @@ export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => v
     try { await index(generator, o); } finally { raw.inference.index_seconds = seconds(t); }
     t = performance.now();
     try {
-      raw.inference.report = sandboxRelative(await runAkmJson(generator, ["improve", "--strategy", STRATEGIES["memory-inference"], "--no-sync", "--require-engines", "--json-to-stdout"], { timeoutMs: o.timeoutMs }), generator.dir);
+      raw.inference.report = sandboxRelative(await runAkmJson(generator, ["improve", "--strategy", STRATEGIES["memory-inference"], "--no-sync", "--require-engines", "--json-to-stdout"], { timeoutMs: improveTimeoutMs(o.timeoutMs, Object.keys(raw.source).length) }), generator.dir);
     } finally { raw.inference.seconds = seconds(t); }
     raw.post_inference = snapshot(generator);
     raw.inference.outcome = inferenceOutcome(raw.inference.report, raw.source, raw.post_inference);
@@ -104,6 +109,31 @@ export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => v
     tallyCalls(generator.env.AKM_DATA_DIR); raw.inference.model_calls = takeModelCalls();
     try { checkpoint(); } finally { removeSandbox(generator); }
   }
+}
+/**
+ * Search the question in the indexed sandbox and `akm show` each hit, in rank order. Search and show must not change the corpus, and in
+ * semantic mode the search must have been semantic. `arm.search` keeps akm's answer with the sandbox folder written as <sandbox>.
+ */
+export async function retrieve(s: Sandbox, question: string, o: Options, arm: { search: unknown }): Promise<Document[]> {
+  const before = sha256Json(snapshot(s));
+  const found = await runAkmJson<any>(s, ["search", "--limit", String(o.searchLimit), ...(await agentDetailArgs(s)), "--", question], { timeoutMs: o.timeoutMs });
+  arm.search = sandboxRelative(found, s.dir);
+  if (o.semantic && found.searchMode !== "semantic") throw new Error(`search did not remain semantic: ${String(found.searchMode)}`);
+  if (!Array.isArray(found.hits)) throw new Error("search returned no hits array");
+  const docs: Document[] = [];
+  for (const hit of found.hits) {
+    if (typeof hit.ref !== "string") throw new Error("search hit has no ref");
+    const shown = await runAkmJson<any>(s, ["show", hit.ref], { timeoutMs: o.timeoutMs });
+    if (typeof shown.content !== "string") throw new Error(`show returned no content for ${hit.ref}`);
+    docs.push({ ref: hit.ref, content: shown.content });
+  }
+  if (sha256Json(snapshot(s)) !== before) throw new Error("answer-phase AKM commands changed the frozen corpus");
+  return docs;
+}
+/** Persist after each phase/arm. All future-question labels stay in the caller, never in the inference sandbox. */
+export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => void = () => {}): Promise<Raw> {
+  const config = configFor(o);
+  await runInference(raw, config, o, checkpoint);
   for (const name of raw.order) {
     const arm = raw.arms[name];
     if (name === "inferred" && raw.inference.outcome === "error") {
@@ -113,27 +143,11 @@ export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => v
     try {
       if (s) {
         writeConfig(s, config);
-        const files = name === "source" ? raw.source : raw.post_inference!;
-        place(s, files);
+        place(s, name === "source" ? raw.source : raw.post_inference!);
         let t = performance.now();
         try { await index(s, o); } finally { arm.seconds.index = seconds(t); }
-        const before = sha256Json(snapshot(s));
         t = performance.now();
-        try {
-          const found = await runAkmJson<any>(s, ["search", "--limit", String(o.searchLimit), ...(await agentDetailArgs(s)), "--", c.question], { timeoutMs: o.timeoutMs });
-          arm.search = sandboxRelative(found, s.dir);
-          if (o.semantic && found.searchMode !== "semantic") throw new Error(`search did not remain semantic: ${String(found.searchMode)}`);
-          if (!Array.isArray(found.hits)) throw new Error("search returned no hits array");
-          const docs: Document[] = [];
-          for (const hit of found.hits) {
-            if (typeof hit.ref !== "string") throw new Error("search hit has no ref");
-            const shown = await runAkmJson<any>(s, ["show", hit.ref], { timeoutMs: o.timeoutMs });
-            if (typeof shown.content !== "string") throw new Error(`show returned no content for ${hit.ref}`);
-            docs.push({ ref: hit.ref, content: shown.content });
-          }
-          arm.context = pack(docs, o.contextTokens);
-          if (sha256Json(snapshot(s)) !== before) throw new Error("answer-phase AKM commands changed the frozen corpus");
-        } finally { arm.seconds.retrieval = seconds(t); }
+        try { arm.context = pack(await retrieve(s, c.question, o, arm), o.contextTokens); } finally { arm.seconds.retrieval = seconds(t); }
       }
       arm.prompt = promptFor(c, arm.context); checkpoint();
       const t = performance.now();

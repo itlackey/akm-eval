@@ -42,7 +42,7 @@ export function armOrder(index: number, seed: string): ArmName[] {
   const offset = createHash("sha256").update(seed).digest().readUInt32BE(0) % orders.length;
   return [...orders[(index + offset) % orders.length]!];
 }
-export function sourceFiles(c: Case): Record<string, string> {
+export function sourceFiles(c: Pick<Case, "id" | "notes">): Record<string, string> {
   return Object.fromEntries(c.notes.map((text, i) => {
     const name = createHash("sha256").update(`${c.id}:${i}`).digest("hex").slice(0, 16);
     return [`memories/m${name}.md`, text];

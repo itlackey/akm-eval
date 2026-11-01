@@ -51,6 +51,27 @@ test('memory quality exposes three controls, two contrasts, uncertainty and cove
   expect((await exported(page)).length).toBe(existing.runs.length + 2);
   expect(errors).toEqual([]);
 });
+test('memory budgets show each standard budget with its accuracy, packed tokens and exact p-value, and leave an unrecorded budget empty', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await open(page);
+  await page.locator('#view').selectOption('memory-budgets');
+  for (const [arm, value] of [['none', 25], ['source', 50], ['inferred', 75]])
+    await expect(cells(page, `memory_b4096_${arm}_accuracy`).first()).toContainText(`${value}.00`);
+  await expect(cells(page, 'memory_b8192_inferred_accuracy').first()).toContainText('25.00');
+  await expect(cells(page, 'memory_b4096_source_tokens').first()).toHaveText('900.0');
+  await expect(cells(page, 'memory_b4096_memory_inference_p_value').first()).toHaveText('0.2500');
+  await expect(cells(page, 'memory_b4096_memory_inference_gain').first()).toHaveText('25.00');
+  await expect(cells(page, 'memory_b8192_inferred_accuracy').nth(1)).toHaveText('—'); // the second run records no 8192 budget
+  await expect(cells(page, 'memory_cross_budget_inference_failure_inclusive_p_value').first()).toHaveText('0.2000');
+  await expect(cells(page, 'memory_cross_budget_inference_failure_inclusive_helps').first()).toHaveText('1');
+  await expect(cells(page, 'memory_holm_cross_budget_p').first()).toHaveText('0.4000');
+  await expect(page.locator('#view-context')).toContainText('Holm-adjusted p-values cover both primary comparisons');
+  await expect(page.locator('#view-context')).toContainText('primary comparison is Inferred − notes at 4096');
+  const rows = await exported(page);
+  expect(rows[0].memory_b4096_memory_inference_p_value).toBe(0.25);
+  expect(rows[1].memory_b8192_inferred_accuracy).toBeNull();
+  expect(errors).toEqual([]);
+});
 test('memory usage and diagnostics preserve unknown/zero, partial reporting, filters, exports and URL restoration', async ({ page }, info) => {
   await open(page);
   await page.locator('#view').selectOption('memory-performance');
