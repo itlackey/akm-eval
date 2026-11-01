@@ -2,7 +2,7 @@
 //
 // A filter query (a query with `searchArgs` such as `--since`) carries a sentinel: an asset outside the filter's window that matches the query
 // best, so an unfiltered search always returns it. Two answers show that the build does not apply the flags:
-//   - the sentinel comes back, because the build ignores a flag it does not declare (older builds did), or
+//   - the sentinel comes back, because the build ignores a flag it does not declare (akm before 0.9.0 did), or
 //   - the call fails with akm's unknown-flag error, because the build refuses it (0.10.261022 does: UNKNOWN_FLAG, exit 2).
 // Either way the numbers of the filter queries would mean nothing, so the column is `unsupported` and its filter queries stay out of the
 // metrics. The guard reads rows only, so scripts/rescore applies it to a stored run. It does not guess from a version number.

@@ -35,7 +35,7 @@ An akm build that does not apply `--since` or `--until` would score its filter q
 
 A column (`search` or `semantic_search`) is `unsupported` when, for any of its filter queries:
 
-- the sentinel comes back (the build ignored the flag: akm before 0.10 did), or
+- the sentinel comes back (the build ignored the flag: akm before 0.9.0 did), or
 - akm refused the flag (akm 0.10.261022 exits 2 with `UNKNOWN_FLAG`).
 
 Then every filter query of that column is left out of its metrics, the call is not counted as an error, and the summary says so:
