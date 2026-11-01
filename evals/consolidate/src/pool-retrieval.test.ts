@@ -95,10 +95,20 @@ describe("retrievalSummary", () => {
     expect(Object.keys(s.phases.before.search.kinds)).toEqual(["supersedes", "single"]);
   });
 
+  test("reports ndcg_10 for the control queries and not for the retire queries, in their kinds either", () => {
+    const s = retrievalSummary(small, qs, raw);
+    expect(s.phases.before.search.retire).not.toHaveProperty("ndcg_10");
+    expect(s.phases.before.search.kinds.supersedes).not.toHaveProperty("ndcg_10");
+    expect(s.phases.before.search.control).toHaveProperty("ndcg_10", 1);
+    expect(s.phases.before.search.kinds.single).toHaveProperty("ndcg_10", 1);
+    expect(s.delta.after.search.retire).not.toHaveProperty("ndcg_10");
+    expect(s.delta.after.search.control).toHaveProperty("ndcg_10", 0);
+  });
+
   test("gives each phase's delta against before: about 0 for the no-op control and the accept before the reindex, and the gain after it", () => {
     const { delta } = retrievalSummary(small, qs, raw);
-    expect(delta.noop.search.retire).toEqual({ mrr: 0, success_5: 0, ndcg_10: 0, banned_above_first: 0 });
-    expect(delta.after_accept.search.retire).toEqual({ mrr: 0, success_5: 0, ndcg_10: 0, banned_above_first: 0 });
+    expect(delta.noop.search.retire).toEqual({ mrr: 0, success_5: 0, banned_above_first: 0 });
+    expect(delta.after_accept.search.retire).toEqual({ mrr: 0, success_5: 0, banned_above_first: 0 });
     expect(delta.after.search.retire).toMatchObject({ mrr: 0.5, banned_above_first: -1 });
     expect(delta.after.search.control).toEqual({ mrr: 0, success_5: 0, ndcg_10: 0, banned_above_first: null });
   });
@@ -225,7 +235,7 @@ describe("runPool with queries", () => {
       expect(r.phases.after.search.retire.banned_above_first).toBeLessThan(r.phases.before.search.retire.banned_above_first);
       expect(r.delta.after.search.retire.banned_above_first).toBeLessThan(0);
       // the no-op control: the same queries on the same index
-      for (const command of ["search", "curate"]) for (const group of ["retire", "control"]) expect(r.delta.noop[command][group]).toEqual({ mrr: 0, success_5: 0, ndcg_10: 0, banned_above_first: group === "retire" ? 0 : null });
+      for (const command of ["search", "curate"]) for (const group of ["retire", "control"]) expect(r.delta.noop[command][group]).toEqual(group === "retire" ? { mrr: 0, success_5: 0, banned_above_first: 0 } : { mrr: 0, success_5: 0, ndcg_10: 0, banned_above_first: null });
       // controls stay findable
       for (const command of ["search", "curate"]) expect(r.delta.after[command].control.success_5).toBe(0);
       // a retired note is still returned straight after the accept, as in akm#1307, and gone after the reindex

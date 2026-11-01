@@ -51,11 +51,16 @@ export interface GroupMetrics {
   errored: number;
   mrr: number | null;
   success_5: number | null;
-  ndcg_10: number | null;
+  /**
+   * Only for the control queries. For the retire queries it is left out: a duplicate or triple has every note graded 3, so the correct retirement of one reads as a loss, and on
+   * the other retire queries one note is relevant and it says no more than `mrr`.
+   */
+  ndcg_10?: number | null;
   /** The share of the queries that ban a note where one ranks above the first relevant note. Lower is better. */
   banned_above_first: number | null;
 }
 const FIELDS = ["mrr", "success_5", "ndcg_10", "banned_above_first"] as const;
+type Field = (typeof FIELDS)[number];
 
 export interface CommandMetrics {
   /** Queries of clusters with a note that may be retired (duplicate, triple, subsumed, supersedes). */
@@ -73,7 +78,7 @@ export interface RetrievalSummary {
   accepted: { n: number; safe: number; unsafe: number; wrong_successor: number };
   phases: Record<Phase, Record<Command, CommandMetrics>>;
   /** Each phase's metrics less those of `before`, for the retire and the control queries. `noop` is the control: it should be about 0. */
-  delta: Record<Exclude<Phase, "before">, Record<Command, Record<"retire" | "control", Record<(typeof FIELDS)[number], number | null>>>>;
+  delta: Record<Exclude<Phase, "before">, Record<Command, Record<"retire" | "control", Partial<Record<Field, number | null>>>>>;
   /**
    * The share of the accepted retirements whose retired note a query of its cluster still returns. About 1 before, and 0 after the reindex. A retirement that no query returns
    * and one of whose queries failed is not in `of`.
@@ -85,7 +90,7 @@ export interface RetrievalSummary {
 const hasRetire = (c: Pick<Cluster, "retire">): boolean => Object.keys(c.retire).length > 0;
 const round = (x: number | null): number | null => (x === null ? null : Number(x.toFixed(4)));
 
-function groupMetrics(queries: PoolQuery[], rows: QueryAnswers[], phase: Phase, command: Command): GroupMetrics {
+function groupMetrics(queries: PoolQuery[], rows: QueryAnswers[], phase: Phase, command: Command, ndcg: boolean): GroupMetrics {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const scored = queries.flatMap((q) => {
     const a = byId.get(q.id)?.phases[phase];
@@ -93,7 +98,7 @@ function groupMetrics(queries: PoolQuery[], rows: QueryAnswers[], phase: Phase, 
   });
   const s = summarizeRows(scored); // each command's means leave out the queries whose call of that command failed, and no others
   const m = s.metrics[command];
-  return { n: m.n, errored: s.errored[command], mrr: round(m.mrr), success_5: round(m.success_5), ndcg_10: round(m.ndcg_10), banned_above_first: round(m.banned_above_first) };
+  return { n: m.n, errored: s.errored[command], mrr: round(m.mrr), success_5: round(m.success_5), ...(ndcg ? { ndcg_10: round(m.ndcg_10) } : {}), banned_above_first: round(m.banned_above_first) };
 }
 
 /**
@@ -112,9 +117,9 @@ export function retrievalSummary(pool: Pick<Pool, "clusters">, queries: PoolQuer
         COMMANDS.map((c) => [
           c,
           {
-            retire: groupMetrics(retire, raw.rows, p, c),
-            control: groupMetrics(control, raw.rows, p, c),
-            kinds: Object.fromEntries(KINDS.filter((k) => kindsOf(k).length > 0).map((k) => [k, groupMetrics(kindsOf(k), raw.rows, p, c)])),
+            retire: groupMetrics(retire, raw.rows, p, c, false),
+            control: groupMetrics(control, raw.rows, p, c, true),
+            kinds: Object.fromEntries(KINDS.filter((k) => kindsOf(k).length > 0).map((k) => [k, groupMetrics(kindsOf(k), raw.rows, p, c, !hasRetire(cluster.get(kindsOf(k)[0]!.cluster) as Cluster))])),
           },
         ]),
       ),
@@ -125,7 +130,7 @@ export function retrievalSummary(pool: Pick<Pool, "clusters">, queries: PoolQuer
     PHASES.filter((p) => p !== "before").map((p) => [
       p,
       Object.fromEntries(
-        COMMANDS.map((c) => [c, Object.fromEntries((["retire", "control"] as const).map((g) => [g, Object.fromEntries(FIELDS.map((f) => [f, diff(phases[p][c][g][f], phases.before[c][g][f])]))]))]),
+        COMMANDS.map((c) => [c, Object.fromEntries((["retire", "control"] as const).map((g) => [g, Object.fromEntries(FIELDS.filter((f) => f in phases.before[c][g]).map((f) => [f, diff(phases[p][c][g][f] ?? null, phases.before[c][g][f] ?? null)]))]))]),
       ),
     ]),
   ) as RetrievalSummary["delta"];

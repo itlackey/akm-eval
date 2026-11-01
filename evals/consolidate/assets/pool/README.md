@@ -42,6 +42,8 @@ The queries of the retrieval measurement (`../../README.md`, "Search and curate 
 | `stale` | one for each supersedes cluster (5) | in the words of the old value, which the older note matches more closely: the newer note 3, the older note 0 and banned |
 | `control` | one for each note of an overlap (14), contradicts (4) and lookalike (6) cluster that holds a claim its sibling lacks, and one for each single (16) | the note that holds the claim 3, its sibling 1 (same topic, lacks the claim) |
 
+The retire queries are scored with `mrr`, `success_5` and `banned_above_first`, and the control queries with `mrr`, `success_5` and `ndcg_10`. The retire queries have no `ndcg_10`: every note of a duplicate or triple cluster is graded 3, so the correct retirement of one would read as a loss, and on the other retire queries one note is relevant, so it says no more than `mrr`.
+
 `src/pool-retrieval.test.ts` checks them against `labels.json`: a banned note is one the cluster allows to retire, every graded note is in the query's cluster, every cluster has a query.
 
 ## License

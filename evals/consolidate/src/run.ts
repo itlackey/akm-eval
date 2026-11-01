@@ -206,6 +206,7 @@ function printRetrieval(r: RetrievalSummary | { error: string }, m: { unsafe: { 
       for (const field of ["mrr", "success_5", "ndcg_10", "banned_above_first"] as const) {
         const cell = (p: keyof RetrievalSummary["phases"]) => f3(r.phases[p][command][group][field]);
         if (group === "control" && field === "banned_above_first") continue;
+        if (group === "retire" && field === "ndcg_10") continue; // not reported for the retire queries (see GroupMetrics)
         rows.push([group, field, cell("before"), cell("noop"), cell("after_accept"), cell("after")]);
       }
     }

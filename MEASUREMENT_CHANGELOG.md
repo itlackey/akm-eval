@@ -158,7 +158,10 @@ Add a release entry here when a version changes.
     consolidate's continuity check sees what it saw before. After the `proposal list` the run does `akm proposal drain --promote --yes`, asks
     the queries without a reindex (AFTER_ACCEPT), runs `akm index --full` and asks them again (AFTER).
   - New outputs, only with queries: `retrieval.json` (the accepted retirements and the answers), `summary.retrieval` (search and curate `mrr`,
-    `success_5`, `ndcg_10` and `banned_above_first` for the retire and the control queries, by phase and by kind of cluster, the deltas against
+    `success_5` and `banned_above_first` for the retire queries, `mrr`, `success_5` and `ndcg_10` for the control queries, by phase and by
+    kind of cluster. The retire queries have no `ndcg_10`, which departs from the issue's metric list: every note of a duplicate or triple
+    is graded 3, so a correct retirement reads as a loss, and on the other retire queries one note is relevant, so it says no more than
+    `mrr`. The block also holds the deltas against
     BEFORE, the share of accepted retirements whose retired note a query of its cluster still returns, and the labels' verdicts on the accepted
     retirements), `manifest.eval_settings.retrieval: true`, and the queries of each cluster in its manifest input digest. Scored with the retrieval
     eval's own `scoreQuery`; the metrics are not rescored by `scripts/rescore`, which scores the pool metrics only.
