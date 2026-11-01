@@ -76,16 +76,13 @@ export function clusterRows(pool: Pick<Pool, "clusters">, retirements: Retiremen
   });
 }
 
-/** The files loadPoolQueries reads from the pool folder, for the digest of the queries a run asks. */
-export const QUERY_FILES = ["queries.jsonl", "qrels.jsonl"];
-
 /**
  * Reads assets/pool/queries.jsonl and qrels.jsonl, in the retrieval eval's format with a `cluster` on each query, and checks them against the pool: every cluster has a query, every
  * graded note is a note of the query's cluster, every query has a note graded 2 or more, and a banned note is one the cluster allows to retire.
  */
 export function loadPoolQueries(dir: string, pool: Pick<Pool, "clusters">): PoolQuery[] {
-  const queriesFile = join(dir, QUERY_FILES[0] as string);
-  const qrelsFile = join(dir, QUERY_FILES[1] as string);
+  const queriesFile = join(dir, "queries.jsonl");
+  const qrelsFile = join(dir, "qrels.jsonl");
   const text = readFileSync(queriesFile, "utf8");
   const queries = parseQueries(text, queriesFile);
   const qrels = parseQrels(readFileSync(qrelsFile, "utf8"), qrelsFile);

@@ -157,8 +157,3 @@ export function retrievalSummary(pool: Pick<Pool, "clusters">, queries: PoolQuer
     seconds: raw.seconds,
   };
 }
-
-/** What retrieval.json holds when a step of the measurement failed: the pool's own metrics stand, and this says why there are none for retrieval. */
-export interface RetrievalFailed {
-  error: string;
-}
