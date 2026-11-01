@@ -47,7 +47,7 @@ One JSON object per line.
 | `expected` | task queries only: the refs of the assets the author expected to answer it. Empty when the library has no answer |
 | `searchArgs` | optional: extra `akm search` arguments for this query, described below. Not `--`, `--limit`, `--format` or `--detail`: the runner sets those |
 
-`searchArgs` is an optional array of existing `akm search` CLI arguments, for example `["--filter", "user=alice", "--belief", "current"]`. The collector and label pool pass them before `--` to both keyword and semantic search. Curate keeps its usual invocation: this field does not add filters to commands that lack them. Arguments are direct argv, with no shell expansion. `--`, `--limit`, `--format` and `--detail` are the runner's own and are rejected. akm ignores flags it does not declare, so use only flags the pinned akm build supports: an unknown flag returns unfiltered results that score as if the filter had applied.
+`searchArgs` is an optional array of existing `akm search` CLI arguments, for example `["--filter", "user=alice", "--belief", "current"]`. The collector and label pool pass them before `--` to both keyword and semantic search. Curate keeps its usual invocation: this field does not add filters to commands that lack them. Arguments are direct argv, with no shell expansion. `--`, `--limit`, `--format` and `--detail` are the runner's own and are rejected. Use only flags the pinned akm build supports. akm 0.10.261022 refuses an unknown flag (exit 2, `UNKNOWN_FLAG`) and the call is counted as errored; an older build ignores it, and returns unfiltered results that score as if the filter had applied. A query that has a `sentinel` in the qrels (see `dated/README.md`) is guarded against both: the run marks the column `unsupported` instead.
 
 ### How they were written
 
@@ -83,6 +83,7 @@ One JSON object per line, one per pair of a task query and an asset.
 | `reason` | the judge's reason, in about 25 words |
 | `alias_of` | optional canonical ref of the same physical asset, verified by the label author; share one grade/ideal-ranking identity |
 | `banned` | optional, `true` on a pair of grade 0 that must never rank above a relevant asset. The library has none. See "books/" |
+| `sentinel` | optional, `true` on a banned pair of a query that has `searchArgs`: the asset outside the filter's window that matches best. Only the dated set uses it. See `dated/README.md` |
 | `judge` | optional, the model that graded the pair. `label` writes it |
 | `prompt_sha256` | optional, a digest of the prompt the judge was given: its version, system text, the layout of the message and the 16,000-character window |
 | `date` | optional, the UTC day the pair was graded, such as `2026-10-11` |

@@ -1,0 +1,153 @@
+{"id":"d01","ref":"memories/pager-handoff-thursday","grade":3,"reason":"In the window of the filter and answers the query. Observed 2026-08-18."}
+{"id":"d01","ref":"memories/pager-handoff-2025","grade":0,"reason":"Outside the window and the best unfiltered match: it comes back only when the build ignores the filter.","banned":true,"sentinel":true}
+{"id":"d01","ref":"memories/pager-handoff-autumn-trial","grade":0,"reason":"Observed 2025-11-03 but updated 2026-09-20: the filter uses the observed date, so it is outside the window.","banned":true}
+{"id":"d02","ref":"knowledge/backup-retention-policy","grade":3,"reason":"In the window of the filter and answers the query. Updated 2026-09-02, no observed date."}
+{"id":"d02","ref":"knowledge/backup-retention-2025","grade":0,"reason":"Outside the window and the best unfiltered match: it comes back only when the build ignores the filter.","banned":true,"sentinel":true}
+{"id":"d03","ref":"memories/staging-db-host-before-migration","grade":3,"reason":"In the window of the filter and answers the query. Observed 2026-02-10 but updated 2026-09-01: the filter uses the observed date."}
+{"id":"d03","ref":"memories/staging-db-host-first","grade":2,"reason":"In the window of the filter and answers the query. Observed 2025-12-05."}
+{"id":"d03","ref":"memories/staging-db-host-current","grade":0,"reason":"Outside the window and the best unfiltered match: it comes back only when the build ignores the filter.","banned":true,"sentinel":true}
+{"id":"d04","ref":"knowledge/release-freeze-2025","grade":3,"reason":"In the window of the filter and answers the query. Updated 2025-11-20."}
+{"id":"d04","ref":"knowledge/release-freeze-2026","grade":0,"reason":"Outside the window and the best unfiltered match: it comes back only when the build ignores the filter.","banned":true,"sentinel":true}
+{"id":"d05","ref":"memories/invoice-approval-limit-raised","grade":3,"reason":"In the window of the filter and answers the query. Observed 2026-07-21."}
+{"id":"d05","ref":"memories/invoice-approval-limit-2025","grade":0,"reason":"Outside the window and the best unfiltered match: it comes back only when the build ignores the filter.","banned":true,"sentinel":true}
+{"id":"d06","ref":"memories/cert-renewal-lead-time-spring","grade":3,"reason":"In the window of the filter and answers the query. Observed 2026-03-12."}
+{"id":"d06","ref":"memories/cert-renewal-lead-time-2025","grade":0,"reason":"Outside the window and the best unfiltered match: it comes back only when the build ignores the filter.","banned":true,"sentinel":true}
+{"id":"d06","ref":"memories/cert-renewal-lead-time-autumn","grade":0,"reason":"Observed 2026-10-02, after the end of the window.","banned":true}
+{"id":"d07","ref":"memories/laptop-refresh-cycle-2026","grade":3,"reason":"The newer version of the same fact."}
+{"id":"d07","ref":"memories/laptop-refresh-cycle-2025","grade":0,"reason":"The older version of the same fact: it must not rank above the newer one.","banned":true}
+{"id":"d08","ref":"memories/badge-reader-reset","grade":3,"reason":"The newer version of the same fact."}
+{"id":"d08","ref":"memories/badge-reader-reset-steps","grade":0,"reason":"The older version of the same fact: it must not rank above the newer one.","banned":true}
+{"id":"d09","ref":"knowledge/expense-report-deadline-2026","grade":3,"reason":"The newer version of the same fact."}
+{"id":"d09","ref":"knowledge/expense-report-deadline-2025","grade":0,"reason":"The older version of the same fact: it must not rank above the newer one.","banned":true}
+{"id":"d10","ref":"memories/parking-permit-issue-2026","grade":3,"reason":"The newer version of the same fact. It has an observed date; the older one has only an updated date."}
+{"id":"d10","ref":"memories/parking-permit-issue-2025","grade":0,"reason":"The older version of the same fact: it must not rank above the newer one.","banned":true}
+{"id":"d11","ref":"knowledge/guest-wifi-rotation","grade":3,"reason":"The only note on the topic, and it has no date."}
+{"id":"d11","ref":"memories/guest-wifi-vendor-contact","grade":1,"reason":"Same topic, dated, does not say how the password is rotated."}
+{"id":"d12","ref":"memories/standing-desk-reimbursement","grade":3,"reason":"The only note on the topic, and it has no date."}
+{"id":"d01","ref":"knowledge/guest-wifi-rotation","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"memories/guest-wifi-vendor-contact","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"knowledge/release-freeze-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"memories/meeting-room-booking","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"memories/staging-db-host-before-migration","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"knowledge/release-freeze-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"memories/badge-reader-reset","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/staging-db-host-current","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/staging-db-host-first","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/staging-db-host-before-migration","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/laptop-refresh-cycle-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/laptop-refresh-cycle-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/cert-renewal-lead-time-spring","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/cert-renewal-lead-time-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"knowledge/release-freeze-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"knowledge/backup-retention-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"knowledge/backup-retention-policy","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"memories/guest-wifi-vendor-contact","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"memories/pager-handoff-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"memories/pager-handoff-thursday","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"knowledge/onboarding-laptop-image","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"memories/meeting-room-booking","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/meeting-room-booking","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"knowledge/backup-retention-policy","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"knowledge/backup-retention-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/pager-handoff-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/staging-db-host-first","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/parking-permit-issue-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/parking-permit-issue-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/cert-renewal-lead-time-spring","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"memories/guest-wifi-vendor-contact","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"knowledge/release-freeze-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"knowledge/release-freeze-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"memories/standing-desk-reimbursement","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"knowledge/expense-report-deadline-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"knowledge/expense-report-deadline-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"knowledge/backup-retention-policy","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"memories/parking-permit-issue-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"memories/pager-handoff-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"memories/pager-handoff-autumn-trial","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"knowledge/release-freeze-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"knowledge/release-freeze-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"memories/pager-handoff-thursday","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"memories/badge-reader-reset-steps","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"memories/laptop-refresh-cycle-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d07","ref":"knowledge/onboarding-laptop-image","grade":1,"reason":"Same general topic (laptops), but it does not say how often they are refreshed."}
+{"id":"d07","ref":"knowledge/backup-retention-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d07","ref":"knowledge/backup-retention-policy","grade":0,"reason":"Unrelated to the query."}
+{"id":"d07","ref":"memories/standing-desk-reimbursement","grade":0,"reason":"Unrelated to the query."}
+{"id":"d07","ref":"memories/coffee-machine-descaling","grade":0,"reason":"Unrelated to the query."}
+{"id":"d07","ref":"memories/cert-renewal-lead-time-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d07","ref":"memories/cert-renewal-lead-time-autumn","grade":0,"reason":"Unrelated to the query."}
+{"id":"d07","ref":"knowledge/guest-wifi-rotation","grade":0,"reason":"Unrelated to the query."}
+{"id":"d08","ref":"knowledge/guest-wifi-rotation","grade":0,"reason":"Unrelated to the query."}
+{"id":"d08","ref":"knowledge/onboarding-laptop-image","grade":0,"reason":"Unrelated to the query."}
+{"id":"d08","ref":"memories/laptop-refresh-cycle-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d08","ref":"memories/pager-handoff-autumn-trial","grade":0,"reason":"Unrelated to the query."}
+{"id":"d08","ref":"memories/laptop-refresh-cycle-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d08","ref":"memories/guest-wifi-vendor-contact","grade":0,"reason":"Unrelated to the query."}
+{"id":"d08","ref":"memories/invoice-approval-limit-raised","grade":0,"reason":"Unrelated to the query."}
+{"id":"d08","ref":"memories/cert-renewal-lead-time-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d09","ref":"memories/standing-desk-reimbursement","grade":1,"reason":"Mentions the expense report, but does not say when it is due."}
+{"id":"d09","ref":"memories/pager-handoff-autumn-trial","grade":0,"reason":"Unrelated to the query."}
+{"id":"d09","ref":"knowledge/backup-retention-policy","grade":0,"reason":"Unrelated to the query."}
+{"id":"d09","ref":"memories/invoice-approval-limit-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d09","ref":"memories/invoice-approval-limit-raised","grade":0,"reason":"Unrelated to the query."}
+{"id":"d09","ref":"memories/pager-handoff-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d09","ref":"memories/meeting-room-booking","grade":0,"reason":"Unrelated to the query."}
+{"id":"d09","ref":"knowledge/release-freeze-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d10","ref":"memories/pager-handoff-autumn-trial","grade":0,"reason":"Unrelated to the query."}
+{"id":"d10","ref":"knowledge/release-freeze-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d10","ref":"knowledge/release-freeze-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d10","ref":"memories/staging-db-host-before-migration","grade":0,"reason":"Unrelated to the query."}
+{"id":"d10","ref":"memories/pager-handoff-thursday","grade":0,"reason":"Unrelated to the query."}
+{"id":"d10","ref":"knowledge/expense-report-deadline-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d10","ref":"knowledge/expense-report-deadline-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d10","ref":"memories/meeting-room-booking","grade":0,"reason":"Unrelated to the query."}
+{"id":"d11","ref":"memories/pager-handoff-thursday","grade":0,"reason":"Unrelated to the query."}
+{"id":"d11","ref":"memories/pager-handoff-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d11","ref":"knowledge/onboarding-laptop-image","grade":0,"reason":"Unrelated to the query."}
+{"id":"d11","ref":"memories/pager-handoff-autumn-trial","grade":0,"reason":"Unrelated to the query."}
+{"id":"d11","ref":"memories/badge-reader-reset-steps","grade":0,"reason":"Unrelated to the query."}
+{"id":"d11","ref":"memories/meeting-room-booking","grade":0,"reason":"Unrelated to the query."}
+{"id":"d11","ref":"memories/laptop-refresh-cycle-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d11","ref":"memories/badge-reader-reset","grade":0,"reason":"Unrelated to the query."}
+{"id":"d12","ref":"memories/invoice-approval-limit-raised","grade":0,"reason":"Unrelated to the query."}
+{"id":"d12","ref":"memories/invoice-approval-limit-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d12","ref":"memories/laptop-refresh-cycle-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d12","ref":"memories/laptop-refresh-cycle-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d12","ref":"knowledge/expense-report-deadline-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d12","ref":"memories/pager-handoff-autumn-trial","grade":0,"reason":"Unrelated to the query."}
+{"id":"d12","ref":"knowledge/backup-retention-policy","grade":0,"reason":"Unrelated to the query."}
+{"id":"d12","ref":"memories/meeting-room-booking","grade":0,"reason":"Unrelated to the query."}
+{"id":"d12","ref":"knowledge/expense-report-deadline-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d07","ref":"memories/staging-db-host-first","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"knowledge/backup-retention-policy","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"knowledge/expense-report-deadline-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"memories/cert-renewal-lead-time-autumn","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"memories/invoice-approval-limit-raised","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"memories/laptop-refresh-cycle-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"memories/parking-permit-issue-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d01","ref":"memories/staging-db-host-current","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"knowledge/expense-report-deadline-2026","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/badge-reader-reset","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/cert-renewal-lead-time-autumn","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/coffee-machine-descaling","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/invoice-approval-limit-raised","grade":0,"reason":"Unrelated to the query."}
+{"id":"d02","ref":"memories/pager-handoff-thursday","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"knowledge/release-freeze-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"memories/cert-renewal-lead-time-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"memories/cert-renewal-lead-time-spring","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"memories/laptop-refresh-cycle-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d03","ref":"memories/pager-handoff-autumn-trial","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/cert-renewal-lead-time-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/invoice-approval-limit-2025","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/pager-handoff-autumn-trial","grade":0,"reason":"Unrelated to the query."}
+{"id":"d04","ref":"memories/staging-db-host-before-migration","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"knowledge/onboarding-laptop-image","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"memories/badge-reader-reset","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"memories/cert-renewal-lead-time-autumn","grade":0,"reason":"Unrelated to the query."}
+{"id":"d05","ref":"memories/cert-renewal-lead-time-spring","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"knowledge/onboarding-laptop-image","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"memories/badge-reader-reset","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"memories/coffee-machine-descaling","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"memories/guest-wifi-vendor-contact","grade":0,"reason":"Unrelated to the query."}
+{"id":"d06","ref":"memories/staging-db-host-before-migration","grade":0,"reason":"Unrelated to the query."}
+{"id":"d08","ref":"knowledge/release-freeze-2026","grade":0,"reason":"Unrelated to the query."}

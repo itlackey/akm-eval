@@ -33,9 +33,13 @@ Results go to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (`priva
 
 `--cases DIR` runs a labelled set of yours. The folder holds:
 
-- `queries.jsonl` and `qrels.jsonl`, in the format of `assets/README.md`. A query whose `kind` is `nontask` (or `chitchat`, `notification`, `log`, `status`) should get no result; every other query needs grades. A query can carry `searchArgs`, extra `akm search` flags; akm ignores a flag it does not know, so read the unknown-flag warning in `assets/README.md` first.
+- `queries.jsonl` and `qrels.jsonl`, in the format of `assets/README.md`. A query whose `kind` is `nontask` (or `chitchat`, `notification`, `log`, `status`) should get no result; every other query needs grades. A query can carry `searchArgs`, extra `akm search` flags; akm 0.10 refuses a flag it does not know, and older builds ignored it, so read the unknown-flag warning in `assets/README.md` first.
 - `library/`: the folder akm indexes, or a link to it. The refs in `qrels.jsonl` are the refs `akm search` prints for it.
 - `bundles.json`, only when `library/` is a folder of bundles: `{ "notes": "akm", "site": "website-snapshot" }`, each bundle's folder and adapter. Each bundle is indexed in place, read only, and its refs are `<folder>//<path>`.
+
+## A dated set: `--cases evals/retrieval/assets/dated`
+
+A separate, optional set for akm's date filters (`--since`, `--until` on `akm search`) and its recency tie-break: [its README](assets/dated/README.md). It has filter queries, tie-break queries and controls, and a sentinel guard. A filter query's qrels carry a `sentinel`, a banned asset outside the window that an unfiltered search ranks first. A build that ignores the flags, or refuses them, does not get its filter queries scored: the summary counts them under `unsupported` and gives the reason, and `by_kind` reports the kinds apart. The public collections and the eval's version are unchanged.
 
 ## How a query is scored
 

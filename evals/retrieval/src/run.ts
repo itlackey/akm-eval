@@ -111,6 +111,12 @@ interface Summary {
   metrics: Columns<SystemMetrics>;
   /** The share of inputs where akm returned nothing: for non-task inputs, and for task queries with no relevant asset. */
   abstention: { non_task: Columns<Abstention>; no_answer: Columns<Abstention> };
+  /** Only for a set with filter queries (sentinels in its qrels, see guard.ts): how many of its filter queries each column left out of the metrics because akm does not apply their flags. */
+  unsupported?: Columns<number>;
+  /** Why, in a sentence, or null when every column applied the flags. */
+  unsupported_reason?: string | null;
+  /** Only for a set with filter queries: the metrics of each query kind, such as filter, tiebreak and control. */
+  by_kind?: Record<string, Columns<SystemMetrics>>;
   /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
@@ -160,6 +166,14 @@ function printSummary(s: Summary): void {
   const ab = (g: Columns<Abstention>) => systems.map((sys) => `${at(g, sys).abstained}/${at(g, sys).n} ${pct(at(g, sys).rate)}`.padEnd(COLUMN)).join("  ").trimEnd();
   if (a.non_task.search.n > 0) console.log(`  returned nothing, non-task inputs        ${ab(a.non_task)}`);
   if (a.no_answer.search.n > 0) console.log(`  returned nothing, task without answer    ${ab(a.no_answer)}`);
+  if (s.unsupported_reason) console.log(`  UNSUPPORTED: ${s.unsupported_reason}`);
+  for (const [kind, km] of Object.entries(s.by_kind ?? {})) {
+    console.log(`  ${kind} queries (n ${at(km, "search").n} in search)`);
+    const kindRow = (label: string, f: (x: SystemMetrics) => string) => console.log(`    ${label.padEnd(14)}  ${systems.map((sys) => f(at(km, sys)).padEnd(COLUMN)).join("  ")}`.trimEnd());
+    kindRow("nDCG@10", (x) => fixed(x.ndcg_10));
+    kindRow("Success@5", (x) => pct(x.success_5));
+    kindRow("banned > first", (x) => pct(x.banned_above_first));
+  }
   if (systems.some((sys) => at(s.errored, sys) > 0)) console.log(`  errored calls: ${systems.map((sys) => `${labelOf(sys)} ${at(s.errored, sys)}`).join(", ")} (left out of the numbers)${s.timeouts > 0 ? `, ${s.timeouts} of the calls timed out` : ""}`);
   console.log(`  results      ${relative(ROOT, s.results_dir)}/`);
 }

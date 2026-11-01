@@ -139,6 +139,16 @@ Add a release entry here when a version changes.
   retain the argv. Scoring remains 0.3. Earlier saved runs retain their
   collector identity; use a new collection to measure newly added filters.
 
+- retrieval, dated set (#167): a new optional set, `--cases evals/retrieval/assets/dated`, for akm#1228's `--since`/`--until` filters and
+  recency tie-break. The public sets, their `assets_sha256` and retrieval's version 0.3 are unchanged, and so is every earlier run. Nothing
+  the collector asks akm changes: a query's `searchArgs` already reached `akm search`.
+  - A qrels row can carry `sentinel: true` (on a banned grade 0 pair). A query with a sentinel is a filter query: a search column whose
+    sentinel comes back, or whose call akm refused as `UNKNOWN_FLAG`, is `unsupported`; its filter queries are left out of that column's
+    metrics and are not errors (a refused flag no longer aborts a `--semantic` run). Filter queries are not scored in the curate columns.
+    The summary of a set with sentinels gains `unsupported`, `unsupported_reason` and `by_kind`; the summary of any other set is as before.
+  - Scoring: the case `labels` digest includes `sentinels` only when a case has them, so no public case digest changes. A stored run is
+    judged again by `scripts/rescore`.
+
 ## 0.7.1
 
 No eval changed version. The manifest field `treatment_hints` is now
