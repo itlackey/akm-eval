@@ -103,11 +103,16 @@ export function bannedByQuery(qrels: Qrel[]): Map<string, string[]> {
   return by;
 }
 
-/** Query id to the refs that guard it (a sentinel is also banned). */
+/** Query id to the refs that guard it (a sentinel is also banned), with every alias of each: the guard matches the refs akm returned, before aliases fold. */
 export function sentinelsByQuery(qrels: Qrel[]): Map<string, string[]> {
   const aliases = aliasesOf(qrels);
   const by = new Map<string, string[]>();
-  for (const r of qrels) if (r.sentinel) by.set(r.id, [...(by.get(r.id) ?? []), aliases[r.ref] ?? r.ref]);
+  for (const r of qrels) {
+    if (!r.sentinel) continue;
+    const canonical = aliases[r.ref] ?? r.ref;
+    const forms = [canonical, ...Object.keys(aliases).filter((a) => aliases[a] === canonical)];
+    by.set(r.id, [...new Set([...(by.get(r.id) ?? []), ...forms])]);
+  }
   return by;
 }
 

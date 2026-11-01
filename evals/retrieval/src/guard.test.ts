@@ -95,6 +95,16 @@ describe("the dated set", () => {
     expect(() => parseQrels(JSON.stringify({ ...row, banned: true, sentinel: false }))).toThrow('"sentinel" that is not true on a banned pair');
   });
 
+  test("a sentinel returned under an alias of its ref still trips the guard", () => {
+    const qrels = parseQrels([
+      { id: "f", ref: "k/old", grade: 0, reason: "r", banned: true, sentinel: true },
+      { id: "f", ref: "m/old", grade: 0, reason: "r", alias_of: "k/old" },
+      { id: "f", ref: "k/new", grade: 3, reason: "r" },
+    ].map((r) => JSON.stringify(r)).join("\n"));
+    const [c] = casesOf([{ id: "f", query: "q", kind: "filter", searchArgs: ["--since", "2026-06-01"] }], qrels);
+    expect(evidenceOf(makeRow(c, { search: answer(["m/old", "k/new"]), curate: answer([]) }), "search")).toBe("f: the out-of-window sentinel m/old came back");
+  });
+
   test("a case's labels change with its sentinels, and the public sets' labels do not carry the field", () => {
     const [c] = filters;
     expect(MEASUREMENT.labels(c)).toMatchObject({ sentinels: c.sentinels });
