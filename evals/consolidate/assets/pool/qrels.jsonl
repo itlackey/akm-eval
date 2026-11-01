@@ -1,0 +1,114 @@
+{"id": "duplicate-01-topic", "ref": "memories/halbrook-deploy-freeze", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-01-topic", "ref": "memories/halbrook-freeze-rules", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-02-topic", "ref": "memories/vesper-token-rotation", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-02-topic", "ref": "memories/vesper-service-token-rotation", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-03-topic", "ref": "memories/corvane-backup-schedule", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-03-topic", "ref": "memories/corvane-database-backups", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-04-topic", "ref": "memories/dunmere-feature-flags", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-04-topic", "ref": "memories/dunmere-flag-conventions", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-05-topic", "ref": "memories/fenwick-log-retention", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-05-topic", "ref": "memories/fenwick-how-long-logs-stay", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-06-topic", "ref": "memories/gallowglass-rate-limits", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-06-topic", "ref": "memories/gallowglass-api-request-limits", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-07-topic", "ref": "memories/ilkley-release-checklist", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "duplicate-07-topic", "ref": "memories/ilkley-pre-release-steps", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "triple-01-topic", "ref": "memories/jessamy-oncall-handover", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "triple-01-topic", "ref": "memories/jessamy-oncall-handoff-notes", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "triple-01-topic", "ref": "memories/jessamy-handover-rules", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "triple-02-topic", "ref": "memories/kettering-cert-renewal", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "triple-02-topic", "ref": "memories/kettering-certificate-renewals", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "triple-02-topic", "ref": "memories/kettering-tls-renewal-rules", "grade": 3, "reason": "states the claim; every note of the cluster says the same, so any of them answers"}
+{"id": "subsumed-01-extra-claim", "ref": "memories/lumen-queue-sizing-and-alarms", "grade": 3, "reason": "the bigger note holds the claim the query asks for"}
+{"id": "subsumed-01-extra-claim", "ref": "memories/lumen-queue-sizing", "grade": 0, "reason": "the smaller note lacks the claim the query asks for; it may be retired for the bigger one", "banned": true}
+{"id": "subsumed-02-extra-claim", "ref": "memories/marlowe-image-pipeline-formats", "grade": 3, "reason": "the bigger note holds the claim the query asks for"}
+{"id": "subsumed-02-extra-claim", "ref": "memories/marlowe-image-pipeline", "grade": 0, "reason": "the smaller note lacks the claim the query asks for; it may be retired for the bigger one", "banned": true}
+{"id": "subsumed-03-extra-claim", "ref": "memories/norwood-invoice-rules-and-rounding", "grade": 3, "reason": "the bigger note holds the claim the query asks for"}
+{"id": "subsumed-03-extra-claim", "ref": "memories/norwood-invoice-rules", "grade": 0, "reason": "the smaller note lacks the claim the query asks for; it may be retired for the bigger one", "banned": true}
+{"id": "subsumed-04-extra-claim", "ref": "memories/oakhurst-shift-swap-policy", "grade": 3, "reason": "the bigger note holds the claim the query asks for"}
+{"id": "subsumed-04-extra-claim", "ref": "memories/oakhurst-shift-swaps", "grade": 0, "reason": "the smaller note lacks the claim the query asks for; it may be retired for the bigger one", "banned": true}
+{"id": "subsumed-05-extra-claim", "ref": "memories/pellam-kiosk-update-procedure", "grade": 3, "reason": "the bigger note holds the claim the query asks for"}
+{"id": "subsumed-05-extra-claim", "ref": "memories/pellam-kiosk-update", "grade": 0, "reason": "the smaller note lacks the claim the query asks for; it may be retired for the bigger one", "banned": true}
+{"id": "supersedes-01-current", "ref": "memories/quillon-cache-ttl-current", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-01-current", "ref": "memories/quillon-cache-ttl", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "supersedes-01-stale", "ref": "memories/quillon-cache-ttl-current", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-01-stale", "ref": "memories/quillon-cache-ttl", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "supersedes-02-current", "ref": "memories/rooksby-build-agents-update", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-02-current", "ref": "memories/rooksby-build-agents", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "supersedes-02-stale", "ref": "memories/rooksby-build-agents-update", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-02-stale", "ref": "memories/rooksby-build-agents", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "supersedes-03-current", "ref": "memories/sedgemoor-alert-routing-v2", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-03-current", "ref": "memories/sedgemoor-alert-routing", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "supersedes-03-stale", "ref": "memories/sedgemoor-alert-routing-v2", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-03-stale", "ref": "memories/sedgemoor-alert-routing", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "supersedes-04-current", "ref": "memories/tavistock-retry-budget-revised", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-04-current", "ref": "memories/tavistock-retry-budget", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "supersedes-04-stale", "ref": "memories/tavistock-retry-budget-revised", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-04-stale", "ref": "memories/tavistock-retry-budget", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "supersedes-05-current", "ref": "memories/underhill-office-access-badges", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-05-current", "ref": "memories/underhill-office-access", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "supersedes-05-stale", "ref": "memories/underhill-office-access-badges", "grade": 3, "reason": "the newer note holds the current value and replaces the older one"}
+{"id": "supersedes-05-stale", "ref": "memories/underhill-office-access", "grade": 0, "reason": "the older note states the value that was replaced; it may be retired for the newer one", "banned": true}
+{"id": "overlap-01-a", "ref": "memories/vantage-report-export", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-01-a", "ref": "memories/vantage-report-export-notes", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-01-b", "ref": "memories/vantage-report-export", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-01-b", "ref": "memories/vantage-report-export-notes", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-02-a", "ref": "memories/wexcombe-room-booking", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-02-a", "ref": "memories/wexcombe-room-booking-rules", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-02-b", "ref": "memories/wexcombe-room-booking", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-02-b", "ref": "memories/wexcombe-room-booking-rules", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-03-a", "ref": "memories/yarrow-sensor-calibration", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-03-a", "ref": "memories/yarrow-sensor-calibration-notes", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-03-b", "ref": "memories/yarrow-sensor-calibration", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-03-b", "ref": "memories/yarrow-sensor-calibration-notes", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-04-a", "ref": "memories/zenith-search-ranking", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-04-a", "ref": "memories/zenith-search-ranking-signals", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-04-b", "ref": "memories/zenith-search-ranking", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-04-b", "ref": "memories/zenith-search-ranking-signals", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-05-a", "ref": "memories/ashgrove-onboarding-week", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-05-a", "ref": "memories/ashgrove-onboarding-week-plan", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-05-b", "ref": "memories/ashgrove-onboarding-week", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-05-b", "ref": "memories/ashgrove-onboarding-week-plan", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-06-a", "ref": "memories/bramwell-greenhouse-climate", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-06-a", "ref": "memories/bramwell-greenhouse-climate-targets", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-06-b", "ref": "memories/bramwell-greenhouse-climate", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-06-b", "ref": "memories/bramwell-greenhouse-climate-targets", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-07-a", "ref": "memories/calloway-expense-policy", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "overlap-07-a", "ref": "memories/calloway-expense-policy-summary", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-07-b", "ref": "memories/calloway-expense-policy", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "overlap-07-b", "ref": "memories/calloway-expense-policy-summary", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "contradicts-01-a", "ref": "memories/delmont-session-timeout", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "contradicts-01-a", "ref": "memories/delmont-session-settings", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "contradicts-01-b", "ref": "memories/delmont-session-timeout", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "contradicts-01-b", "ref": "memories/delmont-session-settings", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "contradicts-02-a", "ref": "memories/eastcott-nightly-job", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "contradicts-02-a", "ref": "memories/eastcott-nightly-job-timing", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "contradicts-02-b", "ref": "memories/eastcott-nightly-job", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "contradicts-02-b", "ref": "memories/eastcott-nightly-job-timing", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "lookalike-01-a", "ref": "memories/kiln-3-firing", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "lookalike-01-a", "ref": "memories/kiln-7-firing", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "lookalike-01-b", "ref": "memories/kiln-3-firing", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "lookalike-01-b", "ref": "memories/kiln-7-firing", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "lookalike-02-a", "ref": "memories/orders-queue-settings", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "lookalike-02-a", "ref": "memories/invoices-queue-settings", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "lookalike-02-b", "ref": "memories/orders-queue-settings", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "lookalike-02-b", "ref": "memories/invoices-queue-settings", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "lookalike-03-a", "ref": "memories/north-region-failover", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "lookalike-03-a", "ref": "memories/south-region-failover", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "lookalike-03-b", "ref": "memories/north-region-failover", "grade": 1, "reason": "same topic, but this note does not hold the claim the query asks for"}
+{"id": "lookalike-03-b", "ref": "memories/south-region-failover", "grade": 3, "reason": "holds the claim the query asks for; no other note of the pool does"}
+{"id": "single-01-control", "ref": "memories/harrow-coffee-rota", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-02-control", "ref": "memories/ivybridge-bike-store", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-03-control", "ref": "memories/juniper-translation-glossary", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-04-control", "ref": "memories/kestrel-drone-battery-care", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-05-control", "ref": "memories/lindenhall-parking-rules", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-06-control", "ref": "memories/moorfield-onboarding-quiz", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-07-control", "ref": "memories/northgate-invoice-archive", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-08-control", "ref": "memories/oldcastle-ferry-timetable", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-09-control", "ref": "memories/pinewood-label-printer", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-10-control", "ref": "memories/quarry-hill-sampling-plan", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-11-control", "ref": "memories/ravenscar-podcast-gear", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-12-control", "ref": "memories/stanmore-library-loans", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-13-control", "ref": "memories/thornley-fire-drill", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-14-control", "ref": "memories/ulverston-wiki-style", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-15-control", "ref": "memories/wetherby-courier-contract", "grade": 3, "reason": "the only note on this subject"}
+{"id": "single-16-control", "ref": "memories/yewdale-trail-closures", "grade": 3, "reason": "the only note on this subject"}

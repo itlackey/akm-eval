@@ -1,0 +1,64 @@
+{"id": "duplicate-01-topic", "cluster": "duplicate-01", "query": "who can lift the Friday deploy freeze at Halbrook and for how long", "kind": "topic", "expected": ["memories/halbrook-deploy-freeze", "memories/halbrook-freeze-rules"]}
+{"id": "duplicate-02-topic", "cluster": "duplicate-02", "query": "what happens when a Vesper service token has expired", "kind": "topic", "expected": ["memories/vesper-token-rotation", "memories/vesper-service-token-rotation"]}
+{"id": "duplicate-03-topic", "cluster": "duplicate-03", "query": "how long does Corvane keep full database backups", "kind": "topic", "expected": ["memories/corvane-backup-schedule", "memories/corvane-database-backups"]}
+{"id": "duplicate-04-topic", "cluster": "duplicate-04", "query": "how are Dunmere feature flags named and cleaned up", "kind": "topic", "expected": ["memories/dunmere-feature-flags", "memories/dunmere-flag-conventions"]}
+{"id": "duplicate-05-topic", "cluster": "duplicate-05", "query": "how long do Fenwick audit logs stay before they are deleted", "kind": "topic", "expected": ["memories/fenwick-log-retention", "memories/fenwick-how-long-logs-stay"]}
+{"id": "duplicate-06-topic", "cluster": "duplicate-06", "query": "Gallowglass API request limit per minute and what to do after a 429", "kind": "topic", "expected": ["memories/gallowglass-rate-limits", "memories/gallowglass-api-request-limits"]}
+{"id": "duplicate-07-topic", "cluster": "duplicate-07", "query": "what the Ilkley team checks before a release goes out", "kind": "topic", "expected": ["memories/ilkley-release-checklist", "memories/ilkley-pre-release-steps"]}
+{"id": "triple-01-topic", "cluster": "triple-01", "query": "how the Jessamy on-call engineer hands the pager to the next shift", "kind": "topic", "expected": ["memories/jessamy-oncall-handover", "memories/jessamy-oncall-handoff-notes", "memories/jessamy-handover-rules"]}
+{"id": "triple-02-topic", "cluster": "triple-02", "query": "when are Kettering TLS certificates renewed and what is installed first", "kind": "topic", "expected": ["memories/kettering-cert-renewal", "memories/kettering-certificate-renewals", "memories/kettering-tls-renewal-rules"]}
+{"id": "subsumed-01-extra-claim", "cluster": "subsumed-01", "query": "which metric counts the messages a full Lumen queue drops", "kind": "extra-claim", "expected": ["memories/lumen-queue-sizing-and-alarms"]}
+{"id": "subsumed-02-extra-claim", "cluster": "subsumed-02", "query": "what happens to an animated GIF uploaded to Marlowe", "kind": "extra-claim", "expected": ["memories/marlowe-image-pipeline-formats"]}
+{"id": "subsumed-03-extra-claim", "cluster": "subsumed-03", "query": "are Norwood invoice amounts rounded before or after the tax is added", "kind": "extra-claim", "expected": ["memories/norwood-invoice-rules-and-rounding"]}
+{"id": "subsumed-04-extra-claim", "cluster": "subsumed-04", "query": "can an Oakhurst night shift be swapped for a day shift", "kind": "extra-claim", "expected": ["memories/oakhurst-shift-swap-policy"]}
+{"id": "subsumed-05-extra-claim", "cluster": "subsumed-05", "query": "which Pellam kiosks get a software update first", "kind": "extra-claim", "expected": ["memories/pellam-kiosk-update-procedure"]}
+{"id": "supersedes-01-current", "cluster": "supersedes-01", "query": "how long does the Quillon response cache keep entries", "kind": "current", "expected": ["memories/quillon-cache-ttl-current"]}
+{"id": "supersedes-01-stale", "cluster": "supersedes-01", "query": "Quillon cache keeps entries for 10 minutes", "kind": "stale", "expected": ["memories/quillon-cache-ttl-current"]}
+{"id": "supersedes-02-current", "cluster": "supersedes-02", "query": "how many build agents does Rooksby run", "kind": "current", "expected": ["memories/rooksby-build-agents-update"]}
+{"id": "supersedes-02-stale", "cluster": "supersedes-02", "query": "Rooksby builds run on 6 agents", "kind": "stale", "expected": ["memories/rooksby-build-agents-update"]}
+{"id": "supersedes-03-current", "cluster": "supersedes-03", "query": "how soon is an unacknowledged Sedgemoor alert escalated to the team lead", "kind": "current", "expected": ["memories/sedgemoor-alert-routing-v2"]}
+{"id": "supersedes-03-stale", "cluster": "supersedes-03", "query": "Sedgemoor alert not acknowledged in 15 minutes is escalated to the team lead", "kind": "stale", "expected": ["memories/sedgemoor-alert-routing-v2"]}
+{"id": "supersedes-04-current", "cluster": "supersedes-04", "query": "what share of calls per minute may the Tavistock gateway use for retries", "kind": "current", "expected": ["memories/tavistock-retry-budget-revised"]}
+{"id": "supersedes-04-stale", "cluster": "supersedes-04", "query": "Tavistock retry budget is 10 percent of the calls in a minute", "kind": "stale", "expected": ["memories/tavistock-retry-budget-revised"]}
+{"id": "supersedes-05-current", "cluster": "supersedes-05", "query": "how long does a new Underhill badge take to arrive", "kind": "current", "expected": ["memories/underhill-office-access-badges"]}
+{"id": "supersedes-05-stale", "cluster": "supersedes-05", "query": "a new Underhill badge takes 2 working days to arrive", "kind": "stale", "expected": ["memories/underhill-office-access-badges"]}
+{"id": "overlap-01-a", "cluster": "overlap-01", "query": "exports over 100000 rows in Vantage are split into files", "kind": "control", "expected": ["memories/vantage-report-export"]}
+{"id": "overlap-01-b", "cluster": "overlap-01", "query": "who can open a Vantage export link", "kind": "control", "expected": ["memories/vantage-report-export-notes"]}
+{"id": "overlap-02-a", "cluster": "overlap-02", "query": "how many people must book the large Wexcombe room", "kind": "control", "expected": ["memories/wexcombe-room-booking"]}
+{"id": "overlap-02-b", "cluster": "overlap-02", "query": "how is catering ordered for the large Wexcombe room", "kind": "control", "expected": ["memories/wexcombe-room-booking-rules"]}
+{"id": "overlap-03-a", "cluster": "overlap-03", "query": "at what temperature are Yarrow sensors in cold stores calibrated", "kind": "control", "expected": ["memories/yarrow-sensor-calibration"]}
+{"id": "overlap-03-b", "cluster": "overlap-03", "query": "who checks the Yarrow reference rig each year", "kind": "control", "expected": ["memories/yarrow-sensor-calibration-notes"]}
+{"id": "overlap-04-a", "cluster": "overlap-04", "query": "do pinned results in Zenith search always appear first", "kind": "control", "expected": ["memories/zenith-search-ranking"]}
+{"id": "overlap-04-b", "cluster": "overlap-04", "query": "how does Zenith search treat results in a language other than the user's", "kind": "control", "expected": ["memories/zenith-search-ranking-signals"]}
+{"id": "overlap-05-a", "cluster": "overlap-05", "query": "what training must an Ashgrove hire finish before production access", "kind": "control", "expected": ["memories/ashgrove-onboarding-week"]}
+{"id": "overlap-05-b", "cluster": "overlap-05", "query": "how many live calls does a support hire at Ashgrove shadow in the first week", "kind": "control", "expected": ["memories/ashgrove-onboarding-week-plan"]}
+{"id": "overlap-06-a", "cluster": "overlap-06", "query": "how much warmer is the Bramwell tomato house kept", "kind": "control", "expected": ["memories/bramwell-greenhouse-climate"]}
+{"id": "overlap-06-b", "cluster": "overlap-06", "query": "when does the Bramwell frost alarm sound", "kind": "control", "expected": ["memories/bramwell-greenhouse-climate-targets"]}
+{"id": "overlap-07-a", "cluster": "overlap-07", "query": "when are taxi rides paid in Calloway expense claims", "kind": "control", "expected": ["memories/calloway-expense-policy"]}
+{"id": "overlap-07-b", "cluster": "overlap-07", "query": "which exchange rate do Calloway foreign currency claims use", "kind": "control", "expected": ["memories/calloway-expense-policy-summary"]}
+{"id": "contradicts-01-a", "cluster": "contradicts-01", "query": "Delmont session ends after 30 minutes without a request", "kind": "control", "expected": ["memories/delmont-session-timeout"]}
+{"id": "contradicts-01-b", "cluster": "contradicts-01", "query": "Delmont session ends after 8 hours without a request", "kind": "control", "expected": ["memories/delmont-session-settings"]}
+{"id": "contradicts-02-a", "cluster": "contradicts-02", "query": "Eastcott nightly job starts at 01:30 UTC", "kind": "control", "expected": ["memories/eastcott-nightly-job"]}
+{"id": "contradicts-02-b", "cluster": "contradicts-02", "query": "Eastcott nightly job starts at 04:00 UTC", "kind": "control", "expected": ["memories/eastcott-nightly-job-timing"]}
+{"id": "lookalike-01-a", "cluster": "lookalike-01", "query": "how hot does the firing of kiln 3 get", "kind": "control", "expected": ["memories/kiln-3-firing"]}
+{"id": "lookalike-01-b", "cluster": "lookalike-01", "query": "on which day is kiln 7 fired", "kind": "control", "expected": ["memories/kiln-7-firing"]}
+{"id": "lookalike-02-a", "cluster": "lookalike-02", "query": "how many messages does the orders queue hold at most", "kind": "control", "expected": ["memories/orders-queue-settings"]}
+{"id": "lookalike-02-b", "cluster": "lookalike-02", "query": "how long do messages in the invoices queue last before they expire", "kind": "control", "expected": ["memories/invoices-queue-settings"]}
+{"id": "lookalike-03-a", "cluster": "lookalike-03", "query": "which region does the North region fail over to", "kind": "control", "expected": ["memories/north-region-failover"]}
+{"id": "lookalike-03-b", "cluster": "lookalike-03", "query": "after how many minutes of failed health checks does the South region fail over", "kind": "control", "expected": ["memories/south-region-failover"]}
+{"id": "single-01-control", "cluster": "single-01", "query": "how often is the Harrow kitchen coffee machine descaled", "kind": "control", "expected": ["memories/harrow-coffee-rota"]}
+{"id": "single-02-control", "cluster": "single-02", "query": "which rack do cargo bikes use in the Ivybridge bike store", "kind": "control", "expected": ["memories/ivybridge-bike-store"]}
+{"id": "single-03-control", "cluster": "single-03", "query": "which terms in the Juniper glossary are marked keep and not translated", "kind": "control", "expected": ["memories/juniper-translation-glossary"]}
+{"id": "single-04-control", "cluster": "single-04", "query": "at what charge level are Kestrel survey drone batteries stored", "kind": "control", "expected": ["memories/kestrel-drone-battery-care"]}
+{"id": "single-05-control", "cluster": "single-05", "query": "which Lindenhall parking bays have electric vehicle chargers", "kind": "control", "expected": ["memories/lindenhall-parking-rules"]}
+{"id": "single-06-control", "cluster": "single-06", "query": "what is the pass mark of the Moorfield workshop safety quiz", "kind": "control", "expected": ["memories/moorfield-onboarding-quiz"]}
+{"id": "single-07-control", "cluster": "single-07", "query": "who can open the Northgate archive of old supplier invoices", "kind": "control", "expected": ["memories/northgate-invoice-archive"]}
+{"id": "single-08-control", "cluster": "single-08", "query": "what time does the staff ferry leave Oldcastle pier", "kind": "control", "expected": ["memories/oldcastle-ferry-timetable"]}
+{"id": "single-09-control", "cluster": "single-09", "query": "how to change a roll in the Pinewood label printer", "kind": "control", "expected": ["memories/pinewood-label-printer"]}
+{"id": "single-10-control", "cluster": "single-10", "query": "what follows a nitrate result above the limit in the Quarry Hill water sampling", "kind": "control", "expected": ["memories/quarry-hill-sampling-plan"]}
+{"id": "single-11-control", "cluster": "single-11", "query": "what file format does the Ravenscar podcast record in", "kind": "control", "expected": ["memories/ravenscar-podcast-gear"]}
+{"id": "single-12-control", "cluster": "single-12", "query": "how long is a loan from the Stanmore staff library", "kind": "control", "expected": ["memories/stanmore-library-loans"]}
+{"id": "single-13-control", "cluster": "single-13", "query": "where is the assembly point of the Thornley fire drill", "kind": "control", "expected": ["memories/thornley-fire-drill"]}
+{"id": "single-14-control", "cluster": "single-14", "query": "how wide may screenshots be on the Ulverston wiki", "kind": "control", "expected": ["memories/ulverston-wiki-style"]}
+{"id": "single-15-control", "cluster": "single-15", "query": "within how many days must a lost Wetherby parcel be claimed", "kind": "control", "expected": ["memories/wetherby-courier-contract"]}
+{"id": "single-16-control", "cluster": "single-16", "query": "when does the Yewdale ridge path close because of wind", "kind": "control", "expected": ["memories/yewdale-trail-closures"]}

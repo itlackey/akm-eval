@@ -3,7 +3,7 @@
 // its engine, and counts the notes it proposes to retire that held a claim the other lacked. See ../README.md.
 //
 //   evals/consolidate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]
-//   evals/consolidate/run --pool [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--timeout-ms N]
+//   evals/consolidate/run --pool [--no-retrieval] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--timeout-ms N]
 //
 // The flags, the setup, the pool of workers and the summary are lib/run.ts. This file is what is consolidate's: the spec of the run on pairs, and
 // the spec of `--pool`, which is a run of its own: one sandbox with the whole pool of notes and a single `akm improve`, scored a cluster at a time.
@@ -11,7 +11,8 @@
 //
 // What a run says of how akm embedded the notes goes to its manifest's eval_settings, which scripts/compare shows. The pool run keeps its own marks:
 // the manifest's mode is "pool", its folder is named <model>-pool without --label, and akm's result of the one improve run is written to improve.json
-// beside samples.jsonl and summary.json.
+// beside samples.jsonl and summary.json. Unless --no-retrieval, the pool run also asks akm's search and curate the labelled queries of assets/pool before and after it accepts
+// the retirements it staged: retrieval.json holds the answers, and summary.json the metrics they give (pool-retrieval.ts).
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -23,10 +24,11 @@ import { type CollectContext, IMPROVE_TIMEOUT_MS, NAME, POOL_DEFAULT_BUDGET_MS, 
 import { assetsDigest } from "./inputs.ts";
 import { pct } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { type Pool, loadPool, poolCases, poolFiles } from "./pool.ts";
+import { type Pool, type PoolQuery, type RetrievalRaw, loadPool, loadPoolQueries, poolCases, poolFiles, retrievalSummary } from "./pool.ts";
 import { type PoolCase, type PoolRaw, type PoolRow, makePoolRow, poolErrored, poolSummarize } from "./pool-score.ts";
 import { type Embedder, sandboxMaker } from "./sandbox.ts";
 import { type Row, summarize } from "./score.ts";
+import type { RetrievalSummary } from "./pool-retrieval.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -34,8 +36,11 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 /** What both runs add to the context of a case: how to make a sandbox, how akm embeds the notes, and for a test how long to wait after a rate limit. */
 type Extra = Pick<CollectContext, "newSandbox" | "embedder" | "rateLimitWaitMs">;
 
-/** What the pool run adds: the pool itself, read once for the run, and for a test the time after which akm is killed (see PoolContext). */
-type PoolExtra = Extra & { pool?: Pool; improveTimeoutMs?: number };
+/**
+ * What the pool run adds: the pool itself, read once for the run, for a test the time after which akm is killed (see PoolContext), and the pool's labelled queries unless
+ * the run is --no-retrieval.
+ */
+type PoolExtra = Extra & { pool?: Pool; improveTimeoutMs?: number; queries?: PoolQuery[] };
 
 /** The fields of a summary that are neither the common ones nor from `summarize`: how akm embedded the notes to find pairs. */
 type Embedding = { embedder: Embedder };
@@ -149,7 +154,8 @@ no model, and the same pairs on every run, which the cases were made for. --sema
     flags: "[--pool]",
     extra: `  --pool    one sandbox with the whole pool in assets/pool (80 memories) and a single improve run, as a real night
             consolidates, instead of a sandbox per pair. Public pool only; not with --corpus custom, --corpus all, --cases or --limit.
-            With it --timeout-ms is akm's own wall-clock budget for the run: see \`run --pool --help\`.`,
+            With it --timeout-ms is akm's own wall-clock budget for the run: see \`run --pool --help\`.
+  --no-retrieval  with --pool: do not ask search and curate the pool's queries before and after the retirements are accepted.`,
   },
 };
 
@@ -179,7 +185,36 @@ function printPool(s: Summary & PoolOwn): void {
   const rows: string[][] = [["kind", "clusters", "hit", "retired safe", "retired unsafe", "wrong successor", "untouched"]];
   for (const [kind, k] of Object.entries(m.classes) as [string, any][]) if (k.clusters > 0) rows.push([kind, String(k.clusters), `${k.hit}/${k.with_safe_retirement}`, String(k.retired_safe), String(k.retired_unsafe), String(k.wrong_successor), String(k.untouched)]);
   printTable(rows);
+  if (s.retrieval) printRetrieval(s.retrieval, m);
   console.log(`  results             ${relative(ROOT, s.results_dir)}/`);
+}
+
+const f3 = (x: number | null | undefined): string => (x === null || x === undefined ? "-" : x.toFixed(3));
+const signed = (x: number | null | undefined): string => (x === null || x === undefined ? "-" : `${x >= 0 ? "+" : ""}${x.toFixed(3)}`);
+
+/** The retrieval block of the pool summary: per command and group, the metrics before, after the accept and after the reindex, and the no-op control. */
+function printRetrieval(r: RetrievalSummary | { error: string }, m: { unsafe: { n: number; of: number }; wrong_successor: number }): void {
+  if ("error" in r) {
+    console.log(`  retrieval           none: ${r.error}`);
+    return;
+  }
+  const a = r.accepted;
+  console.log(`\n  retrieval           ${r.n_retire_queries} retire queries and ${r.n_control_queries} control queries; the drain accepted ${a.n} retirements (${a.safe} safe, ${a.unsafe} unsafe, ${a.wrong_successor} wrong successor; the proposals had ${m.unsafe.n} unsafe of ${m.unsafe.of}, ${m.wrong_successor} wrong successor)`);
+  for (const command of ["search", "curate"] as const) {
+    const rows: string[][] = [[command, "metric", "before", "no-op", "after accept", "after"]];
+    for (const group of ["retire", "control"] as const) {
+      for (const field of ["mrr", "success_5", "ndcg_10", "banned_above_first"] as const) {
+        const cell = (p: keyof RetrievalSummary["phases"]) => f3(r.phases[p][command][group][field]);
+        if (group === "control" && field === "banned_above_first") continue;
+        if (group === "retire" && field === "ndcg_10") continue; // not reported for the retire queries (see GroupMetrics)
+        rows.push([group, field, cell("before"), cell("noop"), cell("after_accept"), cell("after")]);
+      }
+    }
+    printTable(rows);
+  }
+  const rr = r.retired_ref_returned;
+  console.log(`  retired note still returned  ${(["search", "curate"] as const).map((c) => `${c} ${rr.before[c].returned}/${rr.before[c].of} before, ${rr.after_accept[c].returned}/${rr.after_accept[c].of} after accept, ${rr.after[c].returned}/${rr.after[c].of} after the reindex`).join("; ")}`);
+  console.log(`  no-op delta (mrr)            ${(["search", "curate"] as const).map((c) => `${c} retire ${signed(r.delta.noop[c].retire.mrr)}, control ${signed(r.delta.noop[c].control.mrr)}`).join("; ")}`);
 }
 
 /** What the pool run says to a custom corpus and to --limit. */
@@ -204,7 +239,11 @@ const POOL_SPEC: EvalSpec<PoolCase, PoolRow, PoolExtra> = {
   prepare: (values, corpora) => {
     if (corpora.length !== 1 || corpora[0]?.name !== "public" || values.limit !== undefined) throw new Error(POOL_ONLY);
     const own = embedding(values);
-    return () => own;
+    if (values["no-retrieval"]) return () => own;
+    // Read now, so that a queries file that does not read stops the run here, before it has spent anything.
+    const dir = join((corpora[0] as ResolvedCorpus).folder, "pool");
+    const queries = loadPoolQueries(dir, loadPool(dir));
+    return () => ({ ...own, queries });
   },
   // The notes are written to the sandbox in the order the pool was read, so the pool is read once more here, whole, and not rebuilt from the clusters.
   openRun: async (_ctx, corpus) => ({ pool: loadPool(join(corpus.folder, "pool")) }),
@@ -212,13 +251,26 @@ const POOL_SPEC: EvalSpec<PoolCase, PoolRow, PoolExtra> = {
     const collected = await collectPool(ctx.pool as Pool, ctx);
     // akm's result of the improve run as it printed it, with the endpoint hidden, beside the rows that were scored from it. A run that failed before akm printed one has none.
     if (collected.improve) writeFileSync(join(ctx.resultsDir as string, "improve.json"), `${hideEndpoint(JSON.stringify(collected.improve, null, 2), ctx.baseUrl)}\n`);
+    // What search and curate answered, a query to a line, and the retirements the drain accepted: the summary's retrieval block is scored from this file (summaryExtras). A run whose
+    // improve failed asked nothing after it, and the file says so.
+    if (ctx.queries) writeRetrieval(join(ctx.resultsDir as string, RETRIEVAL_FILE), collected.retrieval ?? { error: "the pool run failed, so the queries were not asked after it" }, ctx.baseUrl);
     const rows = cases.map((c) => makePoolRow(c, collected.raw.get(c.id) as PoolRaw));
     for (const row of rows) record(row);
     const failed = rows.find(poolErrored);
     return { rows, aborted: failed ? `the pool run failed: ${failed.error}` : undefined };
   },
-  summaryExtras: (cases, _rows, ctx) => ({ mode: "pool", embedder: ctx.embedder ?? "deterministic", n_notes: cases.reduce((n, c) => n + c.notes.length, 0), n_clusters: cases.length, n_cases: 1 }), // the one pool run is the one case
-  manifestExtras: (ctx) => ({ mode: "pool", eval_settings: { embedder: ctx.embedder ?? "deterministic" } }),
+  // what each cluster presented to akm includes the queries of this run's measurement, so a run with them is not the run without (--no-retrieval): its input digests are those of before
+  caseContext: (c, ctx) => (ctx.queries ? ctx.queries.filter((q) => q.cluster === c.id).map(({ id, query, kind, grades, banned }) => ({ id, query, kind, grades, banned })) : undefined),
+  summaryExtras: (cases, _rows, ctx) => ({
+    mode: "pool",
+    embedder: ctx.embedder ?? "deterministic",
+    n_notes: cases.reduce((n, c) => n + c.notes.length, 0),
+    n_clusters: cases.length,
+    n_cases: 1, // the one pool run is the one case
+    ...(ctx.queries ? { retrieval: retrievalOf(ctx) } : {}),
+  }),
+  manifestExtras: (ctx) => ({ mode: "pool", eval_settings: { embedder: ctx.embedder ?? "deterministic", ...(ctx.queries ? { retrieval: true } : {}) } }),
+  options: { "no-retrieval": { type: "boolean" } },
   printSummary: printPool,
   usage: {
     timeout: "akm improve's own wall-clock budget, which akm is given as its --timeout-ms; the eval stops akm 10 minutes after it",
@@ -227,12 +279,30 @@ const POOL_SPEC: EvalSpec<PoolCase, PoolRow, PoolExtra> = {
 Settings come from .env at the repository root. Written for akm 0.9.26. It reads the public pool only, so leave out --corpus custom, --corpus all,
 --cases and --limit. Without --semantic akm embeds the notes with its deterministic word-hash embedder, with it with its built-in model.`,
     limit: "not used with --pool",
-    flags: "--pool",
-    extra: `  --pool    selects this run. --timeout-ms is akm's own wall-clock budget for the improve run (akm's default is 2 hours): a short one makes
+    flags: "--pool [--no-retrieval]",
+    extra: `  --no-retrieval  leave out the retrieval measurement: the run asks akm what it asked before it, and its summary has no \`retrieval\`. Without it the run also
+            asks search and curate the pool's labelled queries: in a copy of the pool (twice), in the improved sandbox after it accepts what is staged
+            (before any reindex), and after a reindex. Needs assets/pool/queries.jsonl and qrels.jsonl.
+  --pool    selects this run. --timeout-ms is akm's own wall-clock budget for the improve run (akm's default is 2 hours): a short one makes
             akm cut the pool to what the budget covers (its "cold-start budget" warning). The eval kills akm 10 minutes after the budget.
             Without --label the results folder is named <UTC date>-<model name>-pool.`,
   },
 };
+
+const RETRIEVAL_FILE = "retrieval.json";
+
+/** retrieval.json: the retirements the drain accepted and the seconds of each step, then the answers to one query on each line; or `{ "error": ... }` when a step failed. */
+function writeRetrieval(file: string, raw: RetrievalRaw | { error: string }, baseUrl: string): void {
+  if ("error" in raw) return writeFileSync(file, `${hideEndpoint(JSON.stringify(raw), baseUrl)}\n`);
+  const head = JSON.stringify({ accepted: raw.accepted, seconds: raw.seconds });
+  writeFileSync(file, `${hideEndpoint(`${head.slice(0, -1)},"rows":[\n${raw.rows.map((r) => JSON.stringify(r)).join(",\n")}\n]}`, baseUrl)}\n`); // akm names the endpoint in some errors
+}
+
+/** The retrieval block of the summary, scored from retrieval.json, or the error that file holds. */
+function retrievalOf(ctx: { queries?: PoolQuery[]; resultsDir?: string; pool?: Pool }): RetrievalSummary | { error: string } {
+  const stored = JSON.parse(readFileSync(join(ctx.resultsDir as string, RETRIEVAL_FILE), "utf8")) as RetrievalRaw | { error: string };
+  return "error" in stored ? stored : retrievalSummary(ctx.pool as Pool, ctx.queries as PoolQuery[], stored);
+}
 
 export const runPool = (ctx: CtxInput<PoolExtra>, resultsParent?: string): Promise<Summary & PoolOwn> =>
   runIn(POOL_SPEC, { name: "public", folder: join(EVAL_DIR, "assets"), rewrite: false, seed: null, flag: "--corpus public" }, ctx, resultsParent) as Promise<Summary & PoolOwn>;

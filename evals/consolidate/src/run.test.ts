@@ -602,6 +602,7 @@ describe("the command with an akm that answers", () => {
     const keep = (path: string) => !path.includes("node_modules");
     cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "src"), join(tree, "evals", "consolidate", "src"), { recursive: true, filter: keep });
+    cpSync(join(REPO, "evals", "retrieval", "src"), join(tree, "evals", "retrieval", "src"), { recursive: true, filter: keep }); // the pool run scores its queries with the retrieval eval's scorer
     cpSync(join(EVAL, "assets", "pool"), join(tree, "evals", "consolidate", "assets", "pool"), { recursive: true });
     const script = join(tree, "fake-akm.ts");
     writeFileSync(script, FAKE_AKM);
@@ -640,7 +641,7 @@ describe("the command with an akm that answers", () => {
 
   test("--pool runs the pool as one improve with the strategy: a run without --timeout-ms sends akm none, as it always did, and one with it sends akm the budget", () => {
     const { exec, stored } = copyOfRepo();
-    const plain = exec(["--pool", "--label", "plain"]);
+    const plain = exec(["--pool", "--no-retrieval", "--label", "plain"]);
     expect([plain.code, plain.err]).toEqual([0, ""]);
     expect(plain.calls.find((c) => c.args[0] === "improve")?.args).toEqual(["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout", "--format", "json"]);
     const { folder, summary, rows } = stored(join("evals", "consolidate", "results"), "plain");
@@ -651,7 +652,7 @@ describe("the command with an akm that answers", () => {
     expect(readdirSync(folder).filter((name) => name !== ".running").sort()).toEqual(["improve.json", "samples.jsonl", "summary.json"]); // akm's result of the improve run is kept beside the rows
     expect(JSON.parse(readFileSync(join(folder, "improve.json"), "utf8"))).toMatchObject({ ok: true, strategy: "consolidate" });
 
-    const budget = exec(["--pool", "--timeout-ms", "123000", "--label", "budget"]);
+    const budget = exec(["--pool", "--no-retrieval", "--timeout-ms", "123000", "--label", "budget"]);
     expect(budget.code).toBe(0);
     expect(budget.calls.find((c) => c.args[0] === "improve")?.args).toEqual(["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout", "--format", "json", "--timeout-ms", "123000"]);
     expect(stored(join("evals", "consolidate", "results"), "budget").summary).toMatchObject({ timeout_ms: 123_000, manifest: { settings: { timeout_ms: 123_000 } } });
@@ -662,7 +663,7 @@ describe("the command with an akm that answers", () => {
     const notes = join(tree, "notes");
     mkdirSync(notes);
     writeFileSync(join(notes, "cases.jsonl"), `${JSON.stringify(mk("d1", "duplicate", "retire-older"))}\n`);
-    for (const args of [["--pool"], ["--pool", "--label", "mine"], ["--cases", notes], ["--cases", notes, "--label", "mine"]]) expect([args, exec(args).code]).toEqual([args, 0]); // the model is m
+    for (const args of [["--pool", "--no-retrieval"], ["--pool", "--no-retrieval", "--label", "mine"], ["--cases", notes], ["--cases", notes, "--label", "mine"]]) expect([args, exec(args).code]).toEqual([args, 0]); // the model is m
     const day = new Date().toISOString().slice(0, 10);
     expect(readdirSync(join(tree, "evals", "consolidate", "results")).sort()).toEqual([`${day}-m-pool`, `${day}-mine`]);
     expect(readdirSync(join(tree, "private", "consolidate", "results")).sort()).toEqual([`${day}-m`, `${day}-mine`]);
