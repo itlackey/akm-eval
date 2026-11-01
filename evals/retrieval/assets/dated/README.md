@@ -21,11 +21,11 @@ It calls no model. The numbers of a run are read by query kind (`by_kind` in `su
 | `tiebreak` | 4 | none | Two versions of one fact in the same words. The newer is graded 3 and the older is `banned`. Before the tie-break the order of two equal scores decides; after it the newer should come first. The older one sorts first in three of the four pairs, and the newer in one, so a tie-break that ignores the date cannot pass them all |
 | `control` | 2 | none | A note without any date, alone or beside a dated note on another aspect of the topic. Its ranking must not move |
 
-The filters read a note's `observed` date and fall back to its `updated` date. Two things in the library test that:
+The filters read a note's `observed` date and fall back to its `updated` date. Three things in the library test that:
 
 - `memories/pager-handoff-autumn-trial` was observed on 2025-11-03 and written on 2026-09-20. Query d01 (`--since 2026-06-01`) bans it, because it is outside the window by its observed date.
 - `memories/staging-db-host-before-migration` was observed on 2026-02-10 and written on 2026-09-01. Query d03 (`--until 2026-04-01`) grades it 3, because it is inside the window by its observed date.
-- The `knowledge/` notes have an `updated` date only, so they test the fallback.
+- The `knowledge/` notes have no `observed` date, only `updated` and a `created` equal to it, so they test the fallback (a fallback to `created` gives the same date).
 
 No window starts or ends on a note's date, so the result does not depend on whether a bound is inclusive. No query puts a date in its text, so akm's `observed:<date>` search hint cannot rank a note.
 
