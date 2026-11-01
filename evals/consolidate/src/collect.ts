@@ -11,10 +11,12 @@ import { join } from "node:path";
 import { type Sandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { LIMIT, ask } from "../../retrieval/src/akm.ts";
 import { type Embedder, embedderEnv, noteAges, withEmbedder } from "./sandbox.ts";
 import type { Case } from "./cases.ts";
 import { type PairPass, type Raw, type RetireProposal, type Row, type UsageRow, makeRow, nameOfRef } from "./score.ts";
 import type { Cluster, Pool, PoolRaw, RunRaw } from "./pool-score.ts";
+import { type Accepted, type Answers, COMMANDS, PHASES, type Phase, type PoolQuery, type QueryAnswers, type RetrievalRaw } from "./pool-retrieval.ts";
 
 export const NAME = "consolidate";
 /** The strategy akm ships for consolidate alone. */
@@ -65,8 +67,11 @@ export type CollectContext = {
   embedder?: Embedder;
 };
 
-/** The pool run's context. `improveTimeoutMs` is the time after which the eval kills akm, in place of the budget and its slack: for tests. */
-export type PoolContext = CollectContext & { overrides: Overrides; improveTimeoutMs?: number };
+/**
+ * The pool run's context. `improveTimeoutMs` is the time after which the eval kills akm, in place of the budget and its slack: for tests. `queries` are the pool's labelled queries,
+ * which the run asks before and after it accepts the retirements it staged; a run without them (`--no-retrieval`) is the pool run as it was before retrieval was measured.
+ */
+export type PoolContext = CollectContext & { overrides: Overrides; improveTimeoutMs?: number; queries?: PoolQuery[] };
 
 const embedderOf = (ctx: { embedder?: Embedder }): Embedder => ctx.embedder ?? "deterministic";
 /** The real embedder loads its model to index, and the first run downloads it, so it gets longer than the hash one. */
@@ -215,10 +220,90 @@ export function rawFromPoolRun(pool: { clusters: Pick<Cluster, "id" | "notes">[]
   return { run, byCluster };
 }
 
-/** What the pool run collected: the raw output of each cluster, and akm's result as it printed it (null when akm printed none). */
+/** What the pool run collected: the raw output of each cluster, akm's result as it printed it (null when akm printed none), and with queries what search and curate answered. */
 export interface PoolCollected {
   raw: Map<string, PoolRaw>;
   improve: unknown;
+  /** Set when the run had queries: their answers, or why there are none. */
+  retrieval?: RetrievalRaw | { error: string };
+}
+
+const retrievalCallMs = (ctx: CollectContext): number | undefined => (embedderOf(ctx) === "real" ? 10 * 60_000 : undefined); // the real embedder embeds each query; ask() has its own limit for the hash one
+
+/** Asks akm for the first results of every query, in search and in curate. A call that fails is an answer with an error (see ask), not a throw. */
+async function answerQueries(sandbox: Sandbox, queries: PoolQuery[], ctx: CollectContext): Promise<Map<string, Answers>> {
+  const out = new Map<string, Answers>();
+  for (const q of queries) {
+    const answers = {} as Answers;
+    for (const command of COMMANDS) {
+      // The pool searches with the embedder of its config, so akm says "semantic" for the hash embedder as well as for the real one.
+      const a = await ask(sandbox, command, q.query, LIMIT, "semantic", retrievalCallMs(ctx), q.searchArgs);
+      answers[command] = { refs: a.refs, seconds: a.seconds, ...(a.error ? { error: a.error } : {}), ...(a.timedOut ? { timedOut: true } : {}) };
+    }
+    out.set(q.id, answers);
+  }
+  return out;
+}
+
+/** Writes the pool into a sandbox of its own and indexes it: what the pool run does before improve, in a copy that improve never touches. */
+async function indexedPool(pool: Pool, ctx: PoolContext): Promise<Sandbox> {
+  const sandbox = ctx.newSandbox();
+  try {
+    writeConfig(sandbox, effectiveConfig(ctx));
+    Object.assign(sandbox.env, embedderEnv(embedderOf(ctx)));
+    writePoolNotes(sandbox, pool);
+    await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: indexTimeout(ctx) });
+    return sandbox;
+  } catch (e) {
+    removeSandbox(sandbox);
+    throw e;
+  }
+}
+
+/**
+ * BEFORE, in a copy of the pool: the queries twice, so that the second run (`noop`) shows how far the same queries move on an index nothing was done to. The copy is not the sandbox
+ * that gets improved: akm records each search in state.db, and consolidate replays a note's past queries to set continuityRisk, which changes which retirements it stages.
+ */
+async function collectBaseline(pool: Pool, queries: PoolQuery[], ctx: PoolContext): Promise<{ before: Map<string, Answers>; noop: Map<string, Answers>; seconds: number }> {
+  const t0 = performance.now();
+  console.log("  retrieval: asking the queries in a copy of the pool, twice");
+  const copy = await indexedPool(pool, ctx);
+  try {
+    const before = await answerQueries(copy, queries, ctx);
+    const noop = await answerQueries(copy, queries, ctx);
+    return { before, noop, seconds: Number(((performance.now() - t0) / 1000).toFixed(1)) };
+  } finally {
+    removeSandbox(copy);
+  }
+}
+
+/**
+ * What the pool run does after it has listed its proposals, in the sandbox that was improved: accepts what is staged, as a user's unattended drain does, asks the queries without a
+ * reindex (AFTER_ACCEPT) and after one (AFTER). The retirements it accepted are read back from the accepted proposals.
+ */
+async function collectAfter(sandbox: Sandbox, queries: PoolQuery[], ctx: PoolContext): Promise<{ accepted: Accepted[]; afterAccept: Map<string, Answers>; after: Map<string, Answers>; seconds: Record<string, number> }> {
+  const seconds: Record<string, number> = {};
+  const timed = async <T>(name: string, f: () => Promise<T>): Promise<T> => {
+    const t0 = performance.now();
+    try {
+      return await f();
+    } finally {
+      seconds[name] = Number(((performance.now() - t0) / 1000).toFixed(1));
+    }
+  };
+  console.log("  retrieval: accepting what is staged, then asking the queries before and after a reindex");
+  await timed("drain", () => runAkmJson(sandbox, ["proposal", "drain", "--promote", "--yes"], { timeoutMs: INDEX_TIMEOUT_MS }));
+  const listing = await runAkmJson(sandbox, ["proposal", "list", "--status", "accepted", "--detail", "full"], { timeoutMs: INDEX_TIMEOUT_MS });
+  const accepted = retireProposals(listing).map((p) => ({ retiredRef: p.retirement.retiredRef, successorRef: p.retirement.successorRef ?? null }));
+  const afterAccept = await timed("after_accept", () => answerQueries(sandbox, queries, ctx));
+  await timed("reindex", () => runAkmJson(sandbox, ["index", "--full"], { timeoutMs: indexTimeout(ctx) }));
+  const after = await timed("after", () => answerQueries(sandbox, queries, ctx));
+  return { accepted, afterAccept, after, seconds };
+}
+
+/** The answers of the phases, a query at a time, as retrieval.json keeps them. */
+function retrievalRows(queries: PoolQuery[], byPhase: Record<Phase, Map<string, Answers>>): QueryAnswers[] {
+  return queries.map((q) => ({ id: q.id, cluster: q.cluster, phases: Object.fromEntries(PHASES.map((p) => [p, byPhase[p].get(q.id) as Answers])) as QueryAnswers["phases"] }));
 }
 
 /**
@@ -228,8 +313,21 @@ export interface PoolCollected {
  *
  * `ctx.timeoutMs` is akm's wall-clock budget for the improve run, and the eval kills akm POOL_KILL_SLACK_MS after it. A run with the default budget
  * leaves `--timeout-ms` out of akm's arguments, as it always did: the default is akm's own.
+ *
+ * With `ctx.queries` the run also measures search and curate. Its baseline is made in a copy before this sandbox exists, and the accepting and the asking come after the proposals are
+ * read, so the commands this sandbox is given up to `proposal list` are the same with and without queries, and the clusters' raw output is scored from that `proposal list`. A step
+ * of the retrieval measurement that fails leaves the pool's metrics as they are and says so in `retrieval.error`.
  */
 export async function collectPool(pool: Pool, ctx: PoolContext): Promise<PoolCollected> {
+  let baseline: Awaited<ReturnType<typeof collectBaseline>> | undefined;
+  let retrievalError: string | undefined;
+  if (ctx.queries) {
+    try {
+      baseline = await collectBaseline(pool, ctx.queries, ctx);
+    } catch (e) {
+      retrievalError = `the baseline of the queries failed: ${hideEndpoint((e as Error).message.slice(0, 300), ctx.baseUrl)}`;
+    }
+  }
   const sandbox = ctx.newSandbox();
   let improveJson: unknown = null;
   let seconds = 0;
@@ -247,7 +345,20 @@ export async function collectPool(pool: Pool, ctx: PoolContext): Promise<PoolCol
     improveJson = JSON.parse(improve.stdout);
     const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: INDEX_TIMEOUT_MS });
     const { run, byCluster } = rawFromPoolRun(pool, improveJson, proposals, seconds);
-    return { raw: new Map(pool.clusters.map((cl) => [cl.id, { run, retire_proposals: byCluster.get(cl.id) ?? [] }])), improve: improveJson };
+    const collected: PoolCollected = { raw: new Map(pool.clusters.map((cl) => [cl.id, { run, retire_proposals: byCluster.get(cl.id) ?? [] }])), improve: improveJson };
+    if (ctx.queries) {
+      if (retrievalError === undefined && baseline) {
+        try {
+          const after = await collectAfter(sandbox, ctx.queries, ctx);
+          const byPhase = { before: baseline.before, noop: baseline.noop, after_accept: after.afterAccept, after: after.after };
+          collected.retrieval = { accepted: after.accepted, rows: retrievalRows(ctx.queries, byPhase), seconds: { baseline: baseline.seconds, ...after.seconds } };
+        } catch (e) {
+          retrievalError = `the retrieval steps after the proposals failed: ${hideEndpoint((e as Error).message.slice(0, 300), ctx.baseUrl)}`;
+        }
+      }
+      if (retrievalError !== undefined) collected.retrieval = { error: retrievalError };
+    }
+    return collected;
   } catch (e) {
     const message = (e as Error).message;
     const error: PoolRaw = { error: hideEndpoint(message.slice(0, 300), ctx.baseUrl), timedOut: isTimeout(message), seconds };

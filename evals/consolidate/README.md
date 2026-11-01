@@ -63,12 +63,32 @@ A real night gives consolidate a whole pool: the pair pass finds pairs among all
 ```
 evals/consolidate/run --pool
 evals/consolidate/run --pool --timeout-ms 600000 --label short-budget
+evals/consolidate/run --pool --no-retrieval    # leave out the search and curate queries: the pool run as it was
 evals/consolidate/run --pool --config-patch private/patches/anti-collapse-off.json
 ```
 
-For the last, save `{ "improve": { "strategies": { "consolidate": { "processes": { "consolidate": { "antiCollapse": { "enabled": false } } } } } } }` as that file. With `--pool`, `--timeout-ms N` is akm's own wall-clock budget for the run (default 7200000, 2 hours, which akm uses when it is given none); a short one makes akm cut the pool for the promote pass, and the eval kills akm 10 minutes after the budget. The pool is one run, so there is no `--concurrency`, and the run fails when its `improve` does. `--pool` reads the public pool only, so it refuses `--corpus custom`, `--corpus all`, `--cases` and `--limit`; `--semantic` and `--label` work as above, and without `--label` the folder is named for the model and `-pool`. The folder holds `summary.json` (its `mode` is `pool`, as its manifest's is), `samples.jsonl` (one row per cluster) and `improve.json`, akm's own result of the improve run with the endpoint written `<MODEL_BASE_URL>`.
+For the last, save `{ "improve": { "strategies": { "consolidate": { "processes": { "consolidate": { "antiCollapse": { "enabled": false } } } } } } }` as that file. With `--pool`, `--timeout-ms N` is akm's own wall-clock budget for the run (default 7200000, 2 hours, which akm uses when it is given none); a short one makes akm cut the pool for the promote pass, and the eval kills akm 10 minutes after the budget. The pool is one run, so there is no `--concurrency`, and the run fails when its `improve` does. `--pool` reads the public pool only, so it refuses `--corpus custom`, `--corpus all`, `--cases` and `--limit`; `--semantic` and `--label` work as above, and without `--label` the folder is named for the model and `-pool`. The folder holds `summary.json` (its `mode` is `pool`, as its manifest's is), `samples.jsonl` (one row per cluster), `improve.json`, akm's own result of the improve run with the endpoint written `<MODEL_BASE_URL>`, and, unless `--no-retrieval`, `retrieval.json`.
 
 The pool has 47 clusters with known outcomes (`assets/pool/README.md`). A retirement is safe (allowed, for an allowed successor), wrong-successor, or unsafe (the note holds a claim no other has). Metrics: `unsafe`, `staged`, `precision`, `recall` (clusters with a note to retire, 19 of 47, where one safe retirement was proposed), `wrong_successor`, `classes`, `pairs`, `calls`, `chunks`, `anti_collapse_injected`, `cold_start_budget` and `warnings`. akm retires one note per chain in a run, so a triple of duplicates ends with one retirement and two failed judgments. One cluster is 5 points of recall. One pool run took about 4.5 minutes and 56 calls on akm 0.9.30.
+
+### Search and curate before and after the retirements are accepted
+
+A retirement that akm stages is accepted unattended by `akm proposal drain --promote --yes`. Does `akm search` and `akm curate` then rank the current note better, without losing a note that is still valid? Unless `--no-retrieval`, a `--pool` run asks both commands the 64 labelled queries of `assets/pool/queries.jsonl` and `qrels.jsonl` (the retrieval eval's format, with a `cluster` on each query; `assets/pool/README.md` says what they are):
+
+| Phase | Where | What it shows |
+|---|---|---|
+| `before` | a copy of the pool that is indexed and left alone | the starting ranking |
+| `noop` | the same copy, the same queries again | the delta from nothing: index noise. About 0 |
+| `after_accept` | the improved sandbox straight after the drain, with no reindex | what a user sees: a retired note is still in the index (akm#1307) |
+| `after` | the same sandbox after `akm index --full` | the ranking once the retirements are in the index |
+
+The copy is a second sandbox written and indexed as the pool's is. It is not the improved one because akm records each search in `state.db`, and consolidate replays a note's past queries to set `continuityRisk`, which changes which retirements it stages. The improved sandbox gets the same commands up to `proposal list` as without queries, and the existing metrics above are scored from that `proposal list`, before anything is accepted: with a deterministic model they equal those of a `--no-retrieval` run. With a real model they move from run to run, as they always did.
+
+The queries: for each cluster with a note that may be retired (duplicate, triple, subsumed, supersedes) a query whose answer is the note that stays, and for a supersedes pair a second query worded like the stale note, so that it matches the stale note more closely. The retired note of a subsumed or supersedes pair is `banned`: it must not outrank the note that stays (`banned_above_first`). A duplicate or triple has no fixed note to retire, so all its notes are graded 3 and none is banned. The other clusters (overlap, contradicts, lookalike, single) are the controls: one query for each note that holds a claim of its own, which must stay findable, so an unsafe retirement shows as lost recall.
+
+`summary.json` gains `retrieval`: for `search` and `curate`, the `mrr`, `success_5`, `ndcg_10` and `banned_above_first` of the retire and the control queries in every phase and by kind of cluster; `delta`, each phase less `before` (`noop` is the control); `retired_ref_returned`, the share of the accepted retirements whose retired note a query of its cluster returns (about 1 before; after the reindex 0; a non-zero `after_accept` is akm#1307); and `accepted`, how the pool's labels judge the retirements the drain accepted, next to the existing `unsafe` and `wrong_successor`, so a gain that comes with unsafe retirements is visible. `retrieval.json` holds the answers a query to a line, from which `retrieval` is scored with the retrieval eval's `scoreQuery`. A step that fails leaves the pool's metrics as they are and `retrieval` says `{ "error": ... }`. The embedder is the pool's: with the default deterministic one the results are hybrid, with `--semantic` they use bge-small (`embedder` and `semantic_verification` in the summary). Setting it up costs a baseline index and 4 x 128 akm calls: about 4.5 minutes on akm 0.10 with a stub model.
+
+`--no-retrieval` runs the pool as it was before: the same akm commands, no `retrieval` and no `retrieval.json`. It is removed at the next version of this eval (0.3), when retrieval becomes part of every pool run; see `MEASUREMENT_CHANGELOG.md`. A per-pair run is not changed.
 
 ## Notes
 

@@ -47,7 +47,8 @@ export const MEASUREMENT: Measurement<AnyCase, Raw | PoolRaw, AnyRow> = {
   caseId: (c) => c.id,
   // The notes go into the bundle under their names, dated by file time (a pair: older says which is older). A cluster of the pool is run in
   // the one bundle with every other note, so the whole pool is part of what akm saw.
-  input: (c) => (isPool(c) ? { notes: c.notes.map((name) => ({ name, text: c.texts[name], age_days: c.ages[name] })), pool_sha256: c.pool_sha256 } : { a: c.a, b: c.b, older: c.older }),
+  // `queries`, the context a pool run gives a cluster (the labelled queries it asks about its notes), is there only for a run that asks them: a --no-retrieval run has the input it always had.
+  input: (c, queries) => (isPool(c) ? { notes: c.notes.map((name) => ({ name, text: c.texts[name], age_days: c.ages[name] })), pool_sha256: c.pool_sha256, ...(queries === undefined ? {} : { queries }) } : { a: c.a, b: c.b, older: c.older }),
   // Everything the scorer reads of the case: which side is safe and the relation, or the cluster's kind and what each note may be retired for.
   labels: (c) => (isPool(c) ? { kind: c.kind, notes: c.notes, retire: c.retire } : { relation: c.relation, safe: c.safe, a: c.a.name, b: c.b.name }),
   rawOf: (row) => (isPoolRow(row) || Array.isArray(row.may_retire) ? poolRawOf(row) : rawOf(row)), // a pool row from before the manifest has no run, but it has may_retire

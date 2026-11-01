@@ -5,9 +5,12 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { sha256Json } from "../../../lib/provenance.ts";
+import { casesOf, parseQrels, parseQueries } from "../../retrieval/src/lib.ts";
+import type { PoolQuery } from "./pool-retrieval.ts";
 import { KINDS, type Cluster, type Pool, type PoolCase, type Retirement, worst } from "./pool-score.ts";
 
 export * from "./pool-score.ts";
+export * from "./pool-retrieval.ts";
 export { POOL_STRATEGY, poolImproveArgs, writePoolNotes } from "./collect.ts";
 
 /** Reads assets/pool: labels.json and memories/<name>.md. Throws on a pool that does not add up. */
@@ -71,4 +74,41 @@ export function clusterRows(pool: Pick<Pool, "clusters">, retirements: Retiremen
     const mine = retirements.filter((r) => r.cluster === cl.id);
     return { id: cl.id, kind: cl.kind, notes: cl.notes, may_retire: Object.keys(cl.retire), outcome: worst(mine), retirements: mine.map(({ cluster: _c, kind: _k, ...r }) => r) };
   });
+}
+
+/** The files loadPoolQueries reads from the pool folder, for the digest of the queries a run asks. */
+export const QUERY_FILES = ["queries.jsonl", "qrels.jsonl"];
+
+/**
+ * Reads assets/pool/queries.jsonl and qrels.jsonl, in the retrieval eval's format with a `cluster` on each query, and checks them against the pool: every cluster has a query, every
+ * graded note is a note of the query's cluster, every query has a note graded 2 or more, and a banned note is one the cluster allows to retire.
+ */
+export function loadPoolQueries(dir: string, pool: Pick<Pool, "clusters">): PoolQuery[] {
+  const queriesFile = join(dir, QUERY_FILES[0] as string);
+  const qrelsFile = join(dir, QUERY_FILES[1] as string);
+  const text = readFileSync(queriesFile, "utf8");
+  const queries = parseQueries(text, queriesFile);
+  const qrels = parseQrels(readFileSync(qrelsFile, "utf8"), qrelsFile);
+  const clusterOf = new Map(text.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as { id: string; cluster?: unknown }).map((q) => [q.id, q.cluster]));
+  const cases = casesOf(queries, qrels);
+  const clusters = new Map(pool.clusters.map((c) => [c.id, c]));
+  const problems: string[] = [];
+  const out: PoolQuery[] = [];
+  for (const c of cases) {
+    const id = clusterOf.get(c.id);
+    const cluster = typeof id === "string" ? clusters.get(id) : undefined;
+    if (!cluster) {
+      problems.push(`${c.id} names the cluster ${JSON.stringify(id)}, which the pool does not have`);
+      continue;
+    }
+    const refs = new Set(cluster.notes.map((n) => `memories/${n}`));
+    for (const ref of Object.keys(c.grades)) if (!refs.has(ref)) problems.push(`${c.id} grades ${ref}, which is not a note of ${cluster.id}`);
+    if (!Object.values(c.grades).some((g) => g >= 2)) problems.push(`${c.id} has no note graded 2 or more`);
+    for (const ref of c.banned) if (!Object.keys(cluster.retire).includes(ref.replace(/^memories\//, ""))) problems.push(`${c.id} bans ${ref}, which ${cluster.id} does not allow to retire`);
+    out.push({ ...c, cluster: cluster.id });
+  }
+  for (const cl of pool.clusters) if (!out.some((q) => q.cluster === cl.id)) problems.push(`${cl.id} has no query`);
+  if (qrels.some((r) => !cases.some((c) => c.id === r.id))) problems.push("qrels.jsonl grades a query that queries.jsonl does not have");
+  if (problems.length > 0) throw new Error(`the pool queries in ${dir}: ${problems[0]}${problems.length > 1 ? ` (and ${problems.length - 1} more)` : ""}`);
+  return out;
 }

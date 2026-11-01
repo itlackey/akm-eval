@@ -149,6 +149,24 @@ Add a release entry here when a version changes.
   - Scoring: the case `labels` digest includes `sentinels` only when a case has them, so no public case digest changes. A stored run is
     judged again by `scripts/rescore`.
 
+- consolidate stays 0.2. `--pool` now also measures search and curate (itlackey/akm-eval#166), on by default, with `--no-retrieval` to opt out. It adds
+  steps and outputs and changes none that the existing metrics read, so every earlier pool run stays comparable:
+  - The pool sandbox that `akm improve` runs in gets the commands it always got, up to the `proposal list` that the existing metrics (`unsafe`,
+    `staged`, `precision`, `recall`, `wrong_successor`, `classes` and the rest) are scored from, before anything is accepted. The queries
+    (`assets/pool/queries.jsonl` and `qrels.jsonl`: 64 queries in the retrieval eval's format, with a `cluster` on each) are first asked in a
+    separate copy of the pool, twice (BEFORE and a no-op control), so no search reaches the improved sandbox's `state.db` before improve and
+    consolidate's continuity check sees what it saw before. After the `proposal list` the run does `akm proposal drain --promote --yes`, asks
+    the queries without a reindex (AFTER_ACCEPT), runs `akm index --full` and asks them again (AFTER).
+  - New outputs, only with queries: `retrieval.json` (the accepted retirements and the answers), `summary.retrieval` (search and curate `mrr`,
+    `success_5`, `ndcg_10` and `banned_above_first` for the retire and the control queries, by phase and by kind of cluster, the deltas against
+    BEFORE, the share of accepted retirements whose retired note a query of its cluster still returns, and the labels' verdicts on the accepted
+    retirements), `manifest.eval_settings.retrieval: true`, and the queries of each cluster in its manifest input digest. Scored with the retrieval
+    eval's own `scoreQuery`; the metrics are not rescored by `scripts/rescore`, which scores the pool metrics only.
+  - `--no-retrieval` runs the pool as it was: the same akm commands, no retrieval fields, no `retrieval.json`, and the same input digests. With a
+    deterministic model (the fixtures and the smoke's stub) the existing metrics are equal with and without it; with a real model they move from run
+    to run, so compare them against the spread of repeated runs.
+  - At the next consolidate version bump (0.3) `--no-retrieval` is removed and retrieval is always on.
+
 ## 0.7.1
 
 No eval changed version. The manifest field `treatment_hints` is now
