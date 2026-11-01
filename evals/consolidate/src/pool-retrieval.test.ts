@@ -121,6 +121,9 @@ describe("retrievalSummary", () => {
     expect(s.phases.before.search.retire).toMatchObject({ n: 0, errored: 1, mrr: null });
     expect(s.phases.before.curate.retire).toMatchObject({ n: 1, errored: 0, mrr: 0.5 });
     expect(s.phases.before.search.control).toMatchObject({ n: 1, errored: 0 });
+    // a retirement whose queries all failed is not known to be gone: it is left out of the rate, not counted as not returned
+    expect(s.retired_ref_returned.before.search).toEqual({ returned: 0, of: 0, rate: null });
+    expect(s.retired_ref_returned.before.curate).toEqual({ returned: 1, of: 1, rate: 1 });
   });
 });
 
@@ -340,6 +343,8 @@ describe("runPool with queries", () => {
           // a search that errors is an errored call, scored as one; the baseline itself still ran
           expect(s.retrieval).toMatchObject({ n_queries: 64 });
           expect(s.retrieval.phases.before.search.retire.errored).toBe(24);
+          // and a retired note that no call could have returned is not counted as gone: the pass criterion of akm#1307 reads after_accept
+          for (const p of ["before", "after_accept", "after"]) expect(s.retrieval.retired_ref_returned[p].search).toEqual({ returned: 0, of: 0, rate: null });
         } else {
           expect(s.retrieval).toEqual({ error: expect.stringContaining(reason) });
         }

@@ -74,7 +74,10 @@ export interface RetrievalSummary {
   phases: Record<Phase, Record<Command, CommandMetrics>>;
   /** Each phase's metrics less those of `before`, for the retire and the control queries. `noop` is the control: it should be about 0. */
   delta: Record<Exclude<Phase, "before">, Record<Command, Record<"retire" | "control", Record<(typeof FIELDS)[number], number | null>>>>;
-  /** The share of the accepted retirements whose retired note a query of its cluster still returns. About 1 before, and 0 after the reindex. */
+  /**
+   * The share of the accepted retirements whose retired note a query of its cluster still returns. About 1 before, and 0 after the reindex. A retirement that no query returns
+   * and one of whose queries failed is not in `of`.
+   */
   retired_ref_returned: Record<Exclude<Phase, "noop">, Record<Command, { returned: number; of: number; rate: number | null }>>;
   seconds: Record<string, number>;
 }
@@ -128,14 +131,18 @@ export function retrievalSummary(pool: Pick<Pool, "clusters">, queries: PoolQuer
   ) as RetrievalSummary["delta"];
 
   const verdicts = raw.accepted.map((a) => judgeRetirement(pool, nameOfRef(a.retiredRef), a.successorRef ? nameOfRef(a.successorRef) : null)?.verdict);
-  const returnedIn = (phase: Phase, command: Command, a: Accepted): boolean => {
+  // Returned when a query of its cluster returns it; not known (null) when none does and one of those calls failed, as a failed call is left out of the means.
+  const returnedIn = (phase: Phase, command: Command, a: Accepted): boolean | null => {
     const name = nameOfRef(a.retiredRef);
     const mine = new Set(queries.filter((q) => cluster.get(q.cluster)?.notes.includes(name)).map((q) => q.id));
-    return raw.rows.some((r) => mine.has(r.id) && r.phases[phase][command].refs.some((ref) => nameOfRef(ref) === name));
+    const answers = raw.rows.filter((r) => mine.has(r.id)).map((r) => r.phases[phase][command]);
+    if (answers.some((x) => x.refs.some((ref) => nameOfRef(ref) === name))) return true;
+    return answers.some((x) => x.error) ? null : false;
   };
   const returned = (phase: Phase, command: Command) => {
-    const n = raw.accepted.filter((a) => returnedIn(phase, command, a)).length;
-    return { returned: n, of: raw.accepted.length, rate: raw.accepted.length === 0 ? null : round(n / raw.accepted.length) };
+    const known = raw.accepted.map((a) => returnedIn(phase, command, a)).filter((x) => x !== null);
+    const n = known.filter(Boolean).length;
+    return { returned: n, of: known.length, rate: known.length === 0 ? null : round(n / known.length) };
   };
   const rates = Object.fromEntries((["before", "after_accept", "after"] as const).map((p) => [p, Object.fromEntries(COMMANDS.map((c) => [c, returned(p, c)]))])) as RetrievalSummary["retired_ref_returned"];
 
