@@ -55,7 +55,7 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   input: inputOf,
   rescoreContexts: (_root, summary, cases) => new Map(cases.map(c => [c.id, libraryOf(summary)])),
   // Everything score() reads of the case: whether it is a task, the grade of each asset judged for it and the assets it bans.
-  labels: (c) => ({ kind: c.kind, grades: c.grades, banned: [...c.banned].sort(), ...(c.aliases ? { aliases: c.aliases } : {}) }),
+  labels: (c) => ({ kind: c.kind, grades: c.grades, banned: [...c.banned].sort(), ...(c.aliases ? { aliases: c.aliases } : {}), ...(c.sentinels ? { sentinels: [...c.sentinels].sort() } : {}) }),
   rawOf,
   score: makeRow,
   errored,

@@ -6,6 +6,7 @@
 // A fix here applies to stored runs too: scripts/rescore scores them again from their raw outputs.
 
 import { type Retrieval, mean, retrievalMetrics } from "../../../lib/ir.ts";
+import { isGuarded, isUnknownFlag, takesSearchArgs, unsupportedColumns } from "./guard.ts";
 
 export const NON_TASK_KINDS = ["chitchat", "notification", "log", "status", "nontask"];
 
@@ -33,6 +34,8 @@ export interface Case {
   aliases?: Record<string, string>;
   /** Extra CLI argv for search columns only, before the query separator. */
   searchArgs?: string[];
+  /** The assets that sit outside the window of this filter query and match it best: one coming back in a search column means the build ignored the filter. See guard.ts. */
+  sentinels?: string[];
 }
 
 // --- Scoring one query ------------------------------------------------------------------------------------------
@@ -159,6 +162,8 @@ export interface SystemRow {
   error?: string;
   timed_out?: true;
   scores?: Scored;
+  /** A filter query's search call that akm refused as an unknown flag. It is not an errored call: guard.ts counts it as unsupported. */
+  unsupported?: true;
 }
 
 export type Row = {
@@ -167,6 +172,8 @@ export type Row = {
   query: string;
   /** The search-only argv actually requested for this case, when supplied. */
   searchArgs?: string[];
+  /** The sentinels of a filter query (see Case.sentinels). Its presence marks the row as guarded. */
+  sentinels?: string[];
   /** How many assets have grade 2 or 3 for this query. Zero for a non-task input. */
   n_relevant: number;
 } & Columns<SystemRow>;
@@ -174,18 +181,22 @@ export type Row = {
 /** The row of a query: each column's results with the grade of each, and, for a task query with a relevant asset, the scores of a call that did not fail. */
 export function makeRow(c: Case, raw: Raw): Row {
   const nRelevant = Object.values(c.grades).filter((g) => g >= RELEVANT).length;
-  const row: Record<string, unknown> = { id: c.id, kind: c.kind, query: c.query, n_relevant: nRelevant, ...(c.searchArgs ? { searchArgs: c.searchArgs } : {}) };
+  const row: Record<string, unknown> = { id: c.id, kind: c.kind, query: c.query, n_relevant: nRelevant, ...(c.searchArgs ? { searchArgs: c.searchArgs } : {}), ...(c.sentinels?.length ? { sentinels: c.sentinels } : {}) };
   for (const sys of SYSTEMS) {
     const a = raw[sys];
     if (a === undefined) continue;
     const refs = a.refs.map(r => c.aliases?.[r] ?? r);
+    // A filter query is scored for the columns that its searchArgs reach. Curate would answer it unfiltered.
+    const scorable = !c.sentinels?.length || takesSearchArgs(sys);
+    const unsupported = c.sentinels?.length && takesSearchArgs(sys) && a.error !== undefined && isUnknownFlag(a.error);
     row[sys] = {
       refs: a.refs,
       grades: refs.map((r) => (Object.hasOwn(c.grades, r) ? (c.grades[r] as number) : null)),
       seconds: a.seconds,
       ...(a.error ? { error: a.error } : {}),
       ...(a.timedOut ? { timed_out: true as const } : {}),
-      ...(isTask(c) && nRelevant > 0 && !a.error ? { scores: scoreQuery(c.grades, [...new Set(refs)], c.banned) } : {}),
+      ...(unsupported ? { unsupported: true as const } : {}),
+      ...(scorable && isTask(c) && nRelevant > 0 && !a.error ? { scores: scoreQuery(c.grades, [...new Set(refs)], c.banned) } : {}),
     };
   }
   return row as Row;
@@ -217,7 +228,7 @@ export function rawOf(row: Record<string, any>): { raw: Raw } | { missing: strin
 }
 
 /** A query with a failed call in any column has no verdict for it: the call is left out of that column's numbers. */
-export const errored = (row: Row): boolean => SYSTEMS.some((sys) => row[sys]?.error);
+export const errored = (row: Row): boolean => SYSTEMS.some((sys) => row[sys]?.error && !row[sys]?.unsupported);
 
 /** Why a run whose semantic calls failed is aborted: the queries of those calls are missing from the semantic columns. */
 export const semanticFailure = (calls: number): string => `${calls} semantic calls failed, or answered with keyword search. Their queries are left out of the semantic columns: see the errors in samples.jsonl.`;
@@ -229,12 +240,17 @@ export const columnsOf = (rows: Row[]): System[] => SYSTEMS.filter((sys) => sys 
 export function summarizeRows(rows: Row[]) {
   const systems = columnsOf(rows);
   const columns = <T>(f: (sys: System) => T): Columns<T> => ({ search: f("search"), curate: f("curate"), ...(systems.includes("semantic_search") ? { semantic_search: f("semantic_search"), semantic_curate: f("semantic_curate") } : {}) });
+  const guarded = rows.some(isGuarded);
+  // The columns whose filter queries are unsupported (guard.ts): those rows are left out of the metrics of the column, and are not errored calls.
+  const unsupported = unsupportedColumns(rows, systems);
+  const counted = (rs: Row[], s: System) => rs.filter((r) => !at(r, s)?.error && !(isGuarded(r) && (!takesSearchArgs(s) || unsupported[s] !== undefined)));
   const scored = rows.filter((r) => isTask(r) && r.n_relevant > 0);
   const noAnswer = rows.filter((r) => isTask(r) && r.n_relevant === 0);
   const nonTask = rows.filter((r) => !isTask(r));
   const ok = (rs: Row[], s: System) => rs.filter((r) => !at(r, s)?.error);
-  const erroredCalls = columns((s) => rows.filter((r) => at(r, s)?.error).length);
+  const erroredCalls = columns((s) => rows.filter((r) => at(r, s)?.error && !at(r, s).unsupported).length);
   const failedSemantic = (erroredCalls.semantic_search ?? 0) + (erroredCalls.semantic_curate ?? 0);
+  const metricsOf = (rs: Row[]) => columns((s) => summarize(counted(rs, s).map((r) => at(r, s).scores as Scored)));
   return {
     status: failedSemantic > 0 ? ("aborted" as const) : ("complete" as const),
     aborted_reason: failedSemantic > 0 ? semanticFailure(failedSemantic) : null,
@@ -243,10 +259,25 @@ export function summarizeRows(rows: Row[]) {
     n_errored: rows.filter(errored).length,
     errored: erroredCalls,
     timeouts: rows.reduce((n, r) => n + systems.filter((s) => at(r, s).timed_out).length, 0),
-    metrics: columns((s) => summarize(ok(scored, s).map((r) => at(r, s).scores as Scored))),
+    metrics: metricsOf(scored),
     abstention: {
       non_task: columns((s) => abstention(ok(nonTask, s).map((r) => at(r, s).refs.length))),
       no_answer: columns((s) => abstention(ok(noAnswer, s).map((r) => at(r, s).refs.length))),
     },
+    // A set with filter queries (sentinels) also reports which columns could not be scored for them, and its metrics by query kind. Other sets' summaries are as before.
+    ...(guarded
+      ? {
+          unsupported: columns((s) => (unsupported[s] === undefined ? 0 : rows.filter((r) => isGuarded(r) && takesSearchArgs(s)).length)),
+          unsupported_reason: Object.keys(unsupported).length === 0 ? null : unsupportedReason(unsupported),
+          by_kind: Object.fromEntries([...new Set(scored.map((r) => r.kind))].sort().map((kind) => [kind, metricsOf(scored.filter((r) => r.kind === kind))])),
+        }
+      : {}),
   };
+}
+
+/** The sentence for a build that does not apply the filters of the filter queries. */
+function unsupportedReason(unsupported: Partial<Record<System, string>>): string {
+  const cols = Object.keys(unsupported).join(", ");
+  const first = Object.values(unsupported)[0];
+  return `The filter queries are not scored for ${cols}: this akm build does not apply their search flags (${first}). They are left out of the metrics, and they are not errors.`;
 }

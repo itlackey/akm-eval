@@ -1,0 +1,12 @@
+{"id":"d01","query":"when does the pager handoff happen","kind":"filter","searchArgs":["--since","2026-06-01"]}
+{"id":"d02","query":"how long are database backups kept","kind":"filter","searchArgs":["--since","2026-06-01"]}
+{"id":"d03","query":"which host does the staging database run on","kind":"filter","searchArgs":["--until","2026-04-01"]}
+{"id":"d04","query":"what are the release freeze rules","kind":"filter","searchArgs":["--until","2026-03-01"]}
+{"id":"d05","query":"what is the vendor invoice approval limit","kind":"filter","searchArgs":["--since","2026-01-01"]}
+{"id":"d06","query":"what is the TLS certificate renewal lead time","kind":"filter","searchArgs":["--since","2026-01-01","--until","2026-06-30"]}
+{"id":"d07","query":"how often are laptops refreshed","kind":"tiebreak"}
+{"id":"d08","query":"how do I reset a badge reader","kind":"tiebreak"}
+{"id":"d09","query":"when are expense reports due","kind":"tiebreak"}
+{"id":"d10","query":"when are parking permits issued","kind":"tiebreak"}
+{"id":"d11","query":"how is the guest wifi password rotated","kind":"control"}
+{"id":"d12","query":"how much is a standing desk reimbursed","kind":"control"}
