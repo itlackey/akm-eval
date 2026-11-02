@@ -366,7 +366,7 @@ export function connectionsConfig(config: Record<string, any>): Record<string, a
     delete strategy.engine;
     for (const process of Object.values<any>(strategy.processes ?? {})) {
       for (const key of ["engine", "model", "llm", "timeoutMs"]) if (process[key] !== undefined) throw new Error(`cannot write the connections form of a process with ${key}`);
-      if (process.triage?.judgment?.engine !== undefined) throw new Error("cannot write the connections form of a triage judgment with an engine");
+      if (process.judgment?.engine !== undefined || process.triage?.judgment?.engine !== undefined) throw new Error("cannot write the connections form of a judgment with an engine");
       for (const key of ["model", "llm", "timeoutMs"]) if (process.qualityGate?.[key] !== undefined) throw new Error(`cannot write the connections form of a quality gate with ${key}`);
       if (process.qualityGate?.engine !== undefined) {
         delete process.qualityGate.engine;
@@ -374,20 +374,23 @@ export function connectionsConfig(config: Record<string, any>): Record<string, a
       }
     }
   }
-  const definedOnly = (x: Record<string, unknown>) => Object.fromEntries(Object.entries(x).filter(([, v]) => v !== undefined));
-  const connection = definedOnly({
+  const connection = {
     ...extraParams,
-    endpoint,
-    apiKey,
-    timeoutMs,
-    contextLength,
-    concurrency,
-    models: { fast: model, balanced: model, reasoning: model },
-    temperature,
-    max_tokens: maxTokens,
-    reasoning_effort: reasoningEffort,
-    ...(enableThinking === undefined ? {} : { enable_thinking: enableThinking, chat_template_kwargs: { enable_thinking: enableThinking } }),
-  });
+    ...Object.fromEntries(
+      Object.entries({
+        endpoint,
+        apiKey,
+        timeoutMs,
+        contextLength,
+        concurrency,
+        models: { fast: model, balanced: model, reasoning: model },
+        temperature,
+        max_tokens: maxTokens,
+        reasoning_effort: reasoningEffort,
+        ...(enableThinking === undefined ? {} : { enable_thinking: enableThinking, chat_template_kwargs: { enable_thinking: enableThinking } }),
+      }).filter(([, v]) => v !== undefined),
+    ),
+  };
   // What the config already says in 0.10 keys (a config patch) wins, as in akm's conversion: a written connection over the converted one, a written gate over the moved one.
   const written = rest.connections ?? {};
   const out: Record<string, any> = { ...rest, connections: { ...written, default: deepMerge(connection, written.default ?? {}) } };

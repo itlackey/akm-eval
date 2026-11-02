@@ -18,6 +18,7 @@ const fields = { extraParams: { top_p: 0.9, top_k: 20, max_completion_tokens: 51
 const cases: Record<string, Record<string, any>> = {
   "the stock config": stock(),
   "an engine with extraParams, maxTokens, reasoningEffort, contextLength and concurrency": deepMerge(stock(), { engines: { judge: fields } }),
+  "an engine whose extraParams name max_tokens, temperature and reasoning_effort": deepMerge(stock(), { engines: { judge: { temperature: undefined, extraParams: { max_tokens: 64, temperature: 0.3, reasoning_effort: "high" } } } }),
   "a patch that writes a connection field": deepMerge(stock(), { connections: { default: { max_tokens: 2048, temperature: 0.5 } } }),
   "a patch that writes the gate": deepMerge(stock(), { improve: { qualityGate: { llm: { enableThinking: true } } } }),
 };

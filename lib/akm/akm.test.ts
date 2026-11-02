@@ -1051,6 +1051,17 @@ describe("the config form", () => {
     expect(out.improve.qualityGate).toEqual({ connection: "default", llm: { enableThinking: true } });
   });
 
+  test("an extraParams entry stands when the matching first-class field is unset, and a judgment with an engine throws", () => {
+    const config = engineConfig("http://h/v1", "m", false);
+    config.engines.model.extraParams = { max_tokens: 7, temperature: 0.3, reasoning_effort: "high" };
+    expect(connectionsConfig(config).connections.default).toMatchObject({ max_tokens: 7, temperature: 0.3, reasoning_effort: "high" });
+    for (const at of [{ judgment: { engine: "model" } }, { triage: { judgment: { engine: "model" } } }]) {
+      const judged = engineConfig("http://h/v1", "m", false);
+      judged.improve = { strategies: { s: { processes: { extract: at } } } };
+      expect(() => connectionsConfig(judged)).toThrow("judgment with an engine");
+    }
+  });
+
   test("a config with no engines is written as it is, and one it cannot convert throws", () => {
     expect(connectionsConfig(semanticConfig())).toEqual(semanticConfig());
     const two = engineConfig("http://h/v1", "m", false);
