@@ -148,9 +148,9 @@ rounds showed between runs of the same settings. Nothing below was run again.
   as it does in every published 0.10 35B round from 0.10.261005-beta on; 0.9.32 passes it in both. That is an accepted 0.10
   behaviour change, not a regression: akm PR #1170 (commit `4438ce2c3`; CHANGELOG 0.10.26101101, "`captureMode: hot`
   memories are consolidated like any other memory") removed the hot-memory protections on purpose, and the two cases still
-  encode 0.9's rule. The cases are unchanged in this run. Bakeoff scoring 0.5 drops the check from both cases (see MEASUREMENT_CHANGELOG.md), and the
-  run scored again is in the `-rescored` folder beside it: 42/55 cases pass, one more, since `prod-consolidate-full-pool` passes and
-  `consolidate-memory-pool` still fails "no extra or missing promotions" (an extra `memories/deploy-drain-primary`, as in 0.9.32). The check
+  encode 0.9's rule. The cases are unchanged in this run. Bakeoff scoring 0.5 drops the protected-memory check from both and makes `consolidate-memory-pool`
+  non-strict (strict also failed any plan that included `memories/operator-preference`, 0.9's rule again); the run scored again is in the
+  `-rescored` folder beside it: 43/55 cases pass, two more, one for each case. The check
   "promotes memories/artifact-signing-observation", which failed in 0.9.32 and 0.10.261018-beta, passes in this run.
   Bakeoff 0.4 on four builds:
 

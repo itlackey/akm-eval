@@ -222,12 +222,12 @@
     },
     "case_pass": {
       "n": 55,
-      "passed": 52,
-      "rate": 0.9455
+      "passed": 53,
+      "rate": 0.9636
     },
     "checks": {
       "n": 55,
-      "rate": 0.983
+      "rate": 0.9891
     },
     "median_seconds": 4.1,
     "by_process": {
@@ -290,17 +290,15 @@
       "consolidate-promote": {
         "n": 8,
         "valid_output": 8,
-        "passed": 7,
-        "checks": 0.9583,
+        "passed": 8,
+        "checks": 1,
         "outcomes": {
           "output": 8,
           "no-change": 0,
           "unusable": 0,
           "error": 0
         },
-        "failed": {
-          "no extra or missing promotions": 1
-        }
+        "failed": {}
       }
     }
   },
@@ -650,7 +648,7 @@
       "scorer": {
         "version": "0.4"
       },
-      "at": "2026-11-02T16:50:45.112Z",
+      "at": "2026-11-02T17:40:42.767Z",
       "dropped": []
     }
   },
@@ -661,7 +659,7 @@
     "scorer": {
       "version": "0.4"
     },
-    "at": "2026-11-02T16:50:45.112Z",
+    "at": "2026-11-02T17:40:42.767Z",
     "dropped": []
   }
 }

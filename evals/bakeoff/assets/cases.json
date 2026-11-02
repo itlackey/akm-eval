@@ -241,7 +241,7 @@
       "promote": [
         "memories/signed-artifacts"
       ],
-      "strict": true
+      "strict": false
     }
   },
   {

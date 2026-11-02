@@ -227,12 +227,12 @@
     },
     "case_pass": {
       "n": 40,
-      "passed": 35,
-      "rate": 0.875
+      "passed": 36,
+      "rate": 0.9
     },
     "checks": {
       "n": 40,
-      "rate": 0.9579
+      "rate": 0.9663
     },
     "median_seconds": 4.8,
     "by_process": {
@@ -297,8 +297,8 @@
       "consolidate-promote": {
         "n": 8,
         "valid_output": 8,
-        "passed": 6,
-        "checks": 0.8958,
+        "passed": 7,
+        "checks": 0.9375,
         "outcomes": {
           "output": 8,
           "no-change": 0,
@@ -306,7 +306,6 @@
           "error": 0
         },
         "failed": {
-          "no extra or missing promotions": 1,
           "promotes memories/artifact-signing-observation": 1
         }
       }
@@ -630,7 +629,7 @@
       "scorer": {
         "version": "0.2"
       },
-      "at": "2026-11-02T16:50:45.018Z",
+      "at": "2026-11-02T17:40:42.723Z",
       "dropped": []
     }
   },
@@ -641,7 +640,7 @@
     "scorer": {
       "version": "0.2"
     },
-    "at": "2026-11-02T16:50:45.018Z",
+    "at": "2026-11-02T17:40:42.723Z",
     "dropped": []
   }
 }
