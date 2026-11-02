@@ -324,9 +324,73 @@ function giveReferencedVariables(sandbox: Sandbox, config: unknown): void {
   sandbox.referenced = named;
 }
 
-/** Writes akm's config file in the sandbox, in place of the one there, and gives akm the variables that the config names as $NAME, and no others. */
+/** The first akm release that reads `connections` and `harnesses` (akm#1244, 0.10.261014). Earlier releases read only the `engines` form. */
+export const CONNECTIONS_FROM = "0.10.261014";
+
+export type ConfigForm = "engines" | "connections";
+let configForm: ConfigForm = "engines";
+
+/** The form of config the akm under test reads, from the version it prints. Sets the form writeConfig writes, and returns it. */
+export function useConfigForm(version: string): ConfigForm {
+  const m = version.match(/\d+\.\d+\.\d+\S*/);
+  return (configForm = m && atLeast(m[0], CONNECTIONS_FROM) ? "connections" : "engines");
+}
+
+/** The form writeConfig writes: the one useConfigForm last set. A summary records it as `config_form`. */
+export const writtenConfigForm = (): ConfigForm => configForm;
+
+/**
+ * The config of engineConfig and its callers (one LLM engine, `defaults.llmEngine` and `improveStrategy`, an `engine` on a strategy) in the form akm 0.10 reads.
+ * It is the conversion akm makes in memory (docs/reference/configuration.md, "The `engines` form"): the engine becomes the connection `default`, `model` all three
+ * aliases, `temperature` and `enableThinking` request fields. `kind` and `provider` are dropped, since a connection is OpenAI-compatible whatever the provider kind. An `engine` on
+ * a strategy is dropped, since the one connection is the default one, and a gate's becomes `improve.qualityGate.connection`. A config with two engines, or a setting this does not know, throws.
+ */
+export function connectionsConfig(config: Record<string, any>): Record<string, any> {
+  const { engines, defaults, ...rest } = config;
+  if (engines === undefined && defaults === undefined) return config;
+  const names = Object.keys(engines ?? {});
+  if (names.length !== 1) throw new Error(`cannot write the connections form of a config with ${names.length} engines; it takes one`);
+  const { kind, provider: _provider, model, endpoint, apiKey, timeoutMs, temperature, enableThinking, ...unknown } = engines[names[0] as string];
+  const { llmEngine, improveStrategy, ...otherDefaults } = defaults ?? {};
+  if (kind !== "llm" || Object.keys(unknown).length || Object.keys(otherDefaults).length || (llmEngine !== undefined && llmEngine !== names[0])) {
+    throw new Error(`cannot write the connections form of this config: ${JSON.stringify({ kind, ...unknown, ...otherDefaults })}`);
+  }
+  // A strategy's `engine` is dropped, and a gate's moves to `improve.qualityGate`, as akm's conversion has it. Any other `engine` is not one this knows.
+  const strategies = structuredClone(rest.improve?.strategies ?? {});
+  let gate = false;
+  for (const strategy of Object.values<any>(strategies)) {
+    if (strategy.engine !== undefined && strategy.engine !== names[0]) throw new Error(`cannot write the connections form of a strategy routed to ${strategy.engine}`);
+    delete strategy.engine;
+    for (const process of Object.values<any>(strategy.processes ?? {})) {
+      if (process.engine !== undefined) throw new Error("cannot write the connections form of a process with an engine");
+      if (process.qualityGate?.engine !== undefined) {
+        delete process.qualityGate.engine;
+        gate = true;
+      }
+    }
+  }
+  const connection = {
+    endpoint,
+    ...(apiKey === undefined ? {} : { apiKey }),
+    timeoutMs,
+    models: { fast: model, balanced: model, reasoning: model },
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(enableThinking === undefined ? {} : { enable_thinking: enableThinking, chat_template_kwargs: { enable_thinking: enableThinking } }),
+  };
+  const out: Record<string, any> = { ...rest, connections: { default: connection } };
+  if (rest.improve !== undefined || improveStrategy !== undefined) {
+    out.improve = { ...rest.improve, ...(rest.improve?.strategies ? { strategies } : {}), ...(gate ? { qualityGate: { connection: "default" } } : {}), ...(improveStrategy === undefined ? {} : { strategy: improveStrategy }) };
+  }
+  return out;
+}
+
+/**
+ * Writes akm's config file in the sandbox, in place of the one there, and gives akm the variables that the config names as $NAME, and no others.
+ * The config is in the `engines` form; an akm that reads `connections` is given it in that form (useConfigForm, connectionsConfig).
+ */
 export function writeConfig(sandbox: Sandbox, config: unknown): void {
-  writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(config, null, 2)}\n`);
+  const written = configForm === "connections" && typeof config === "object" && config !== null ? connectionsConfig(config as Record<string, any>) : config;
+  writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(written, null, 2)}\n`);
   giveReferencedVariables(sandbox, config);
   const c = config as { semanticSearchMode?: unknown; embedding?: { localModel?: unknown }; engines?: Record<string, unknown> };
   sandbox.semantic = c?.semanticSearchMode === "auto" && c.embedding?.localModel === SEMANTIC_MODEL && Object.keys(c.engines ?? {}).length > 0 ? (sandbox.semantic ?? { lastEvent: 0 }) : undefined;
@@ -542,6 +606,7 @@ export function completionsUrl(baseUrl: string): string {
  * plain config otherwise. The key is named by variable and never held. To send one process to the engine, add
  * its routing to the returned object. `name` is the engine's name in the config, and what akm reports for it.
  * `provider` is the engine's provider kind in akm (openai, anthropic, gemini, groq, ollama, lmstudio): the endpoint is the same whichever it is.
+ * akm 0.10 has no provider kind (a connection is OpenAI-compatible), so writeConfig drops it there.
  */
 export function engineConfig(baseUrl: string, model: string, hasKey: boolean, name = "model", provider = "openai"): Record<string, any> {
   const endpoint = completionsUrl(baseUrl);

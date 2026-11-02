@@ -2,11 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, connectionsConfig, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, useConfigForm, writeConfig, writtenConfigForm } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
 afterEach(() => {
+  useConfigForm("0.9.0");
   for (const s of sandboxes.splice(0)) removeSandbox(s);
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
@@ -991,5 +992,61 @@ describe("useAkm", () => {
 
   test("refuses an empty command", () => {
     expect(() => useAkm({ akm: "  " }, stop, {})).toThrow("--akm needs the command that runs akm");
+  });
+});
+
+describe("the config form", () => {
+  const judge = () => {
+    const config = engineConfig("http://h/v1", "m", true, "judge", "groq");
+    config.engines.judge.temperature = 0;
+    config.engines.judge.enableThinking = false;
+    config.defaults.improveStrategy = "s";
+    config.improve = { strategies: { s: { engine: "judge", processes: { reflect: { qualityGate: { engine: "judge" } }, extract: { enabled: true } } } } };
+    return config;
+  };
+
+  test("an akm reads connections from 0.10.261014, and the engines form before", () => {
+    const form = (v: string) => useConfigForm(v) && writtenConfigForm();
+    expect(["0.9.32", "0.10.261013", "0.10.261014-beta", "0.10.261014", "0.10.261022", "0.11.0"].map(form)).toEqual(["engines", "engines", "engines", "connections", "connections", "connections"]);
+  });
+
+  test("writeConfig writes the engines form as it is for an akm before connections", () => {
+    useConfigForm("0.9.32");
+    const sb = fakeSandbox({}, ENV_AKM);
+    writeConfig(sb, judge());
+    expect(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"))).toEqual(judge());
+  });
+
+  test("writeConfig writes the same settings as connections for an akm after: no provider, one default connection, the gate on it", () => {
+    useConfigForm("0.10.261022");
+    const sb = fakeSandbox({}, ENV_AKM);
+    writeConfig(sb, judge());
+    expect(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"))).toEqual({
+      configVersion: "0.9.0",
+      semanticSearchMode: "off",
+      registries: [],
+      connections: {
+        default: {
+          endpoint: "http://h/v1/chat/completions",
+          apiKey: "$MODEL_API_KEY",
+          timeoutMs: 600_000,
+          models: { fast: "m", balanced: "m", reasoning: "m" },
+          temperature: 0,
+          enable_thinking: false,
+          chat_template_kwargs: { enable_thinking: false },
+        },
+      },
+      improve: { strategies: { s: { processes: { reflect: { qualityGate: {} }, extract: { enabled: true } } } }, qualityGate: { connection: "default" }, strategy: "s" },
+    });
+  });
+
+  test("a config with no engines is written as it is, and one it cannot convert throws", () => {
+    expect(connectionsConfig(semanticConfig())).toEqual(semanticConfig());
+    const two = engineConfig("http://h/v1", "m", false);
+    two.engines.other = two.engines.model;
+    expect(() => connectionsConfig(two)).toThrow("2 engines");
+    const routed = engineConfig("http://h/v1", "m", false);
+    routed.improve = { strategies: { s: { processes: { reflect: { engine: "model" } } } } };
+    expect(() => connectionsConfig(routed)).toThrow("process with an engine");
   });
 });

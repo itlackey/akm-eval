@@ -21,7 +21,7 @@
 import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { type ParseArgsConfig, parseArgs } from "node:util";
-import { AKM_OPTIONS, type AkmBuild, akmBuild, akmUsage, akmVersion, atLeast, createSandbox, removeSandbox, useAkm } from "./akm/akm.ts";
+import { AKM_OPTIONS, type AkmBuild, type ConfigForm, akmBuild, akmUsage, akmVersion, atLeast, createSandbox, removeSandbox, useAkm, useConfigForm, writtenConfigForm } from "./akm/akm.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "./akm/overrides.ts";
 import { type SemanticVerification, takeSemanticVerification } from "./akm/semantic.ts";
 import { type ModelCalls, takeModelCalls } from "./akm/usage.ts";
@@ -86,6 +86,8 @@ export interface Summary {
   akm_build: string | null;
   /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts). Null for a clean checkout and for a release. */
   akm_build_fingerprint: string | null;
+  /** The form of the akm config written to disk: `connections` for an akm that reads it (0.10.261014 on), else `engines`. `config` below stays in the `engines` form. */
+  config_form: ConfigForm;
   limit: number | null;
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. An eval with no strategy has no `strategy`. */
   strategy?: string;
@@ -318,6 +320,7 @@ export async function runCorpus<Case, Row extends Obj, Extra extends Obj>(
     model: ctx.model,
     akm_version: ctx.version,
     ...build,
+    config_form: writtenConfigForm(),
     limit: ctx.limit ?? null,
     ...(spec.strategy === undefined ? { config_patch: patch.config_patch } : patch),
     config: redactConfig(hideEndpoint(config, ctx.baseUrl)), // the endpoint is written as <MODEL_BASE_URL>, and so is it in engine and manifest
@@ -443,6 +446,7 @@ async function main<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Cas
   } finally {
     removeSandbox(probe);
   }
+  useConfigForm(version);
   if (spec.minAkm && !atLeast(version, spec.minAkm)) console.warn(`akm ${version} predates the tested release ${spec.minAkm}; continuing with the requested build. Command or output errors will be recorded normally.`);
   // The endpoint is asked once, with the key and the model name the cases will use: a wrong one ends the run here, before it has spent anything.
   const probed = process.env.AKM_EVAL_NO_PROBE === "1" ? undefined : await probeModel({ baseUrl, apiKey, model });
