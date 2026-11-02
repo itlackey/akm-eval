@@ -51,7 +51,7 @@ const PROBE_NOTE = "The model gets one one-token request before the first case. 
  * results_dir, which is returned and not written. The website, scripts/ledger, compare and rescore read them, so none may go. A run adds timeout_ms
  * to them. It adds no concurrency: promotion has one drain and no pool, and lib/run.ts writes none for an eval that runs its own cases (collectAll).
  */
-const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_errored", "timeouts", "seconds", "calls", "metrics", "model_calls", "semantic_verification", "manifest"];
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "config_form", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_errored", "timeouts", "seconds", "calls", "metrics", "model_calls", "semantic_verification", "manifest"];
 
 /**
  * An akm with akm's proposals table. Its drain reads the first word of each pending proposal's body as the verdict: ACCEPT, REJECT, DEFER, SLOW

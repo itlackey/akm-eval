@@ -2,11 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, connectionsConfig, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, useConfigForm, writeConfig, writtenConfigForm } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
 afterEach(() => {
+  useConfigForm("0.9.0");
   for (const s of sandboxes.splice(0)) removeSandbox(s);
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
@@ -991,5 +992,88 @@ describe("useAkm", () => {
 
   test("refuses an empty command", () => {
     expect(() => useAkm({ akm: "  " }, stop, {})).toThrow("--akm needs the command that runs akm");
+  });
+});
+
+describe("the config form", () => {
+  const judge = () => {
+    const config = engineConfig("http://h/v1", "m", true, "judge", "groq");
+    config.engines.judge.temperature = 0;
+    config.engines.judge.enableThinking = false;
+    config.defaults.improveStrategy = "s";
+    config.improve = { strategies: { s: { engine: "judge", processes: { reflect: { qualityGate: { engine: "judge" } }, extract: { enabled: true } } } } };
+    return config;
+  };
+
+  test("an akm reads connections from 0.10.261014-beta, and the engines form before", () => {
+    const form = (v: string) => useConfigForm(v) && writtenConfigForm();
+    expect(["0.9.32", "0.10.261013-beta", "0.10.261013", "0.10.261014-beta", "0.10.261014", "0.10.261022", "0.11.0"].map(form)).toEqual(["engines", "engines", "engines", "connections", "connections", "connections", "connections"]);
+  });
+
+  test("writeConfig writes the engines form as it is for an akm before connections", () => {
+    useConfigForm("0.9.32");
+    const sb = fakeSandbox({}, ENV_AKM);
+    writeConfig(sb, judge());
+    expect(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"))).toEqual(judge());
+  });
+
+  test("writeConfig writes the same settings as connections for an akm after: no provider, one default connection, the gate on it", () => {
+    useConfigForm("0.10.261022");
+    const sb = fakeSandbox({}, ENV_AKM);
+    writeConfig(sb, judge());
+    expect(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"))).toEqual({
+      configVersion: "0.9.0",
+      semanticSearchMode: "off",
+      registries: [],
+      connections: {
+        default: {
+          endpoint: "http://h/v1/chat/completions",
+          apiKey: "$MODEL_API_KEY",
+          timeoutMs: 600_000,
+          models: { fast: "m", balanced: "m", reasoning: "m" },
+          temperature: 0,
+          enable_thinking: false,
+          chat_template_kwargs: { enable_thinking: false },
+        },
+      },
+      improve: { strategies: { s: { processes: { reflect: { qualityGate: {} }, extract: { enabled: true } } } }, qualityGate: { connection: "default" }, strategy: "s" },
+    });
+  });
+
+  test("an engine's extraParams, maxTokens, reasoningEffort, contextLength and concurrency are carried, and what a patch writes in 0.10 keys wins", () => {
+    const config = engineConfig("http://h/v1", "m", false);
+    Object.assign(config.engines.model, { extraParams: { top_p: 0.9, temperature: 1 }, maxTokens: 8, reasoningEffort: "low", contextLength: 100, concurrency: 2, temperature: 0 });
+    config.connections = { default: { max_tokens: 2048 }, other: { endpoint: "http://o/v1" } };
+    config.improve = { qualityGate: { llm: { enableThinking: true } }, strategies: { s: { processes: { reflect: { qualityGate: { engine: "model" } } } } } };
+    const out = connectionsConfig(config);
+    expect(out.connections.default).toEqual({ top_p: 0.9, endpoint: "http://h/v1/chat/completions", timeoutMs: 600_000, contextLength: 100, concurrency: 2, models: { fast: "m", balanced: "m", reasoning: "m" }, temperature: 0, max_tokens: 2048, reasoning_effort: "low" });
+    expect(out.connections.other).toEqual({ endpoint: "http://o/v1" });
+    expect(out.improve.qualityGate).toEqual({ connection: "default", llm: { enableThinking: true } });
+  });
+
+  test("an extraParams entry stands when the matching first-class field is unset, and a judgment with an engine throws", () => {
+    const config = engineConfig("http://h/v1", "m", false);
+    config.engines.model.extraParams = { max_tokens: 7, temperature: 0.3, reasoning_effort: "high" };
+    expect(connectionsConfig(config).connections.default).toMatchObject({ max_tokens: 7, temperature: 0.3, reasoning_effort: "high" });
+    for (const at of [{ judgment: { engine: "model" } }, { triage: { judgment: { engine: "model" } } }]) {
+      const judged = engineConfig("http://h/v1", "m", false);
+      judged.improve = { strategies: { s: { processes: { extract: at } } } };
+      expect(() => connectionsConfig(judged)).toThrow("judgment with an engine");
+    }
+  });
+
+  test("a config with no engines is written as it is, and one it cannot convert throws", () => {
+    expect(connectionsConfig(semanticConfig())).toEqual(semanticConfig());
+    const two = engineConfig("http://h/v1", "m", false);
+    two.engines.other = two.engines.model;
+    expect(() => connectionsConfig(two)).toThrow("2 engines");
+    const routed = engineConfig("http://h/v1", "m", false);
+    routed.improve = { strategies: { s: { processes: { reflect: { engine: "model" } } } } };
+    expect(() => connectionsConfig(routed)).toThrow("process with engine");
+    for (const key of ["model", "llm", "timeoutMs"]) {
+      const moved = engineConfig("http://h/v1", "m", false);
+      moved.improve = { strategies: { s: { processes: { reflect: { [key]: 1 } } } } };
+      expect(() => connectionsConfig(moved)).toThrow(`process with ${key}`);
+    }
   });
 });

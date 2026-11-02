@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmBuild, createSandbox, dirtyFingerprint, removeSandbox, runAkm, useAkm } from "../../../lib/akm/akm.ts";
+import { akmBuild, createSandbox, dirtyFingerprint, removeSandbox, runAkm, useAkm, useConfigForm, writtenConfigForm } from "../../../lib/akm/akm.ts";
 import { parseOverrides } from "../../../lib/akm/overrides.ts";
 import { buildManifest, caseDigests, corpusFolderOf, HARNESS_VERSION, readManifest, REPO_ROOT, type RunManifest } from "../../../lib/manifest.ts";
 import { endpointDigest, endpointHost, engineSettings, redactActors, redactConfig, sha256Json } from "../../../lib/provenance.ts";
@@ -152,7 +152,7 @@ async function main() {
   let version: string;
   try {
     const result = await runAkm(probe, ["--version"], { timeoutMs: 30000 });
-    if (result.code !== 0) fail("AKM version probe failed"); version = result.stdout.trim();
+    if (result.code !== 0) fail("AKM version probe failed"); version = result.stdout.trim(); useConfigForm(version);
   } finally { removeSandbox(probe); }
   console.log(`Reader/inference destination: ${new URL(model.baseUrl).origin} (no corpus is published). Read README before interpreting scores.`);
   if (judge) console.log(`Judge destination: ${new URL(judge.baseUrl).origin}`);
@@ -191,7 +191,7 @@ async function main() {
       const save = (final = false) => {
         if (current >= 0) rows[current] = plan.row(cases[current]!, raw[current]);
         const summary: any = { eval: MEASUREMENT.eval, version: MEASUREMENT.version, scoring_version: MEASUREMENT.scoringVersion ?? MEASUREMENT.version, harness_version: HARNESS_VERSION, date: new Date().toISOString(), label, corpus: corpusName, corpus_folder: corpusName === "custom" ? corpusFolderOf(folder) : null,
-          git_commit: collectorCommit, collector_fingerprint: collectorFingerprint, model: model.name, akm_version: version, ...build,
+          git_commit: collectorCommit, collector_fingerprint: collectorFingerprint, model: model.name, akm_version: version, ...build, config_form: writtenConfigForm(),
           limit: v.limit ? Number(v.limit) : null, seed: o.seed, timeout_ms: o.timeoutMs, search_mode: evalSettings.search_mode, config: redactConfig(config), reader_settings: readerSettings(model.chat),
           assets_sha256: sha256Json(digests), status, aborted_reason: abortedReason, wall_seconds: (performance.now() - start) / 1000, resumed: v.resume !== undefined, ...plan.summaryExtra,
           ...MEASUREMENT.summarize(rows), manifest: manifestOf({ selected, scored: rows.filter(r => !MEASUREMENT.errored(r) && !MEASUREMENT.unfinished?.(r)).map(r => r.id), errored: rows.filter(r => MEASUREMENT.errored(r)).map(r => r.id) }) };

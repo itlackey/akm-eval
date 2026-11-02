@@ -483,6 +483,13 @@ describe("the order of a run", () => {
     expect(resultsOf("old")[0]?.summary.akm_version).toBe("0.9.24");
     expect(run(["--label", "new"]).err).toBe("");
   });
+
+  test("the summary says which form of config was written: engines before akm 0.10.261014, connections from it", () => {
+    setCases(ok(1));
+    run(["--label", "before"], { FAKE_VERSION: "0.10.261013" });
+    run(["--label", "from"], { FAKE_VERSION: "0.10.261014" });
+    expect([resultsOf("before")[0]?.summary.config_form, resultsOf("from")[0]?.summary.config_form]).toEqual(["engines", "connections"]);
+  });
 });
 
 describe("the model endpoint and the startup banner", () => {
@@ -667,7 +674,7 @@ describe("the cases of a run", () => {
     const [done] = resultsOf("keys");
     const s = done?.summary;
     expect(Object.keys(s).sort()).toEqual(
-      ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "model_calls", "semantic_verification", "concurrency", "timeout_ms", "manifest", "timeouts", "metrics", "extras", "wall_seconds"].sort(),
+      ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "config_form", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "model_calls", "semantic_verification", "concurrency", "timeout_ms", "manifest", "timeouts", "metrics", "extras", "wall_seconds"].sort(),
     );
     expect(s).toMatchObject({
       eval: "fake", corpus: "public", corpus_folder: null, label: "keys", model: "model-x", akm_version: "0.9.99-test", akm_build: null, akm_build_fingerprint: null, limit: 2, strategy: "other", config_patch: null,

@@ -39,7 +39,7 @@ const PROBE_NOTE = "The model gets one one-token request before the first case. 
  * results_dir, which is returned and not written. The website, scripts/ledger, compare and rescore read them, so none may go. A run adds
  * concurrency and timeout_ms to them.
  */
-const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "strategy", "config_patch", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "config", "engine", "assets_sha256", "rubric_version", "seed", "metrics", "model_calls", "semantic_verification", "manifest"];
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "config_form", "limit", "strategy", "config_patch", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "config", "engine", "assets_sha256", "rubric_version", "seed", "metrics", "model_calls", "semantic_verification", "manifest"];
 
 /**
  * An akm whose judge reads one word from the candidate and answers with that verdict. It logs to FAKE_LOG when it is set: when each call starts and
