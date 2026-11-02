@@ -1005,9 +1005,9 @@ describe("the config form", () => {
     return config;
   };
 
-  test("an akm reads connections from 0.10.261014, and the engines form before", () => {
+  test("an akm reads connections from 0.10.261014-beta, and the engines form before", () => {
     const form = (v: string) => useConfigForm(v) && writtenConfigForm();
-    expect(["0.9.32", "0.10.261013", "0.10.261014-beta", "0.10.261014", "0.10.261022", "0.11.0"].map(form)).toEqual(["engines", "engines", "engines", "connections", "connections", "connections"]);
+    expect(["0.9.32", "0.10.261013-beta", "0.10.261013", "0.10.261014-beta", "0.10.261014", "0.10.261022", "0.11.0"].map(form)).toEqual(["engines", "engines", "engines", "connections", "connections", "connections", "connections"]);
   });
 
   test("writeConfig writes the engines form as it is for an akm before connections", () => {
@@ -1040,6 +1040,17 @@ describe("the config form", () => {
     });
   });
 
+  test("an engine's extraParams, maxTokens, reasoningEffort, contextLength and concurrency are carried, and what a patch writes in 0.10 keys wins", () => {
+    const config = engineConfig("http://h/v1", "m", false);
+    Object.assign(config.engines.model, { extraParams: { top_p: 0.9, temperature: 1 }, maxTokens: 8, reasoningEffort: "low", contextLength: 100, concurrency: 2, temperature: 0 });
+    config.connections = { default: { max_tokens: 2048 }, other: { endpoint: "http://o/v1" } };
+    config.improve = { qualityGate: { llm: { enableThinking: true } }, strategies: { s: { processes: { reflect: { qualityGate: { engine: "model" } } } } } };
+    const out = connectionsConfig(config);
+    expect(out.connections.default).toEqual({ top_p: 0.9, endpoint: "http://h/v1/chat/completions", timeoutMs: 600_000, contextLength: 100, concurrency: 2, models: { fast: "m", balanced: "m", reasoning: "m" }, temperature: 0, max_tokens: 2048, reasoning_effort: "low" });
+    expect(out.connections.other).toEqual({ endpoint: "http://o/v1" });
+    expect(out.improve.qualityGate).toEqual({ connection: "default", llm: { enableThinking: true } });
+  });
+
   test("a config with no engines is written as it is, and one it cannot convert throws", () => {
     expect(connectionsConfig(semanticConfig())).toEqual(semanticConfig());
     const two = engineConfig("http://h/v1", "m", false);
@@ -1047,6 +1058,11 @@ describe("the config form", () => {
     expect(() => connectionsConfig(two)).toThrow("2 engines");
     const routed = engineConfig("http://h/v1", "m", false);
     routed.improve = { strategies: { s: { processes: { reflect: { engine: "model" } } } } };
-    expect(() => connectionsConfig(routed)).toThrow("process with an engine");
+    expect(() => connectionsConfig(routed)).toThrow("process with engine");
+    for (const key of ["model", "llm", "timeoutMs"]) {
+      const moved = engineConfig("http://h/v1", "m", false);
+      moved.improve = { strategies: { s: { processes: { reflect: { [key]: 1 } } } } };
+      expect(() => connectionsConfig(moved)).toThrow(`process with ${key}`);
+    }
   });
 });

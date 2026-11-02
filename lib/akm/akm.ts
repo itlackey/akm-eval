@@ -32,6 +32,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { deepMerge } from "./overrides.ts";
 import { tallyCalls } from "./usage.ts";
 import { type SemanticState, verifySemantic } from "./semantic.ts";
 
@@ -324,8 +325,8 @@ function giveReferencedVariables(sandbox: Sandbox, config: unknown): void {
   sandbox.referenced = named;
 }
 
-/** The first akm release that reads `connections` and `harnesses` (akm#1244, 0.10.261014). Earlier releases read only the `engines` form. */
-export const CONNECTIONS_FROM = "0.10.261014";
+/** The first akm release that reads `connections` and `harnesses` (akm#1244, published as 0.10.261014-beta). Earlier releases read only the `engines` form. */
+export const CONNECTIONS_FROM = "0.10.261014-beta";
 
 export type ConfigForm = "engines" | "connections";
 let configForm: ConfigForm = "engines";
@@ -343,43 +344,60 @@ export const writtenConfigForm = (): ConfigForm => configForm;
  * The config of engineConfig and its callers (one LLM engine, `defaults.llmEngine` and `improveStrategy`, an `engine` on a strategy) in the form akm 0.10 reads.
  * It is the conversion akm makes in memory (docs/reference/configuration.md, "The `engines` form"): the engine becomes the connection `default`, `model` all three
  * aliases, `temperature` and `enableThinking` request fields. `kind` and `provider` are dropped, since a connection is OpenAI-compatible whatever the provider kind. An `engine` on
- * a strategy is dropped, since the one connection is the default one, and a gate's becomes `improve.qualityGate.connection`. A config with two engines, or a setting this does not know, throws.
+ * a strategy is dropped, since the one connection is the default one, and a gate's becomes `improve.qualityGate.connection`. Not `akm migrate apply` in the sandbox: it
+ * rewrites assets, writes akm state and adds a process to every config write, which the measured environment should not carry. A config with two engines, or a setting this does not know, throws.
  */
 export function connectionsConfig(config: Record<string, any>): Record<string, any> {
   const { engines, defaults, ...rest } = config;
   if (engines === undefined && defaults === undefined) return config;
   const names = Object.keys(engines ?? {});
   if (names.length !== 1) throw new Error(`cannot write the connections form of a config with ${names.length} engines; it takes one`);
-  const { kind, provider: _provider, model, endpoint, apiKey, timeoutMs, temperature, enableThinking, ...unknown } = engines[names[0] as string];
+  const { kind, provider: _provider, model, endpoint, apiKey, timeoutMs, contextLength, concurrency, temperature, maxTokens, enableThinking, reasoningEffort, extraParams, ...unknown } = engines[names[0] as string];
   const { llmEngine, improveStrategy, ...otherDefaults } = defaults ?? {};
   if (kind !== "llm" || Object.keys(unknown).length || Object.keys(otherDefaults).length || (llmEngine !== undefined && llmEngine !== names[0])) {
     throw new Error(`cannot write the connections form of this config: ${JSON.stringify({ kind, ...unknown, ...otherDefaults })}`);
   }
-  // A strategy's `engine` is dropped, and a gate's moves to `improve.qualityGate`, as akm's conversion has it. Any other `engine` is not one this knows.
+  // A strategy's `engine` is dropped, and a gate's moves to `improve.qualityGate`, as akm's conversion has it. A process's other where-fields are not moved: they throw.
   const strategies = structuredClone(rest.improve?.strategies ?? {});
   let gate = false;
   for (const strategy of Object.values<any>(strategies)) {
     if (strategy.engine !== undefined && strategy.engine !== names[0]) throw new Error(`cannot write the connections form of a strategy routed to ${strategy.engine}`);
+    for (const key of ["model", "llm", "timeoutMs"]) if (strategy[key] !== undefined) throw new Error(`cannot write the connections form of a strategy with ${key}`);
     delete strategy.engine;
     for (const process of Object.values<any>(strategy.processes ?? {})) {
-      if (process.engine !== undefined) throw new Error("cannot write the connections form of a process with an engine");
+      for (const key of ["engine", "model", "llm", "timeoutMs"]) if (process[key] !== undefined) throw new Error(`cannot write the connections form of a process with ${key}`);
+      if (process.triage?.judgment?.engine !== undefined) throw new Error("cannot write the connections form of a triage judgment with an engine");
+      for (const key of ["model", "llm", "timeoutMs"]) if (process.qualityGate?.[key] !== undefined) throw new Error(`cannot write the connections form of a quality gate with ${key}`);
       if (process.qualityGate?.engine !== undefined) {
         delete process.qualityGate.engine;
         gate = true;
       }
     }
   }
-  const connection = {
+  const definedOnly = (x: Record<string, unknown>) => Object.fromEntries(Object.entries(x).filter(([, v]) => v !== undefined));
+  const connection = definedOnly({
+    ...extraParams,
     endpoint,
-    ...(apiKey === undefined ? {} : { apiKey }),
+    apiKey,
     timeoutMs,
+    contextLength,
+    concurrency,
     models: { fast: model, balanced: model, reasoning: model },
-    ...(temperature === undefined ? {} : { temperature }),
+    temperature,
+    max_tokens: maxTokens,
+    reasoning_effort: reasoningEffort,
     ...(enableThinking === undefined ? {} : { enable_thinking: enableThinking, chat_template_kwargs: { enable_thinking: enableThinking } }),
-  };
-  const out: Record<string, any> = { ...rest, connections: { default: connection } };
+  });
+  // What the config already says in 0.10 keys (a config patch) wins, as in akm's conversion: a written connection over the converted one, a written gate over the moved one.
+  const written = rest.connections ?? {};
+  const out: Record<string, any> = { ...rest, connections: { ...written, default: deepMerge(connection, written.default ?? {}) } };
   if (rest.improve !== undefined || improveStrategy !== undefined) {
-    out.improve = { ...rest.improve, ...(rest.improve?.strategies ? { strategies } : {}), ...(gate ? { qualityGate: { connection: "default" } } : {}), ...(improveStrategy === undefined ? {} : { strategy: improveStrategy }) };
+    out.improve = {
+      ...(improveStrategy === undefined ? {} : { strategy: improveStrategy }),
+      ...rest.improve,
+      ...(rest.improve?.strategies ? { strategies } : {}),
+      ...(gate ? { qualityGate: deepMerge({ connection: "default" }, rest.improve?.qualityGate ?? {}) } : {}),
+    };
   }
   return out;
 }
