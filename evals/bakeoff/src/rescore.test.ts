@@ -200,7 +200,7 @@ test("compatible 0.3 outputs rescore for the observation date and full scope wit
     expect(done.rows[0]?.correct).toBe(correct);
     expect(done.rows[0]?.derived).toBe(document);
     expect(done.summary.manifest.collector.version).toBe("0.3");
-    expect(done.summary.manifest.scorer.version).toBe("0.4");
+    expect(done.summary.manifest.scorer.version).toBe("0.5");
     expect(JSON.stringify(stored)).toBe(before);
   }
 });

@@ -17,6 +17,21 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- bakeoff scoring 0.5; collection stays 0.4 (case inputs and the akm invocations are unchanged). Label changes only, no input changes:
+  - `consolidate-memory-pool` and `prod-consolidate-full-pool` no longer expect `memories/operator-preference` to be left out of the
+    plan. akm 0.10 consolidates `captureMode: hot` memories like any other (akm#1170, CHANGELOG 0.10.26101101), so the plan may include
+    it and akm decides afterwards (it skips this one-line note as `promote_source_too_small`). The old check failed on every 0.10 build
+    for a policy that was removed on purpose (#154). The check is dropped and not turned around: expecting the plan to promote the note
+    would measure a model choice akm does not ask for. Both cases still check the expected promotion and that every promotion is a
+    memory of the pool. `consolidate-memory-pool` is no longer `strict`: its "no extra or missing promotions" check also failed any
+    plan that included `memories/operator-preference` (12 of the 14 rescored 0.10 runs plan it), which is 0.9's rule again. It loses
+    its over-promotion check; allowing only that memory would need a new scorer field.
+  - `prod-session-summary` no longer requires or lists `relay-canary-184` in its topics: a request ID cited once as evidence in a
+    five-line session, not a file, resource or decision it works on (#163). `worker-stable`, the deployment it updated, stays.
+  Both case sets still compare as before except through those three cases. Explicitly rescore saved runs (collection 0.2, 0.3 or 0.4; 0.2 runs rescore as before and are labeled the same way) to apply scoring 0.5
+  (the original collection version is kept, originals are untouched). The rescored 0.10.261005-beta to 0.10.261022 35B rounds are in
+  `-rescored` folders beside the originals.
+
 - New memory-utility collection/scoring 0.1: 24 independent public synthetic QA cases, three paired conditions
   (no episodic memory, original notes, native inference snapshot), fixed estimated context budget, actual search/show
   evidence, exact structured-answer scoring and separate citation/literal diagnostics. Failure-inclusive and evaluated-only

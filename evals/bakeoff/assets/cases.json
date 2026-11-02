@@ -212,14 +212,12 @@
     "expected": {
       "required": [
         "relay-worker:7.4",
-        "relay-canary-184",
         "object store",
         "postgresql",
         "worker-stable"
       ],
       "topics": [
         "relay-worker:7.4",
-        "relay-canary-184",
         "worker-stable"
       ],
       "forbidden": [
@@ -243,10 +241,7 @@
       "promote": [
         "memories/signed-artifacts"
       ],
-      "protected": [
-        "memories/operator-preference"
-      ],
-      "strict": true
+      "strict": false
     }
   },
   {
@@ -292,9 +287,6 @@
     "expected": {
       "promote": [
         "memories/artifact-signing-observation"
-      ],
-      "protected": [
-        "memories/operator-preference"
       ],
       "strict": false
     }
