@@ -555,12 +555,14 @@ describe("poolFromSamples and readRun", () => {
 
   test("takes the samples of a run of the same corpus and collection", () => {
     expect(readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "library" }, "the samples"), "public")).toBe("the samples");
+    expect(readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "books" }, "the books"), "public", "books")).toBe("the books");
     expect(readRun(runFolder({ eval: "retrieval", corpus: "custom", collection: "own" }, "mine"), "own")).toBe("mine");
     expect(readRun(runFolder({ eval: "retrieval", corpus: "own", collection: "own" }, "old"), "own")).toBe("old"); // a run from before custom corpora
   });
 
   test("refuses the folder of another collection, another corpus, another eval, or no run at all", () => {
     expect(() => readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "books" }), "public")).toThrow("is a run of the books collection of the public corpus, and this grades the library collection of the public corpus");
+    expect(() => readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "library" }), "public", "books")).toThrow("is a run of the library collection of the public corpus, and this grades the books collection");
     expect(() => readRun(runFolder({ eval: "retrieval", corpus: "custom", collection: "library" }), "public")).toThrow("is a run of the library collection of the custom corpus");
     expect(() => readRun(runFolder({ eval: "retrieval", corpus: "private", collection: "library" }), "public")).toThrow("the library collection of the private corpus");
     expect(() => readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "library" }), "own")).toThrow("this grades the own collection of the custom corpus");
@@ -600,6 +602,15 @@ describe("labelCollection --from", () => {
     writeFileSync(join(dir, "samples.jsonl"), `${rows.join("\n")}\n`);
     return dir;
   };
+
+  test("grades the unjudged results of a books run when it is told the collection", async () => {
+    const set = setup(FILES, QUERIES, [], ANSWERS);
+    const dir = from([row("q1", { search: ["knowledge/a"] })], { eval: "retrieval", corpus: "public", collection: "books" });
+    const { judge } = stubJudge({ "knowledge/a": 2 });
+    expect((await printed(() => labelCollection("public", { ...set.ctx(judge), from: dir }, set.folders))).result).toBe(2);
+    const { result } = await printed(() => labelCollection("public", { ...set.ctx(judge), from: dir, collection: "books" }, set.folders));
+    expect(result).toBe(0);
+  });
 
   test("grades the unjudged results of every column of the run, the semantic ones too, and nothing akm search returns now", async () => {
     const set = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/a", grade: 3, reason: "earlier" }], ANSWERS);

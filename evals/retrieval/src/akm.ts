@@ -95,11 +95,13 @@ export async function load(sb: Sandbox, library: string, bundles?: string, seman
   return total;
 }
 
-/** Every asset akm indexed, with the file it came from. An empty search lists a type, up to its limit. */
+/** Every asset akm indexed, with the file it came from. An empty search lists a type, up to its limit. akm 0.10 hides contradicted and superseded assets unless asked for `--belief all`; the books hold some, and results of older runs may name them. */
 export async function assets(sb: Sandbox, expected: number): Promise<Asset[]> {
   const found: Asset[] = [];
+  const help = await runAkm(sb, ["search", "--help"], { timeoutMs: 60_000 });
+  const belief = (help.stdout + help.stderr).includes("--belief") ? ["--belief", "all"] : [];
   for (const type of TYPES) {
-    const { stdout, stderr, code } = await runAkm(sb, ["search", "", "--type", type, "--limit", "5000", ...(await agentDetailArgs(sb)), "--format", "json"]);
+    const { stdout, stderr, code } = await runAkm(sb, ["search", "", "--type", type, "--limit", "5000", ...belief, ...(await agentDetailArgs(sb)), "--format", "json"]);
     if (code !== 0) throw new Error(`akm search --type ${type} failed (exit ${code}): ${stderr.trim().slice(-300)}`);
     for (const h of (JSON.parse(stdout) as { hits?: Record<string, string>[] }).hits ?? []) {
       found.push({ ref: h.ref, type: h.type, name: h.name ?? h.ref, description: h.description ?? "", path: relative(bundleOf(sb), h.path) });
