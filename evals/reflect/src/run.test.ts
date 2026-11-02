@@ -128,7 +128,7 @@ const runPublic = (ctx: Parameters<typeof runCorpus>[1], folders: { assets: stri
  * The keys of the summary.json that reflect wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts, without results_dir, which is
  * returned and not written. scripts/ledger, scripts/compare and scripts/rescore read them, so none may go. A run adds concurrency and timeout_ms to them.
  */
-const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "retrieval_queries", "served", "metrics", "model_calls", "semantic_verification", "manifest"];
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "config_form", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "retrieval_queries", "served", "metrics", "model_calls", "semantic_verification", "manifest"];
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;

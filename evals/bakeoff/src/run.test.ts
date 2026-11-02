@@ -103,7 +103,7 @@ const samplesOf = (summary: { results_dir: string }): any[] => readFileSync(join
  * returned and not written. The website, scripts/ledger and scripts/compare read them, so none may go. A run adds concurrency and timeout_ms to them. Bakeoff has no
  * strategy, so it never had a `strategy`.
  */
-const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "process", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "served", "metrics", "model_calls", "semantic_verification", "manifest"];
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "config_form", "limit", "process", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "served", "metrics", "model_calls", "semantic_verification", "manifest"];
 
 describe("runCorpus", () => {
   test("runs the akm command of each process, scores what akm wrote, and records the raw output of every case", async () => {

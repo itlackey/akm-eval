@@ -25,7 +25,7 @@ const PROBE_NOTE = "The model gets one one-token request before the first case. 
  * The keys of the summary.json that nightly wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts (with those of RunInputs and
  * CorpusFields it extended), without results_dir, which is returned and not written. The website, scripts/ledger and scripts/compare read them, so none may go.
  */
-const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "embedder", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "model_calls", "semantic_verification", "manifest"];
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "config_form", "embedder", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "model_calls", "semantic_verification", "manifest"];
 /** What a run adds: timeout_ms, which is new, and n_cases, which the driver writes for every spec and the night never had (the night has n_items). A night has no --concurrency, and the driver writes no `concurrency` for a spec that runs its cases itself. */
 const ADDED_KEYS = ["timeout_ms", "n_cases"];
 

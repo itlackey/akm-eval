@@ -140,10 +140,10 @@ const resultsOf = (folders: { results: string }) => {
  * CorpusFields it extended), without results_dir, which is returned and not written. The website, scripts/ledger and scripts/compare read them, so none may go. A run
  * adds concurrency and timeout_ms to them.
  */
-const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "embedder", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "n_paired", "served_models", "metrics", "model_calls", "semantic_verification", "manifest"];
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "config_form", "embedder", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "n_paired", "served_models", "metrics", "model_calls", "semantic_verification", "manifest"];
 
 /** The same for `--pool`: the PoolSummary interface in the committed run.ts (with RunInputs), without results_dir. `error` is there only when the run failed. The pool is one run, so it has no `concurrency`. */
-const POOL_KEYS = ["eval", "mode", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "embedder", "strategy", "config_patch", "timeout_ms", "limit", "n_notes", "n_clusters", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "n_paired", "seconds", "served_models", "metrics", "model_calls", "semantic_verification", "manifest", "config", "engine", "assets_sha256", "seed"];
+const POOL_KEYS = ["eval", "mode", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "config_form", "embedder", "strategy", "config_patch", "timeout_ms", "limit", "n_notes", "n_clusters", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "n_paired", "seconds", "served_models", "metrics", "model_calls", "semantic_verification", "manifest", "config", "engine", "assets_sha256", "seed"];
 
 describe("writeNotes", () => {
   const day = 86_400_000;
