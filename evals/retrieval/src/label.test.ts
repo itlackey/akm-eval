@@ -345,7 +345,7 @@ const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.jso
 const roots = config.bundles ? Object.entries(config.bundles).map(([name, b]) => [name + "//", b.path]) : [["", process.env.AKM_BUNDLE_DIR]];
 const entries = roots.flatMap(([prefix, dir]) => readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".md")).sort().map((f) => { const stem = f.slice(0, -3); const name = stem.split("/").pop(); return { ref: prefix + (stem.includes("/") ? stem : "knowledge/" + stem), type: "knowledge", name, description: "about " + name, path: join(dir, f) }; }));
 if (cmd === "index") { console.log(JSON.stringify({ ok: true, totalEntries: entries.length })); process.exit(0); }
-if (rest[0] === "") { console.log(JSON.stringify({ hits: rest[rest.indexOf("--type") + 1] === "knowledge" ? entries : [] })); process.exit(0); }
+if (rest[0] === "") { if (!rest.join(" ").includes("--belief all")) { console.error("listing needs --belief all"); process.exit(2); } console.log(JSON.stringify({ hits: rest[rest.indexOf("--type") + 1] === "knowledge" ? entries : [] })); process.exit(0); }
 const wanted = ${JSON.stringify(answers)}[rest[rest.indexOf("--") + 1]]?.[cmd] ?? [];
 const hits = wanted.map((name) => entries.find((e) => e.name === name));
 console.log(JSON.stringify(cmd === "search" ? { hits, searchMode: "keyword" } : { items: hits, searchMode: "keyword" }));

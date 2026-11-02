@@ -37,7 +37,7 @@ Add a release entry here when a version changes.
   `fast/qwen3.6-35b-a3b` (prompt umbrela-akm-v1), as the library's latest grades were, and appended to `evals/retrieval/assets/books/qrels.jsonl`. `judged_10` is
   1.0 on every published books run again (it was 0.949 keyword and 0.937 to 0.943 semantic from 0.10.261009-beta on). New relevant grades raise the ideal ranking, so books nDCG@10 reads a little
   lower than at 0.3 on every run, older ones included: 0.10.261022 keyword 0.8357 -> 0.8308 and semantic 0.9108 -> 0.9103, 0.9.32 keyword 0.8275 -> 0.8216 and semantic 0.9089 -> 0.9028.
-  Every published books run was scored again into a `-rescored` folder beside it; the originals are unchanged. The inputs and collection version 0.3 are unchanged.
+  Every published books run (19) was scored again into a `-rescored` folder beside it; the originals are unchanged. The inputs and collection version 0.3 are unchanged.
   The library judgments are not part of this entry: they wait for #145.
 - New memory-utility collection/scoring 0.1: 24 independent public synthetic QA cases, three paired conditions
   (no episodic memory, original notes, native inference snapshot), fixed estimated context budget, actual search/show

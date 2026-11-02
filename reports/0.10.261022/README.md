@@ -152,6 +152,8 @@ rounds showed between runs of the same settings. Nothing below was run again.
   non-strict (strict also failed any plan that included `memories/operator-preference`, 0.9's rule again); the run scored again is in the
   `-rescored` folder beside it: 43/55 cases pass, two more, one for each case. The check
   "promotes memories/artifact-signing-observation", which failed in 0.9.32 and 0.10.261018-beta, passes in this run.
+  Retrieval scoring 0.4 (#150) grades 52 more books pairs; the books run scored again is in its `-rescored` folder: `judged_10` 1.0 (was 0.949 keyword,
+  0.937 semantic), nDCG@10 0.8308 keyword and 0.9103 semantic (0.8357 and 0.9108 at 0.3). See `MEASUREMENT_CHANGELOG.md`.
   Bakeoff 0.4 on four builds:
 
   | | 0.9.32 | 0.10.261012-beta | 0.10.261018-beta | 0.10.261022 |
