@@ -173,9 +173,9 @@ const ranOn = (summary: { corpus?: unknown }): string => String(summary.corpus);
 
 /**
  * The samples.jsonl of a results folder of `run`, after checking that the run is of the set that `label` grades: the library of the
- * public corpus, or the own set. Throws an Error that says what is wrong.
+ * public corpus (its library or its books), or the own set. Throws an Error that says what is wrong.
  */
-export function readRun(dir: string, corpus: Corpus): string {
+export function readRun(dir: string, corpus: Corpus, collection = corpus === "own" ? "own" : "library"): string {
   const summaryFile = join(dir, "summary.json");
   const samplesFile = join(dir, "samples.jsonl");
   if (!existsSync(summaryFile) || !existsSync(samplesFile)) throw new Error(`${dir} is not a results folder of evals/retrieval/run: it needs a summary.json and a samples.jsonl.`);
@@ -185,11 +185,20 @@ export function readRun(dir: string, corpus: Corpus): string {
   } catch {
     throw new Error(`${summaryFile} is not valid JSON`);
   }
-  const collection = corpus === "own" ? "own" : "library";
   if (summary.eval !== "retrieval" || (ranOn(summary) === "public") !== (corpus === "public") || summary.collection !== collection) {
     throw new Error(`${dir} is a run of ${summary.eval === "retrieval" ? `the ${String(summary.collection)} collection of the ${ranOn(summary)} corpus` : "another eval"}, and this grades the ${collection} collection of the ${corpus === "public" ? "public" : "custom"} corpus. Pass the results folder of that run.`);
   }
   return readFileSync(samplesFile, "utf8");
+}
+
+/** The collection a results folder of `run` says it ran, if it says one: --from grades the qrels of that collection. */
+function collectionOfRun(dir: string): string | undefined {
+  try {
+    const { collection } = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")) as { collection?: unknown };
+    return typeof collection === "string" ? collection : undefined;
+  } catch {
+    return undefined; // readRun says what is wrong with the folder
+  }
 }
 
 /** The pairs of the qrels, `id\tref`, whose last row was graded from an asset that has another digest now. `current` is the digest of an asset today, or undefined for one that cannot be read. A row with no digest is never stale. */
@@ -297,7 +306,7 @@ const stamp = () => new Date().toTimeString().slice(0, 8);
  * its pool holds a plain BM25 over it. The own library is tens of thousands of assets, and akm lists 200 for a call:
  * its pool is what akm search and akm curate return, and what akm said of an asset is all label knows of it.
  */
-export async function labelCollection(corpus: Corpus, ctx: { model: string; judge: Judge; limit?: number; from?: string; newSandbox?: () => Sandbox }, folders: Folders): Promise<number> {
+export async function labelCollection(corpus: Corpus, ctx: { model: string; judge: Judge; limit?: number; from?: string; collection?: string; newSandbox?: () => Sandbox }, folders: Folders): Promise<number> {
   const own = corpus === "own";
   const name = (file: string) => (own ? `private/retrieval/own/${file}` : `assets/${file}`);
   const queriesPath = join(folders.assets, "queries.jsonl");
@@ -314,7 +323,7 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
   let samples: string | undefined;
   if (ctx.from !== undefined) {
     try {
-      samples = readRun(ctx.from, corpus);
+      samples = readRun(ctx.from, corpus, ctx.collection);
     } catch (e) {
       console.error(`retrieval label: ${(e as Error).message}`);
       return 2;
@@ -506,7 +515,9 @@ async function main(): Promise<number> {
     console.error("retrieval label: --from needs the results folder of a run");
     return 2;
   }
-  const folders = collectionsFor(chosen)[0].folders;
+  const runCollection = values.from === undefined ? undefined : collectionOfRun(resolve(values.from));
+  const picked = collectionsFor(chosen).find((c) => c.name === runCollection);
+  const folders = (picked ?? collectionsFor(chosen)[0]).folders;
   if (values["stamp-legacy"]) {
     if (corpus === "own") {
       console.error("retrieval label: --stamp-legacy is for the public library, whose refs are worked out from its files. To have your own set's grades checked against its assets, grade them again with label.");
@@ -538,7 +549,7 @@ async function main(): Promise<number> {
     return e.code;
   }
   const judge = makeJudge(baseUrl, judgeSettings.apiKey, model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`), judgeSettings.chat);
-  return labelCollection(corpus, { model, judge, limit, from: values.from === undefined ? undefined : resolve(values.from) }, folders);
+  return labelCollection(corpus, { model, judge, limit, from: values.from === undefined ? undefined : resolve(values.from), collection: picked?.name }, folders);
 }
 
 if (import.meta.main) process.exit(await main());

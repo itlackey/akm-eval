@@ -95,11 +95,11 @@ export async function load(sb: Sandbox, library: string, bundles?: string, seman
   return total;
 }
 
-/** Every asset akm indexed, with the file it came from. An empty search lists a type, up to its limit. */
+/** Every asset akm indexed, with the file it came from. An empty search lists a type, up to its limit. `--belief all` lists the contradicted and superseded assets that 0.10 hides by default; the books hold some. */
 export async function assets(sb: Sandbox, expected: number): Promise<Asset[]> {
   const found: Asset[] = [];
   for (const type of TYPES) {
-    const { stdout, stderr, code } = await runAkm(sb, ["search", "", "--type", type, "--limit", "5000", ...(await agentDetailArgs(sb)), "--format", "json"]);
+    const { stdout, stderr, code } = await runAkm(sb, ["search", "", "--type", type, "--limit", "5000", "--belief", "all", ...(await agentDetailArgs(sb)), "--format", "json"]);
     if (code !== 0) throw new Error(`akm search --type ${type} failed (exit ${code}): ${stderr.trim().slice(-300)}`);
     for (const h of (JSON.parse(stdout) as { hits?: Record<string, string>[] }).hits ?? []) {
       found.push({ ref: h.ref, type: h.type, name: h.name ?? h.ref, description: h.description ?? "", path: relative(bundleOf(sb), h.path) });

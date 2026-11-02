@@ -172,7 +172,7 @@ describe("rescoring a retrieval run", () => {
     const { out } = rescoreFolder(historical);
     const fresh = run();
     const report = comparePair(loadRun(out), loadRun(fresh));
-    expect(report).toMatchObject({ eval_version: "0.2", scoring_version: "0.3", warnings: [] });
+    expect(report).toMatchObject({ eval_version: "0.2", scoring_version: "0.4", warnings: [] });
     expect(report.rows.find(row => row.key === "quality_percent")?.delta).toBe(0);
     expect(summaryOf(historical).manifest.scorer.version).toBe("0.2");
   });
