@@ -1,0 +1,647 @@
+{
+  "eval": "bakeoff",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "0.10.261006-beta-35b-semantic-full-20261017-rescored",
+  "date": "2026-10-17T19:24:37.389Z",
+  "git_commit": "56b295c",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261006-beta",
+  "akm_bin": "akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "limit": null,
+  "config_patch": {
+    "path": "--semantic",
+    "sha256": "591a6213cec2890f9c7e4cd52a35c9e2eab91bf5db0879f27aa6efd178555ef5"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "bakeoff": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "bakeoff"
+    },
+    "experimental": {
+      "improveAutonomy": true
+    },
+    "improve": {
+      "strategies": {
+        "bakeoff-memory-inference": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": true
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        },
+        "bakeoff-schema-repair": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": true
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        },
+        "bakeoff-session-summary": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": true,
+              "indexSessions": true,
+              "minSessionDuration": 0,
+              "triage": {
+                "enabled": false
+              }
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        },
+        "bakeoff-consolidate-promote": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": true,
+              "minPoolSize": 0
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        }
+      }
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    }
+  },
+  "engine": {
+    "engine": "bakeoff",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "<MODEL_BASE_URL>",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "bakeoff": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "70b86a9dadee30a95208b372e9c61f38314f57aa89208818b777ac40e7a86bf0",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 40,
+  "n_run": 40,
+  "n_scored": 40,
+  "n_errored": 0,
+  "timeouts": 0,
+  "served": {
+    "qwen3.6-35b-a3b": 24
+  },
+  "metrics": {
+    "valid_output": {
+      "n": 40,
+      "passed": 40,
+      "rate": 1
+    },
+    "case_pass": {
+      "n": 40,
+      "passed": 29,
+      "rate": 0.725
+    },
+    "checks": {
+      "n": 40,
+      "rate": 0.8921
+    },
+    "median_seconds": 3.2,
+    "by_process": {
+      "memory-inference": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 7,
+        "checks": 0.9688,
+        "outcomes": {
+          "output": 8,
+          "no-change": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "retains explicit date": 1
+        }
+      },
+      "remember-enrich": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 8,
+        "checks": 1,
+        "outcomes": {
+          "output": 8,
+          "no-change": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "schema-repair": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 5,
+        "checks": 0.75,
+        "outcomes": {
+          "output": 8,
+          "no-change": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "trigger is concrete": 3,
+          "generated fields are grounded in the body": 1
+        }
+      },
+      "session-summary": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 2,
+        "checks": 0.7833,
+        "outcomes": {
+          "output": 8,
+          "no-change": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "topics include due_dates.py": 1,
+          "topics include worker-node-7": 1,
+          "topics include webhooks.md": 1,
+          "topics include v3/subscriptions": 1,
+          "topics include fct_orders": 1,
+          "topics include stg_payments_by_order": 1,
+          "topics include android.yml": 1,
+          "topics include interior.pdf": 1,
+          "topics include preamble.tex": 1
+        }
+      },
+      "consolidate-promote": {
+        "n": 8,
+        "valid_output": 8,
+        "passed": 7,
+        "checks": 0.9583,
+        "outcomes": {
+          "output": 8,
+          "no-change": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "no extra or missing promotions": 1
+        }
+      }
+    }
+  },
+  "process": null,
+  "model_calls": {
+    "calls": 79,
+    "errors": 0,
+    "prompt_tokens": 479.1,
+    "completion_tokens": 147.6,
+    "seconds": 1.97,
+    "output_tokens_per_second": 75
+  },
+  "semantic_verification": {
+    "index_checks": 24,
+    "indexed_entries": 116,
+    "embedded_entries": 116,
+    "searches": {
+      "semantic": 0,
+      "non_semantic": 0,
+      "unknown": 0
+    },
+    "telemetry_errors": 0,
+    "failures": 0
+  },
+  "concurrency": 1,
+  "timeout_ms": 900000,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "bakeoff",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "scorer": {
+      "version": "0.5"
+    },
+    "akm": {
+      "version": "0.10.261006-beta",
+      "bin": "akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "bakeoff": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "bakeoff"
+        },
+        "experimental": {
+          "improveAutonomy": true
+        },
+        "improve": {
+          "strategies": {
+            "bakeoff-memory-inference": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": true
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-schema-repair": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": true
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-session-summary": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": true,
+                  "indexSessions": true,
+                  "minSessionDuration": 0,
+                  "triage": {
+                    "enabled": false
+                  }
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-consolidate-promote": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": true,
+                  "minPoolSize": 0
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            }
+          }
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": "591a6213cec2890f9c7e4cd52a35c9e2eab91bf5db0879f27aa6efd178555ef5",
+      "timeout_ms": 900000,
+      "seed": null
+    },
+    "engines": {
+      "bakeoff": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "completion": {
+      "selected": [
+        "infer-checkpoint-memory",
+        "infer-signing-memory",
+        "infer-cache-policy-memory",
+        "infer-operator-preference-memory",
+        "enrich-checkpoint-memory",
+        "enrich-signing-memory",
+        "enrich-cache-policy-memory",
+        "enrich-operator-preference-memory",
+        "repair-lesson-metadata",
+        "repair-backpressure-metadata",
+        "repair-signing-metadata",
+        "repair-rollback-metadata",
+        "prod-session-summary",
+        "consolidate-memory-pool",
+        "prod-consolidate-full-pool",
+        "infer-partition-filter-memory",
+        "infer-press-proof-memory",
+        "infer-test-quarantine-memory",
+        "infer-dns-cutover-memory",
+        "enrich-ios-certificate-memory",
+        "enrich-csv-encoding-memory",
+        "enrich-gpu-taint-memory",
+        "enrich-translation-keys-memory",
+        "repair-migration-metadata",
+        "repair-booklet-metadata",
+        "repair-snapshot-metadata",
+        "repair-credential-leak-metadata",
+        "invoice-timezone-session-summary",
+        "node-disk-pressure-session-summary",
+        "webhook-docs-session-summary",
+        "orders-dedupe-session-summary",
+        "ci-cache-key-session-summary",
+        "print-interior-session-summary",
+        "checkout-flaky-session-summary",
+        "consolidate-warehouse-pool",
+        "consolidate-mobile-release-pool",
+        "consolidate-e2e-testing-pool",
+        "consolidate-docs-style-pool",
+        "consolidate-replica-lag-pool",
+        "consolidate-mixed-library-pool"
+      ],
+      "scored": [
+        "infer-checkpoint-memory",
+        "infer-signing-memory",
+        "infer-cache-policy-memory",
+        "infer-operator-preference-memory",
+        "enrich-checkpoint-memory",
+        "enrich-signing-memory",
+        "enrich-cache-policy-memory",
+        "enrich-operator-preference-memory",
+        "repair-lesson-metadata",
+        "repair-backpressure-metadata",
+        "repair-signing-metadata",
+        "repair-rollback-metadata",
+        "prod-session-summary",
+        "consolidate-memory-pool",
+        "prod-consolidate-full-pool",
+        "infer-partition-filter-memory",
+        "infer-press-proof-memory",
+        "infer-test-quarantine-memory",
+        "infer-dns-cutover-memory",
+        "enrich-ios-certificate-memory",
+        "enrich-csv-encoding-memory",
+        "enrich-gpu-taint-memory",
+        "enrich-translation-keys-memory",
+        "repair-migration-metadata",
+        "repair-booklet-metadata",
+        "repair-snapshot-metadata",
+        "repair-credential-leak-metadata",
+        "invoice-timezone-session-summary",
+        "node-disk-pressure-session-summary",
+        "webhook-docs-session-summary",
+        "orders-dedupe-session-summary",
+        "ci-cache-key-session-summary",
+        "print-interior-session-summary",
+        "checkout-flaky-session-summary",
+        "consolidate-warehouse-pool",
+        "consolidate-mobile-release-pool",
+        "consolidate-e2e-testing-pool",
+        "consolidate-docs-style-pool",
+        "consolidate-replica-lag-pool",
+        "consolidate-mixed-library-pool"
+      ],
+      "errored": []
+    },
+    "eval_settings": {},
+    "rescored_from": {
+      "results": "2026-10-17-0.10.261006-beta-35b-semantic-full-20261017",
+      "scorer": {
+        "version": "0.2"
+      },
+      "at": "2026-11-02T16:50:45.035Z",
+      "dropped": []
+    }
+  },
+  "wall_seconds": 191.786,
+  "scoring_version": "0.5",
+  "rescored_from": {
+    "results": "2026-10-17-0.10.261006-beta-35b-semantic-full-20261017",
+    "scorer": {
+      "version": "0.2"
+    },
+    "at": "2026-11-02T16:50:45.035Z",
+    "dropped": []
+  }
+}
