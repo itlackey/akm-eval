@@ -218,11 +218,11 @@ describe("generate", () => {
     const out = tmp();
     const made = generate({ seed: "20261011", out });
     expect(made.problems).toEqual([]);
-    expect(made.count).toBe(153);
+    expect(made.count).toBe(188);
     const rewritten = parseCases(readFileSync(join(out, "assets", CASES), "utf8"));
-    expect(rewritten.filter((c) => c.label === "good")).toHaveLength(64);
-    expect(rewritten.filter((c) => c.severity === "churn")).toHaveLength(21);
-    expect(rewritten.filter((c) => c.severity === "harmful")).toHaveLength(64);
-    expect(rewritten.filter((c) => c.severity === "other")).toHaveLength(4);
+    expect(rewritten.filter((c) => c.label === "good")).toHaveLength(91);
+    expect(rewritten.filter((c) => c.severity === "churn")).toHaveLength(25);
+    expect(rewritten.filter((c) => c.severity === "harmful")).toHaveLength(71);
+    expect(rewritten.filter((c) => c.severity === "other")).toHaveLength(1);
   });
 });

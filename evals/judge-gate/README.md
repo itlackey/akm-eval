@@ -2,7 +2,7 @@
 
 Does the quality judge pass good improve proposals and refuse bad ones?
 
-`akm improve` has reflect propose revisions to your assets' frontmatter, and a judge model decides which go on to be accepted. This eval gives the judge 153 revisions whose right answer is known, each one a revision that reflect can write today, through `akm judge reflect.quality`, so the prompt, scoring and pass rule are those of the akm under test. The model under test is the judge. Needs an akm with `akm judge` (0.10.261105 or later; not yet in a release, so akm main).
+`akm improve` has reflect propose revisions to your assets' frontmatter, and a judge model decides which go on to be accepted. This eval gives the judge 188 revisions whose right answer is known, each one a revision that reflect can write today, through `akm judge reflect.quality`, so the prompt, scoring and pass rule are those of the akm under test. The model under test is the judge. Needs an akm with `akm judge` (0.10.261105 or later; not yet in a release, so akm main).
 
 ## Run
 
@@ -27,9 +27,9 @@ The model must return one JSON object when asked. A case is up to about 7k token
 
 ## The cases
 
-`assets/cases.jsonl`: 153 reflect revisions labelled under rubric version 3 (`assets/README.md`): 64 good and 89 bad, of which 64 `harmful` (a fact invented, reversed or dropped, or a dated note offered as current), 21 `churn` (nothing needed fixing and every fact kept) and 4 `other`. Every candidate is `applyReflectPatch`'s output, so it is exactly what reflect would send the judge: the body is the source's, and only the `description`, the `when_to_use` and a title heading change. 83 are real revisions from reflect runs (judge off) on the lab 35B, 36 are earlier cases rebuilt the same way and 34 were written for harm the model rarely writes (see the known limits in `assets/README.md`). 115 carry a `[negative]` feedback line. `assets/ADJUDICATION.md` records the labels version 3 changed and the calls a maintainer might reverse. `assets/retired.jsonl` holds the 101 cases of earlier versions that reflect can no longer produce; the scorer does not read it. `bun evals/judge-gate/src/audit.ts` prints the set's make-up. `bun evals/judge-gate/src/reachable.ts --akm DIR` checks that every candidate is still what that akm writes (`--rebuild` writes them again); `AKM_CHECKOUT=DIR bun test evals/judge-gate/src/reachable.test.ts` runs the same check as a test.
+`assets/cases.jsonl`: 188 reflect revisions labelled under rubric version 3 (`assets/README.md`): 91 good and 97 bad, of which 71 `harmful` (a fact invented, reversed or dropped, or a dated note offered as current), 25 `churn` (nothing needed fixing and every fact kept) and 1 `other`. Every candidate is `applyReflectPatch`'s output, so it is exactly what reflect would send the judge: the body is the source's, and only the `description`, the `when_to_use` and a title heading change. 149 are real revisions from reflect runs (judge off) on a 35B model, 36 are earlier cases rebuilt the same way and 3 were written (see the known limits in `assets/README.md`). 156 carry a `[negative]` feedback line. `assets/ADJUDICATION.md` records the labels version 3 changed and the calls a maintainer might reverse. `assets/retired.jsonl` holds the 101 cases of earlier versions that reflect can no longer produce; the scorer does not read it. `bun evals/judge-gate/src/audit.ts` prints the set's make-up. `bun evals/judge-gate/src/reachable.ts --akm DIR` checks that every candidate is still what that akm writes (`--rebuild` writes them again); `AKM_CHECKOUT=DIR bun test evals/judge-gate/src/reachable.test.ts` runs the same check as a test.
 
-The custom rewrite changes names, numbers and the like across each case's source, candidate, feedback and label reason with one mapping, and `generate` checks that every label, diff size and quoted fact survives. It is the same 153 cases, not held-out data.
+The custom rewrite changes names, numbers and the like across each case's source, candidate, feedback and label reason with one mapping, and `generate` checks that every label, diff size and quoted fact survives. It is the same 188 cases, not held-out data.
 
 ## How a case is scored
 
@@ -48,7 +48,7 @@ Until akm#1418 ships, reflect's own review floor (a mean of 3.5) is not in the v
 | `bad_churn` | churn revisions passed |
 | `precision` | of everything passed, the share that was good |
 
-`routes` splits pass, review and reject by label, severity (`good`, `harmful`, `churn`, `other`) and lane (`negative`, `maintenance`); on the `maintenance` lane (no `[negative]` line) a pass is accepted unattended too on an explicit `akm improve <ref>` run (the `scope` lane) and goes to a person only on the proactive lane, so `harmful_auto_accepted` leaves those cases to `routes`, where the maintenance harmful passes can be read. `outcomes` splits each label by route. A judge that passes everything gets good 64/64, bad 89/89 and precision 42%. A change is worth keeping when `good` rises and `harmful_auto_accepted` does not. One case is about 1.6 points of `good` and 1.8 of `harmful_auto_accepted`, so a gap of a case or two is noise.
+`routes` splits pass, review and reject by label, severity (`good`, `harmful`, `churn`, `other`) and lane (`negative`, `maintenance`); on the `maintenance` lane (no `[negative]` line) a pass is accepted unattended too on an explicit `akm improve <ref>` run (the `scope` lane) and goes to a person only on the proactive lane, so `harmful_auto_accepted` leaves those cases to `routes`, where the maintenance harmful passes can be read. `outcomes` splits each label by route. A judge that passes everything gets good 91/91, bad 97/97 and precision 48%. A change is worth keeping when `good` rises and `harmful_auto_accepted` does not. One case is about 1.1 points of `good` and 1.6 of `harmful_auto_accepted` (1 of 64 negative-lane harmful cases), so a gap of a case or two is noise.
 
 ## What the summary reports
 
@@ -56,7 +56,7 @@ Until akm#1418 ships, reflect's own review floor (a mean of 3.5) is not in the v
 
 ## Notes
 
-- Feedback is unbalanced: 115 of the 153 cases carry a `[negative]` line. A judge that refused every one of them, judging nothing, would pass 22 of 64 good and 16 of 89 bad. Read `good` and the harm numbers against that, not against 100% and 0%.
+- Feedback is unbalanced: 156 of the 188 cases carry a `[negative]` line. A judge that refused every one of them, judging nothing, would pass 22 of 91 good and 10 of 97 bad. Read `good` and the harm numbers against that, not against 100% and 0%.
 - The feedback goes to akm as lines in the order the case has them, as reflect passes them; the eval no longer moves the negative lines first.
 - Results under rubric version 1 or 2 (a `summary.json` with no `rubric_version`, or 1 or 2) do not compare with these: the inputs, the labels and the routing changed (`MEASUREMENT_CHANGELOG.md`). The 13 judge-gate rounds published before version 3 are marked in `reports/README.md`.
 - To pair a rewritten case with its public one, use `private/judge-gate/map.json`.

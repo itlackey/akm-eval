@@ -18,8 +18,8 @@ Add a release entry here when a version changes.
 ## Unreleased
 
 - judge-gate collection 0.3 -> 0.4, scoring 0.3 -> 0.4, rubric version 2 -> 3 (#179): judge-gate now measures reflect's gate as it runs today. Cases: the 101 that reflect cannot produce
-  (they edit the body, or a field it does not patch) are retired to `assets/retired.jsonl`; the other 36 are rebuilt through akm's `applyReflectPatch` (`src/reachable.ts`) with their ids, and 83 real reflect
-  revisions (the reflect eval, judge off, lab 35B) and 34 written ones are added: 153 cases, 64 good and 89 bad (64 harmful, 21 churn, 4 `other`), 115 with a `[negative]` line; `assets_sha256` changes.
+  (they edit the body, or a field it does not patch) are retired to `assets/retired.jsonl`; the other 36 are rebuilt through akm's `applyReflectPatch` (`src/reachable.ts`) with their ids, and 149 real reflect
+  revisions (the reflect eval, judge off, a 35B model) and 3 written ones are added: 188 cases, 91 good and 97 bad (71 harmful, 25 churn, 1 `other`), 156 with a `[negative]` line; `assets_sha256` changes.
   Collection: `akm judge reflect.quality` with the feedback as an array in the case's order and the case's `ref` (was `akm improve judge` with one string, negative lines first, no ref). The new akm minimum is
   0.10.261105 (akm main from #1416). Scoring: the three routes of reflect (pass; review, `reviewNeeded`, from a mean of 3.5 until akm#1418 ships, and no verdict; reject), by label, severity and lane;
   the headline is `harmful_auto_accepted` (harmful passes on the `negative` lane), next to `good`, `good_rejected` and `review_share`. Labels follow rubric 3, the policy of the shipped judge's prompt

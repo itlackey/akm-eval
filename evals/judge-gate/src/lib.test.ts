@@ -37,8 +37,8 @@ describe("parseCases", () => {
 
   test("reads the public cases", () => {
     const cases = parseCases(readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl"), "utf8"));
-    expect(cases).toHaveLength(153);
-    expect(cases.filter((c) => c.label === "good")).toHaveLength(64);
+    expect(cases).toHaveLength(188);
+    expect(cases.filter((c) => c.label === "good")).toHaveLength(91);
   });
 });
 
@@ -82,15 +82,15 @@ describe("the severity of the public bad cases", () => {
   const bad = cases.filter((c) => c.label === "bad");
 
   test("every bad case has one, and no good case does", () => {
-    expect(bad).toHaveLength(89);
+    expect(bad).toHaveLength(97);
     for (const c of bad) expect(["churn", "harmful", "other"]).toContain(c.severity as string);
     for (const c of cases.filter((x) => x.label === "good")) expect(c.severity).toBeUndefined();
   });
 
-  test("21 are churn, 64 are harmful and 4 are other. Relabel a case and change these", () => {
-    expect(bad.filter((c) => c.severity === "churn")).toHaveLength(21);
-    expect(bad.filter((c) => c.severity === "harmful")).toHaveLength(64);
-    expect(bad.filter((c) => c.severity === "other")).toHaveLength(4);
+  test("25 are churn, 71 are harmful and 1 is other. Relabel a case and change these", () => {
+    expect(bad.filter((c) => c.severity === "churn")).toHaveLength(25);
+    expect(bad.filter((c) => c.severity === "harmful")).toHaveLength(71);
+    expect(bad.filter((c) => c.severity === "other")).toHaveLength(1);
   });
 
   // A tripwire and no proof. Churn is the form changing with every fact kept, and an intro or a heading may repeat a fact but not make one: a case

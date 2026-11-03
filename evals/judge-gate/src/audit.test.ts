@@ -147,14 +147,14 @@ describe("the public cases", () => {
   const negative = (rows: Case[]) => rows.filter((c) => c.feedback.split("\n").some((l) => l.startsWith("[negative]"))).length;
   const of = (f: (c: Case) => boolean) => cases.filter(f);
 
-  test("are under rubric version 3, with 64 good and 89 bad: 64 harmful, 21 churn and 4 other", () => {
+  test("are under rubric version 3, with 91 good and 97 bad: 71 harmful, 25 churn and 1 other", () => {
     expect(rubricVersion(ASSETS)).toBe(3);
-    expect(cases).toHaveLength(153);
-    expect(new Set(cases.map((c) => c.id)).size).toBe(153);
-    expect(of((c) => c.label === "good")).toHaveLength(64);
-    expect(of((c) => c.severity === "harmful")).toHaveLength(64);
-    expect(of((c) => c.severity === "churn")).toHaveLength(21);
-    expect(of((c) => c.severity === "other")).toHaveLength(4);
+    expect(cases).toHaveLength(188);
+    expect(new Set(cases.map((c) => c.id)).size).toBe(188);
+    expect(of((c) => c.label === "good")).toHaveLength(91);
+    expect(of((c) => c.severity === "harmful")).toHaveLength(71);
+    expect(of((c) => c.severity === "churn")).toHaveLength(25);
+    expect(of((c) => c.severity === "other")).toHaveLength(1);
   });
 
   test("meet the targets of #179: 40 harmful, 20 churn and 40 good, and at least half of each label with a [negative] line", () => {
@@ -201,7 +201,7 @@ describe("the command", () => {
   test("prints the audit of the public cases and exits 0", () => {
     const { code, out } = run();
     expect(code).toBe(0);
-    expect(out).toContain("judge-gate audit | rubric_version 3 | 153 cases");
+    expect(out).toContain("judge-gate audit | rubric_version 3 | 188 cases");
     expect(out).toContain("candidate edits the body beyond an added title: 0");
     expect(out).toContain("7 labels changed");
   });
@@ -209,7 +209,7 @@ describe("the command", () => {
   test("prints JSON with --json", () => {
     const { code, out } = run("--json");
     expect(code).toBe(0);
-    expect(JSON.parse(out)).toMatchObject({ rubric_version: 3, n_cases: 153, labels: { good: { n: 64 }, bad: { n: 89 } }, body_edits: [], frontmatter_edits: [] });
+    expect(JSON.parse(out)).toMatchObject({ rubric_version: 3, n_cases: 188, labels: { good: { n: 91 }, bad: { n: 97 } }, body_edits: [], frontmatter_edits: [] });
   });
 
   test("exits 1 and names the case when a candidate edits the body", () => {
