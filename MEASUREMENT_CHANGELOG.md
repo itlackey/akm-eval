@@ -22,6 +22,9 @@ Add a release entry here when a version changes.
   same with a reworded `when_to_use`, as 0.10.261018-beta proposed (also good: rubric 2 calls a fix bad for body churn only, as for `1ae76bf3`). No existing case, label, severity or criterion changed, the
   rubric stays version 2, and scoring is unchanged. Runs of 0.2 compare with 0.3 by case, not by totals: only `good` and
   `precision` change, as they score 137 cases; `bad`, `bad_harmful` and `bad_churn` score the same 95 cases. The cases add a description to a source that has none, which none of the 135 did.
+- agent-ab and terminal-bench: the summary and report count, per arm, the trials whose Harbor exception is `NonZeroAgentExitCodeError`
+  (`agent_exits`, in `metrics`, at the top level beside `timeouts`, and in the report's arm line and side-by-side table, and `agent_exit` per trial in `samples.jsonl`), scored or not, and also when the trial is later relabelled for a dead plugin (#161). Visibility only: the
+  verifier still scores those workspaces, and pass rates, scoring and eval versions are unchanged. Summaries from before lack the field.
 - bakeoff scoring 0.5; collection stays 0.4 (case inputs and the akm invocations are unchanged). Label changes only, no input changes:
   - `consolidate-memory-pool` and `prod-consolidate-full-pool` no longer expect `memories/operator-preference` to be left out of the
     plan. akm 0.10 consolidates `captureMode: hot` memories like any other (akm#1170, CHANGELOG 0.10.26101101), so the plan may include
