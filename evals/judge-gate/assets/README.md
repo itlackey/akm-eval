@@ -132,7 +132,7 @@ diff invents a rationale or drops a fact; those are harmful. The run scores the 
   spells right elsewhere; 1 corrects a number in the description that the body contradicts; and 1 names in `when_to_use`
   the versions the body records. 5 of them answer a `[negative]` feedback line. They were written to the rubric, not
   taken from reflect, so they may be cleaner and more regular than real proposals, and their labels, written by Claude
-  against this rubric, have not yet been checked by the maintainer. One case is 2.5 points of `good`; split it by `set`
+  against this rubric, have not yet been checked by the maintainer. One case is about 2.4 points of `good`; split it by `set`
   to see the real cases alone.
 - Feedback is not balanced across the labels. 14 of the 42 good cases have feedback (9 positive only, 5 with a
   `[negative]` line) and 38 of the 95 bad ones (15 with a `[negative]` line). Among the real cases it follows the `set`

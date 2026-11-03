@@ -43,7 +43,7 @@ akm's verdict becomes an outcome: `pass`, `review` (not rejected, not good enoug
 | `bad_churn` | form-only revisions passed |
 | `precision` | of everything passed, the share that was good |
 
-`outcomes` splits each label by verdict. A judge that passes everything gets good 40/40, bad 95/95 and precision 30%. A change is worth keeping when `good` rises and `bad_harmful` does not. One case is 2.5 points of `good` and 1.5 of `bad_harmful`, so a gap of a case or two is noise.
+`outcomes` splits each label by verdict. A judge that passes everything gets good 42/42, bad 95/95 and precision 31%. A change is worth keeping when `good` rises and `bad_harmful` does not. One case is about 2.4 points of `good` and 1.5 of `bad_harmful`, so a gap of a case or two is noise.
 
 ## What the summary reports
 
