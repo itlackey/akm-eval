@@ -353,6 +353,16 @@ describe("timeouts, minutes and dollars", () => {
     expect(row).toContain("2 errored (exceptions: SetupError 1), 2 timed out");
   });
 
+  test("counts the trials whose agent exited non-zero apart, scored by the verifier or not, and leaves the pass rate alone (#161)", () => {
+    const crash = { error: "NonZeroAgentExitCodeError" };
+    const r = buildReport([trial("t1", "control", 0, crash), trial("t2", "control", null, crash), trial("t3", "control", 1), trial("t1", "akm", 0)]);
+    expect(r.control).toMatchObject({ trials: 3, scored: 2, errored: 1, agent_exits: 2, timeouts: 0 });
+    expect(r.akm.agent_exits).toBe(0);
+    expect(r.control.pass_rate?.value).toBe(0.5); // the crashed, scored trial is a scored failure as before
+    expect(formatReport(r).find((l) => l.startsWith("  control"))).toContain("0 timed out, 2 agent exit non-zero");
+    expect(sideBySide("t", { corpus: "public", report: r }, { corpus: "custom", report: r }).find((l) => l.includes("agent exit"))).toContain("2 control trials, 0 akm trials");
+  });
+
   test("marks the tasks that timed out in the table, and says what the mark means", () => {
     const r = buildReport([trial("t1", "control", 1, { error: "AgentTimeoutError" }), trial("t1", "akm", 0), trial("t2", "control", 1), trial("t2", "akm", 1)]);
     expect(r.tasks).toEqual([

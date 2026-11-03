@@ -16,7 +16,7 @@ const trial = (task: string, arm: "control" | "akm", reward: number | null, extr
   seconds: 60,
   agentSeconds: 40,
   digest: null,
-  timed_out: false,
+  timed_out: false, agent_exit: false,
   ...extra,
 });
 

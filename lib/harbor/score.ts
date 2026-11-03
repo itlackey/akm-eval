@@ -13,6 +13,8 @@ import { type Arm, type Report, type Trial, buildReport, timedOut } from "./repo
 export interface RunTrial extends Trial {
   /** The agent or its setup ran out of time (AgentTimeoutError, AgentSetupTimeoutError), whatever else the trial is later called. Counted apart from the other errors, so a slower akm shows as one. report.ts counts the timeouts of its tables from this. */
   timed_out: boolean;
+  /** The agent exited non-zero (NonZeroAgentExitCodeError), whatever else the trial is later called. report.ts counts `agent_exits` from this. */
+  agent_exit: boolean;
 }
 
 /** The trials of one arm on one task, counted. */
@@ -91,6 +93,7 @@ export function metricsOf(report: Report, trials: RunTrial[]) {
     scored: a.scored,
     errored: a.errored,
     timeouts: timeouts[name],
+    agent_exits: a.agent_exits,
     minutes: a.per_trial.minutes,
     agent_minutes: a.per_trial.agent_minutes,
     cost_usd: a.per_trial.cost_usd,
@@ -110,12 +113,12 @@ export function metricsOf(report: Report, trials: RunTrial[]) {
 export const erroredOf = (report: Report): number => report.control.errored + report.akm.errored;
 
 /**
- * The fields of the summary that come from the rows: the report, its metrics, the timeouts by arm and the errored trials. The trials are
+ * The fields of the summary that come from the rows: the report, its metrics, the timeouts and agent exits by arm and the errored trials. The trials are
  * taken in the order Harbor's folders have, the order of their names, whatever the order of the rows: the bootstrap draws by position, so
  * the order the report reads them in is part of the number.
  */
-export function summarize(rows: Row[]): { report: Report; metrics: ReturnType<typeof metricsOf>; timeouts: { control: number; akm: number }; n_errored: number } {
+export function summarize(rows: Row[]): { report: Report; metrics: ReturnType<typeof metricsOf>; timeouts: { control: number; akm: number }; agent_exits: { control: number; akm: number }; n_errored: number } {
   const trials = rows.flatMap((r) => r.trials).sort((a, b) => a.trial.localeCompare(b.trial));
   const report = buildReport(trials);
-  return { report, metrics: metricsOf(report, trials), timeouts: timeoutsOf(trials), n_errored: erroredOf(report) };
+  return { report, metrics: metricsOf(report, trials), timeouts: timeoutsOf(trials), agent_exits: { control: report.control.agent_exits, akm: report.akm.agent_exits }, n_errored: erroredOf(report) };
 }
