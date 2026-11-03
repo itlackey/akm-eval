@@ -20,7 +20,7 @@ const EVAL_DIR = join(import.meta.dir, "..");
 const REPO = join(EVAL_DIR, "..", "..");
 
 const dirs: string[] = [];
-const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, FAKE_MS: process.env.FAKE_MS, FAKE_USAGE: process.env.FAKE_USAGE, MODEL_API_KEY: process.env.MODEL_API_KEY, TMPDIR: process.env.TMPDIR };
+const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, FAKE_MS: process.env.FAKE_MS, FAKE_USAGE: process.env.FAKE_USAGE, FAKE_NOJUDGE: process.env.FAKE_NOJUDGE, MODEL_API_KEY: process.env.MODEL_API_KEY, TMPDIR: process.env.TMPDIR };
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
   for (const [k, v] of Object.entries(saved)) {
@@ -53,6 +53,11 @@ import { Database } from "bun:sqlite";
 const [a, b] = process.argv.slice(2);
 const log = (o) => { if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_LOG, JSON.stringify({ t: performance.now() + performance.timeOrigin, ...o }) + "\\n"); };
 if (a === "--version") { log({ at: "version" }); console.log("0.10.261200-test"); process.exit(0); }
+if (a === "judge" && b === "--list") {
+  if (process.env.FAKE_NOJUDGE) { console.error("Unknown command judge"); process.exit(2); }
+  console.log(JSON.stringify({ judges: [{ name: "reflect.quality" }] }));
+  process.exit(0);
+}
 if (a !== "judge" || b !== "reflect.quality") { console.error("unexpected " + process.argv.slice(2).join(" ")); process.exit(1); }
 const input = JSON.parse(await Bun.stdin.text());
 const word = String(input.candidate).split(" ")[0];
@@ -226,6 +231,12 @@ describe("runCorpus", () => {
     expect(["case-1", "case-2", "case-3", "case-4", "case-5", "case-6", "case-7"].map(severityOf)).toEqual(["churn", "churn", "churn", "harmful", "harmful", "harmful", undefined]);
   });
 
+  test("stops before the first case when the akm has no `akm judge`, whatever its version says", async () => {
+    const { ctx, folders, calls } = setup([{ word: "PASS", label: "good" }], { FAKE_NOJUDGE: "1" });
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("has no `akm judge reflect.quality`");
+    expect(calls().filter((c) => c.at === "start")).toEqual([]);
+  });
+
   test("routes a verdict as reflect does: review from a mean of 3.5, a lower band is a reject, and the headline counts harmful passes on the negative lane", async () => {
     const { ctx, folders } = setup([
       { word: "PASS", label: "bad", severity: "harmful", feedback: "[negative] x" },
@@ -238,8 +249,8 @@ describe("runCorpus", () => {
     expect(m.harmful_auto_accepted).toEqual({ n: 3, passed: 1, rate: 0.3333 });
     expect(m.routes.harmful?.negative).toEqual({ pass: 1, review: 1, reject: 1 });
     expect(m.routes.harmful?.maintenance).toEqual({ pass: 1, review: 0, reject: 0 });
-    expect(m.good_rejected).toEqual({ n: 1, passed: 1, rate: 1 });
-    expect(m.review_share).toEqual({ n: 5, passed: 1, rate: 0.2 });
+    expect(m.good_rejected).toEqual({ n: 1, count: 1, rate: 1 });
+    expect(m.review_share).toEqual({ n: 5, count: 1, rate: 0.2 });
   });
 
   test("a score of -1 routed to review is a review whatever the message says, and one routed nowhere is an error", async () => {

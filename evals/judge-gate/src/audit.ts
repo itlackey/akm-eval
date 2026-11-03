@@ -42,6 +42,27 @@ export function bodyChange(source: string, candidate: string): BodyChange {
   return "edited";
 }
 
+/** The frontmatter as blocks: each top-level key's line with the indented lines under it. */
+function blocks(text: string): { key: string; block: string }[] {
+  const fm = FRONTMATTER.exec(text)?.[0] ?? "";
+  const out: { key: string; block: string }[] = [];
+  for (const line of fm.split("\n").slice(1)) {
+    if (line.startsWith("---")) break;
+    const key = /^([A-Za-z_][\w-]*):/.exec(line)?.[1];
+    if (key) out.push({ key, block: line });
+    else if (out.length > 0) (out[out.length - 1] as { block: string }).block += `\n${line}`;
+  }
+  return out;
+}
+
+/** The frontmatter keys other than description, when_to_use and title that differ between a source and its candidate: reflect keeps every other line as it is, so none may. */
+export function otherFrontmatterChanges(source: string, candidate: string): string[] {
+  const rest = (text: string) => blocks(text).filter((b) => !["description", "when_to_use", "title"].includes(b.key));
+  const [was, now] = [rest(source), rest(candidate)];
+  const names = new Set([...was, ...now].map((b) => b.key));
+  return [...names].filter((k) => was.filter((b) => b.key === k).map((b) => b.block).join("\n") !== now.filter((b) => b.key === k).map((b) => b.block).join("\n"));
+}
+
 export interface Coverage {
   n: number;
   feedback: Record<FeedbackKind, number>;
@@ -66,6 +87,8 @@ export interface Audit {
   sets: Record<string, { good: number; bad: number }>;
   /** Cases whose candidate edits the body beyond an added title: reflect cannot, so none may. */
   body_edits: string[];
+  /** Cases whose candidate changes a frontmatter line other than description, when_to_use and title (a stamp such as `type:`, `generated:` or `updated:`): reflect cannot, so none may. */
+  frontmatter_edits: { id: string; keys: string[] }[];
   /** What a judge that decided on the feedback alone would pass, without judging anything. */
   feedback_shortcuts: Record<"refuse_any_feedback" | "refuse_negative_feedback", { good_passed: number; bad_passed: number }>;
   adjudication: Adjudication | null;
@@ -113,6 +136,7 @@ export function audit(cases: Case[], rubric: number, adjudication?: string): Aud
     lanes,
     sets,
     body_edits: cases.filter((c) => bodyChange(c.source, c.candidate) === "edited").map((c) => c.id),
+    frontmatter_edits: cases.map((c) => ({ id: c.id, keys: otherFrontmatterChanges(c.source, c.candidate) })).filter((x) => x.keys.length > 0),
     feedback_shortcuts: {
       refuse_any_feedback: { good_passed: g.feedback.none, bad_passed: b.feedback.none },
       refuse_negative_feedback: { good_passed: g.feedback.none + g.feedback.positive_only, bad_passed: b.feedback.none + b.feedback.positive_only },
@@ -121,8 +145,8 @@ export function audit(cases: Case[], rubric: number, adjudication?: string): Aud
   };
 }
 
-/** Does the audit find a candidate that edits the body? */
-export const disagrees = (a: Audit): boolean => a.body_edits.length > 0;
+/** Does the audit find a candidate that edits the body or a frontmatter line reflect leaves alone? */
+export const disagrees = (a: Audit): boolean => a.body_edits.length > 0 || a.frontmatter_edits.length > 0;
 
 /** The audit as the text the command prints. */
 export function format(a: Audit): string {
@@ -151,6 +175,8 @@ export function format(a: Audit): string {
     `  candidate edits the body beyond an added title: ${a.body_edits.length}`,
   );
   for (const id of a.body_edits) out.push(`    ${id}: body edited`);
+  out.push(`  candidate changes a frontmatter line other than description, when_to_use and title: ${a.frontmatter_edits.length}`);
+  for (const x of a.frontmatter_edits) out.push(`    ${x.id}: ${x.keys.join(", ")}`);
   if (a.adjudication === null) out.push("", `No ${ADJUDICATION} beside the cases.`);
   else {
     out.push("", `Adjudication record (${ADJUDICATION}): ${a.adjudication.changed.length} labels changed, ${a.adjudication.borderline.length} borderline cases left as they were`);
@@ -168,7 +194,7 @@ function main(): void {
     process.exit(2);
   }
   if (values.help) {
-    console.log("Usage: bun evals/judge-gate/src/audit.ts [--assets DIR] [--json]\n\nPrints what the labels cover, the feedback each label carries and whether a candidate edits the body.\n--assets DIR reads DIR/cases.jsonl (default: assets/). Exits 1 when a candidate edits the body.");
+    console.log("Usage: bun evals/judge-gate/src/audit.ts [--assets DIR] [--json]\n\nPrints what the labels cover, the feedback each label carries and whether a candidate edits what reflect cannot.\n--assets DIR reads DIR/cases.jsonl (default: assets/). Exits 1 when a candidate edits the body or a frontmatter line other than description, when_to_use and title.");
     return;
   }
   const dir = resolve(values.assets ?? PUBLIC_ASSETS);

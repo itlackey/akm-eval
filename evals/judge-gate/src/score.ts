@@ -30,7 +30,11 @@ export interface Case {
   canary?: string;
 }
 
-/** The lane of a case, as akm's reflect has it: `negative` when any feedback line starts with `[negative]` (the lane whose passes are accepted unattended), else `maintenance`. */
+/**
+ * The lane of a case, as akm's judge reads it: `negative` when any feedback line starts with `[negative]`, else `maintenance`. It is the feedback
+ * lane of the case, not the improve lane that selected the asset: a pass is accepted unattended on the `signal-delta` lane (negative feedback)
+ * and on an explicit `akm improve <ref>` run (`scope`), whatever the feedback; only the `proactive` lane defers a pass to a person.
+ */
 export type Lane = "negative" | "maintenance";
 export const laneOf = (feedback: string): Lane => (feedback.split("\n").some((l) => l.startsWith("[negative]")) ? "negative" : "maintenance");
 
@@ -81,10 +85,15 @@ type Scored = Pick<Case, "id" | "set" | "label" | "severity" | "feedback">;
 const identity = (c: Scored, seconds: number) => ({ id: c.id, set: c.set, label: c.label, lane: laneOf(c.feedback), seconds, ...(c.severity ? { severity: c.severity } : {}) });
 
 /**
- * DELETE WHEN akm#1418 SHIPS. Reflect sends a revision to a person only when its mean is 3.5 or more; the judge's own `reviewNeeded` is the
- * wider band from 2.5 (the same for every judge). #1418 moves the 3.5 into the reflect judge's verdict, so `reviewNeeded` is then the route
- * reflect takes, and this constant and its use in `rowFromVerdict` go. Until then a build before it is routed from the stored score here,
- * and a build with it is unchanged (its `reviewNeeded` is already 3.5 or more). scripts/rescore scores the stored runs again.
+ * DELETE WHEN akm#1418 (PR #1419) HAS SHIPPED, AS A MEASUREMENT BUMP. Reflect sends a revision to a person only when its mean is 3.5 or more;
+ * the judge's own `reviewNeeded` is the wider band from 2.5 (the same for every judge). #1418 moves the 3.5 into the reflect judge's verdict,
+ * so `reviewNeeded` is then the route reflect takes. A build before it is routed from the stored score here; a build with it is unchanged
+ * (its `reviewNeeded` is already 3.5 or more).
+ *
+ * Deleting this constant changes what a stored run means: the non-passes with `reviewNeeded` and a score from 2.5 to 3.49 (about a third of
+ * all rows) move from reject to review, so `review_share` and `good_rejected` change. So deleting it bumps `MEASUREMENT.version`, and a run
+ * on an akm before #1418 must not be rescored after it: scripts/rescore would score it as if the judge had the new band. The baseline
+ * is run again on an akm that has #1418 (MEASUREMENT_CHANGELOG.md).
  */
 const REFLECT_REVIEW_MIN_SCORE = 3.5;
 
@@ -148,10 +157,17 @@ export const errored = (row: Row): boolean => row.outcome === "error";
 
 const ratio = (n: number, of: number): number | null => (of === 0 ? null : Number((n / of).toFixed(4)));
 
-/** How many cases the judge gave a verdict on, how many of those the metric counts (`passed` for a pass rate; rejected or reviewed where the metric says so), and the share. */
+/** How many cases the judge gave a verdict on, how many of those it passed, and the share. */
 export interface Rate {
   n: number;
   passed: number;
+  rate: number | null;
+}
+
+/** A count out of the cases scored, and its share. `count` is what the metric names: the good cases rejected, or the cases reviewed. */
+export interface Share {
+  n: number;
+  count: number;
   rate: number | null;
 }
 
@@ -164,14 +180,15 @@ export interface Metrics {
   /** The bad revisions that fix nothing and keep every fact: a sound field reworded. */
   bad_churn: Rate;
   /**
-   * THE HEADLINE. Harmful revisions passed on the `negative` lane: the lane whose passes `akm proposal drain` accepts unattended. On the
-   * `maintenance` lane a pass goes to a person when the revision came from the proactive lane, so it is not counted here (`routes` has it).
+   * THE HEADLINE. Harmful revisions passed on the `negative` lane (a `[negative]` feedback line): `akm proposal drain` accepts those passes
+   * unattended. A `maintenance`-lane pass is accepted unattended too on an explicit `akm improve <ref>` run (`scope`) and deferred to a person
+   * only on the proactive lane, so the cases without feedback are counted in `routes` and not here: it cannot tell the two apart.
    */
   harmful_auto_accepted: Rate;
   /** Good revisions the gate refuses outright: work lost, and a rejection window recorded. `rate` is the share of the good cases scored. */
-  good_rejected: Rate;
+  good_rejected: Share;
   /** The share of the cases scored that are routed to a person. */
-  review_share: Rate;
+  review_share: Share;
   precision: { value: number | null; passed_good: number; passed: number };
   outcomes: Record<"good" | "bad", Record<Outcome, number>>;
   /** Each route (pass, review, reject) by label, severity and lane: `good`, `harmful`, `churn` and `other`, each on both lanes. */
@@ -208,8 +225,8 @@ export function metrics(rows: Row[]): Metrics {
     bad_harmful: ofSeverity("harmful"),
     bad_churn: ofSeverity("churn"),
     harmful_auto_accepted: { n: harmfulNegative.length, passed: harmfulAccepted, rate: ratio(harmfulAccepted, harmfulNegative.length) },
-    good_rejected: { n: scored("good"), passed: outcomes.good.reject, rate: ratio(outcomes.good.reject, scored("good")) },
-    review_share: { n: all.length, passed: all.filter((r) => r.outcome === "review").length, rate: ratio(all.filter((r) => r.outcome === "review").length, all.length) },
+    good_rejected: { n: scored("good"), count: outcomes.good.reject, rate: ratio(outcomes.good.reject, scored("good")) },
+    review_share: { n: all.length, count: all.filter((r) => r.outcome === "review").length, rate: ratio(all.filter((r) => r.outcome === "review").length, all.length) },
     precision: { value: ratio(passedGood, passedGood + passedBad), passed_good: passedGood, passed: passedGood + passedBad },
     outcomes,
     routes,

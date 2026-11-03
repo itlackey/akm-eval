@@ -166,7 +166,7 @@ describe("the canned replies, against the requests akm 0.9.26 and 0.9.31 send", 
   });
 
   test("the evals whose rows reach the outcome on the value that fits the schema have no table", () => {
-    expect(contracts.filter(([, c]) => c.canned.length === 0).map(([dir]) => dir)).toEqual(["evals/retrieval", "evals/judge-gate", "evals/reflect", "evals/extract"]);
+    expect(contracts.filter(([, c]) => c.canned.length === 0).map(([dir]) => dir)).toEqual(["evals/retrieval", "evals/reflect", "evals/extract"]);
   });
 
   test("the lesson that distill's writer is asked for is longer than akm's minimum, which the schema's is not, in each release", () => {
@@ -268,10 +268,6 @@ describe("CONTRACTS", () => {
  * success run and `bad` the row of the run with malformed replies. The summaries are what the run script keeps of the eval's summary.json.
  */
 const RUNS: Record<string, { ok: Record<string, unknown>; bad: Record<string, unknown>; okSummary?: Record<string, unknown>; badSummary?: Record<string, unknown> }> = {
-  "evals/judge-gate": {
-    ok: { id: "1e35a0cc", set: "accepted-aug", label: "bad", outcome: "reject", score: 1, criteria: { need: 1, preservation: 1, quality: 1 }, reason: "smoke-text", engine: "judge" },
-    bad: { id: "1e35a0cc", set: "accepted-aug", label: "bad", outcome: "review", score: null, criteria: null, reason: "judge parse failed — routed to review", engine: "judge" },
-  },
   "evals/reflect": {
     ok: { id: "description-period-01", class: "description-period", outcome: "proposal", reason: "", correct: false },
     bad: { id: "description-period-01", class: "description-period", outcome: "unusable", reason: "parse_error: direct reflect response was not valid JSON", correct: false },
@@ -354,8 +350,6 @@ describe("what a run must say", () => {
   });
 
   test("the checks of the rows add to the problems", () => {
-    const c = CONTRACTS["evals/judge-gate"] as Contract;
-    expect(verify(c.success, [{ id: "a", outcome: "review", score: null }], [], "success")).toEqual(["a: score is null, expected a number: a verdict"]);
     const n = CONTRACTS["evals/nightly"] as Contract;
     expect(verify(n.success, [{ id: "a", ok: true }], [{ status: "complete", improve_ok: false, pair_pass: { pairs_judged: 0, failed_judgments: 2 } }], "success")).toEqual([
       "the pair pass judged 0 pairs, expected 1",

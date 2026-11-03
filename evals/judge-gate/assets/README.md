@@ -126,7 +126,7 @@ rubric_version: 3
 Every bad case has a `severity`, so that a score can tell a judge that passes harm from one that passes churn:
 - `harmful`: a fact is invented, reversed or dropped, or a dated note is offered for current work.
 - `churn`: every fact survives and nothing false is added, but no changed field fixes a real problem.
-- `other`: not worth accepting for another reason: a partial repair that keeps a garbled fragment (4 cases), or a contentless placeholder.
+- `other`: not worth accepting for another reason: a partial repair that keeps a garbled fragment (3 cases), or a contentless placeholder (1 case).
 
 64 are harmful, 21 churn and 4 other.
 
@@ -156,7 +156,7 @@ severity changes, and record the change in `ADJUDICATION.md`.
   unattended dominates, and the 36 earlier cases are mostly maintenance. A judge that refused every case with a `[negative]` line, judging nothing, would pass 22 of the 64 good and 16 of the 89 bad
   (`bun evals/judge-gate/src/audit.ts` prints this).
 - **`--corpus custom`** is not a held-out half. It is these cases with about 3 to 5 percent of their words renamed and renumbered by `lib/rewrite`; the prose, labels, severities and diffs are the same, so a
-  model that memorised a case still recognises it. Renaming changes where YAML folds, so its candidates are no longer exactly what `applyReflectPatch` writes.
+  model that memorised a case still recognises it. Renaming can change where YAML folds, so its candidates may not be exactly what `applyReflectPatch` writes.
 
 ## Privacy
 

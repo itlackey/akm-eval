@@ -141,7 +141,7 @@ export interface Entry {
  */
 export const ENTRIES: Entry[] = [
   { dir: "evals/retrieval", model: false, answers: ["search", "curate"] },
-  { dir: "evals/judge-gate" },
+  { dir: "evals/judge-gate", skip: "needs `akm judge`, which no released akm has yet (akm#1416 is on main only); run it on an akm main build" },
   { dir: "evals/reflect" },
   { dir: "evals/distill" },
   { dir: "evals/consolidate" },

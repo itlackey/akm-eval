@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ADJUDICATION, audit, bodyChange, disagrees, feedbackKind, format, readAdjudication } from "./audit.ts";
+import { ADJUDICATION, audit, bodyChange, disagrees, feedbackKind, format, otherFrontmatterChanges, readAdjudication } from "./audit.ts";
 import { rubricVersion } from "./inputs.ts";
 import { type Case, parseCases } from "./lib.ts";
 
@@ -61,6 +61,18 @@ describe("bodyChange", () => {
   });
 });
 
+describe("otherFrontmatterChanges", () => {
+  const source = page("type: skill\ndescription: a. b\nsources:\n  - one\nupdated: 2026-01-01", "\nBody.\n");
+  test("is empty when only description, when_to_use and the title change", () => {
+    expect(otherFrontmatterChanges(source, page("type: skill\ndescription: a, b\nsources:\n  - one\nupdated: 2026-01-01\nwhen_to_use: now", "\n# T\n\nBody.\n"))).toEqual([]);
+  });
+  test("names a stamp added, a field changed or a list item changed", () => {
+    expect(otherFrontmatterChanges(source, page("type: skill\ndescription: a, b\nsources:\n  - one\nupdated: 2026-01-01\ngenerated:\n  by: akm", "\nBody.\n"))).toEqual(["generated"]);
+    expect(otherFrontmatterChanges(source, page("type: skill\ndescription: a, b\nsources:\n  - two\nupdated: 2026-02-02", "\nBody.\n")).sort()).toEqual(["sources", "updated"]);
+    expect(otherFrontmatterChanges(source, page("description: a, b\nsources:\n  - one\nupdated: 2026-01-01", "\nBody.\n"))).toEqual(["type"]);
+  });
+});
+
 describe("audit", () => {
   const cases: Case[] = [
     make(1, "good"),
@@ -91,6 +103,10 @@ describe("audit", () => {
     expect(edited.body_edits).toEqual(["id-good-7"]);
     expect(disagrees(edited)).toBe(true);
     expect(format(edited)).toContain("id-good-7: body edited");
+    const stamped = audit([...cases, make(8, "good", { candidate: page("description: a, b\ngenerated:\n  by: akm", "\nBody.\n") })], 3);
+    expect(stamped.frontmatter_edits).toEqual([{ id: "id-good-8", keys: ["generated"] }]);
+    expect(disagrees(stamped)).toBe(true);
+    expect(format(stamped)).toContain("id-good-8: generated");
   });
 
   test("says in the text it prints what it found", () => {
@@ -150,6 +166,7 @@ describe("the public cases", () => {
 
   test("hold nothing reflect cannot write: no candidate edits the body beyond an added title, and every case has a ref and a reason", () => {
     expect(audit(cases, 3).body_edits).toEqual([]);
+    expect(audit(cases, 3).frontmatter_edits).toEqual([]);
     for (const c of cases) {
       expect(c.ref).toMatch(/^[\w.-]+(\/[\w.-]+)+$/);
       expect(c.labelReason.length).toBeGreaterThan(20);
@@ -192,7 +209,7 @@ describe("the command", () => {
   test("prints JSON with --json", () => {
     const { code, out } = run("--json");
     expect(code).toBe(0);
-    expect(JSON.parse(out)).toMatchObject({ rubric_version: 3, n_cases: 153, labels: { good: { n: 64 }, bad: { n: 89 } }, body_edits: [] });
+    expect(JSON.parse(out)).toMatchObject({ rubric_version: 3, n_cases: 153, labels: { good: { n: 64 }, bad: { n: 89 } }, body_edits: [], frontmatter_edits: [] });
   });
 
   test("exits 1 and names the case when a candidate edits the body", () => {

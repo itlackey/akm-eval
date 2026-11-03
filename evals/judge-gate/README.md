@@ -35,7 +35,7 @@ The custom rewrite changes names, numbers and the like across each case's source
 
 The case goes to `akm judge reflect.quality` with its feedback as lines and its `ref`, and akm's verdict becomes a route, the one reflect takes: `pass` (every criterion 4 or more; on the `negative` lane `akm proposal drain` accepts it unattended), `review` (`verdict.reviewNeeded`: a person decides), `reject` (no proposal; a rejection window is recorded) or `error`. A judge that gave no verdict (`error` or `unparseable` from akm, score -1) is a `review` with a null `score`. `error` is akm failing, timing out, or printing no verdict; errored cases are left out of the counts. The run stops, `aborted`, after 5 cases in a row that errored or got no verdict.
 
-Until akm#1418 ships, reflect's own review floor (a mean of 3.5) is not in the verdict, so `score.ts` routes the review band from the stored score at 3.5. That is one marked constant (`REFLECT_REVIEW_MIN_SCORE`) to delete when #1418 is in; `scripts/rescore` scores stored runs again.
+Until akm#1418 ships, reflect's own review floor (a mean of 3.5) is not in the verdict, so `score.ts` routes the review band from the stored score at 3.5. That is one marked constant (`REFLECT_REVIEW_MIN_SCORE`). Deleting it is a measurement bump: about a third of the rows are non-passes with a mean from 2.5 to 3.49 that it keeps as rejects, so a run on an akm before #1418 must not be rescored after it. Once akm#1419 (#1418) is merged, the baseline is run again on an akm that has it.
 
 | Metric | Meaning |
 |---|---|
@@ -48,7 +48,7 @@ Until akm#1418 ships, reflect's own review floor (a mean of 3.5) is not in the v
 | `bad_churn` | churn revisions passed |
 | `precision` | of everything passed, the share that was good |
 
-`routes` splits pass, review and reject by label, severity (`good`, `harmful`, `churn`, `other`) and lane (`negative`, `maintenance`); on the `maintenance` lane a pass goes to a person when the revision came from the proactive lane, so the route that matters there is reject against not reject. `outcomes` splits each label by route. A judge that passes everything gets good 64/64, bad 89/89 and precision 42%. A change is worth keeping when `good` rises and `harmful_auto_accepted` does not. One case is about 1.6 points of `good` and 1.6 of `harmful_auto_accepted`, so a gap of a case or two is noise.
+`routes` splits pass, review and reject by label, severity (`good`, `harmful`, `churn`, `other`) and lane (`negative`, `maintenance`); on the `maintenance` lane (no `[negative]` line) a pass is accepted unattended too on an explicit `akm improve <ref>` run (the `scope` lane) and goes to a person only on the proactive lane, so `harmful_auto_accepted` leaves those cases to `routes`, where the maintenance harmful passes can be read. `outcomes` splits each label by route. A judge that passes everything gets good 64/64, bad 89/89 and precision 42%. A change is worth keeping when `good` rises and `harmful_auto_accepted` does not. One case is about 1.6 points of `good` and 1.8 of `harmful_auto_accepted`, so a gap of a case or two is noise.
 
 ## What the summary reports
 

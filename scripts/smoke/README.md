@@ -37,7 +37,6 @@ Each eval runs twice. The first run answers every call with the smallest value t
 | Eval | First run's row must say | Second run's row says |
 |---|---|---|
 | `evals/retrieval` | no error; `search` and `curate` each return a ref | no second run |
-| `evals/judge-gate` | `outcome` of `pass`, `review` or `reject`, with a `score` | `review`, with no `score` |
 | `evals/reflect` | `outcome: proposal` | `unusable` |
 | `evals/distill` | `outcome` of `lesson` or `update`, `status: pending` | `invalid` |
 | `evals/consolidate` | `outcome: retire`, `paired`, `judged_as: duplicate`, `staged` | `error` |
