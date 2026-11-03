@@ -40,7 +40,7 @@ The [public results ledger](https://itlackey.github.io/akm-eval/) presents every
 ```
 evals/, benchmarks/   one folder per eval: run, generate, src/, assets/, results/ (gitignored)
 corpus/library/       the shared akm library the evals use, also usable as an akm bundle
-lib/                  what the evals share: the driver (run.ts), the akm sandbox, models, corpora, manifest, --repeat, the rewrite
+lib/                  what the evals share: the driver (run.ts), the akm sandbox, the `akm judge` call (judge.ts), models, corpora, manifest, --repeat, the rewrite
 scripts/              check, compare, ledger, rescore, smoke
 site/                 source of the public GitHub Pages results ledger
 generate-assets       makes the custom corpus of every eval in private/
@@ -190,6 +190,16 @@ Agents and contributors: start with [`AGENTS.md`](AGENTS.md).
 - **Run from a worktree.** A new worktree or clone has none of the gitignored local files. Copy or link `.env`, `models.json` and `private` (a folder or a link) into it from your main checkout. Without `models.json` the Harbor evals have no `limits` for the model: they warn, and their runs are not comparable with runs that had limits.
 - **Run akm by hand.** Set `AKM_BUNDLE_DIR`, `AKM_CONFIG_DIR`, `AKM_DATA_DIR`, `AKM_CACHE_DIR`, `AKM_STATE_DIR` and the `XDG_*` folders to temporary folders, as the evals do (`sandboxEnv` in `lib/akm/akm.ts`). With only the `XDG_*` folders set, akm still indexes your default stash, though its database goes to the temporary folder.
 - **gh.** `gh issue view`, `gh pr view` and `gh pr edit` can fail on this repository with a GraphQL error about the deprecation of Projects (classic). The `--json` forms of the view commands and `gh api repos/itlackey/akm-eval/...` work (`gh api --method PATCH repos/itlackey/akm-eval/pulls/N` in place of `gh pr edit`).
+
+### What a judge eval must satisfy
+
+An eval of one of akm's judges (`akm judge <name>`: judge-gate, and the lesson, pair and drain evals of #153) measures the judge on what akm sends it, so:
+
+- **Cases are reachable.** A case is an input the production pipeline can build for that judge today. Each eval checks that itself and says how (judge-gate rebuilds every candidate through akm's `applyReflectPatch`: `evals/judge-gate/src/reachable.ts`). A case akm can no longer produce is retired, not scored: a rate on inputs akm never sends decides nothing.
+- **Cases are built from real pipeline output.** Take proposals, feedback and neighbouring assets from a real run of the process that feeds the judge, not from text written for the eval. Write by hand only the kinds the pipeline does not produce, and say so in the README.
+- **Labels follow the judge's own rubric.** A label is adjudicated against the policy the judge's prompt implements, not against another eval's grader. If that policy is wrong, that is an akm change, and the labels follow it afterwards.
+- **Scoring uses the production route.** Read the route from the verdict akm prints (`reviewNeeded`, the decision), and copy no threshold. Count a judge that gave no verdict as akm routes it, apart from a failure of akm itself. `lib/judge.ts` calls the judge, tells the envelope from akm failing, and refuses an akm whose judge is older than the `schemaVersion` the eval reads.
+- **Each eval has its own versions.** A change to its cases, labels, input or scoring bumps its `version` or `scoringVersion` and adds an entry to `MEASUREMENT_CHANGELOG.md`. A stored run is scored again only when its raw output still means what the scorer reads (`rawOf` refuses it otherwise), and runs from before a change are not scored by the rule after it.
 
 ## Custom corpora
 

@@ -9,12 +9,13 @@
 
 import { readFileSync, rmSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { type Sandbox, removeSandbox, runAkm } from "../../../lib/akm/akm.ts";
+import { type Sandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { fail } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
+import { requireJudge } from "../../../lib/judge.ts";
 import { type CtxInput, type EvalSpec, type Summary, defaultResults as resultsIn, runCorpus as runIn, runEval } from "../../../lib/run.ts";
 import { CASES, casesSha256, rubricVersion } from "./inputs.ts";
-import { JUDGE_TIMEOUT_MS, NAME, STRATEGY, configFor, judgeCase, openSandbox } from "./collect.ts";
+import { JUDGE, JUDGE_TIMEOUT_MS, MIN_SCHEMA, NAME, STRATEGY, configFor, judgeCase, openSandbox } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { type Case, type Rate, type Row, type Share, hasVerdict, parseCases, pct, selectCases, summarize } from "./lib.ts";
 
@@ -81,13 +82,12 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
   // The sandbox holds the config, so one is opened for the cases of a run and removed after them; that counts its model calls for the summary.
   openRun: async (ctx) => {
     const sandbox = openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider);
-    // A version number does not say that `akm judge` is there (0.10.261105 was cut before #1416), so ask akm.
-    const listed = await runAkm(sandbox, ["judge", "--list", "--format", "json"], { timeoutMs: 120_000 }).catch(() => undefined);
-    if (!listed || listed.code !== 0 || !listed.stdout.includes("reflect.quality")) {
+    // A version number does not say that `akm judge` is there at the schema this eval reads, so ask akm.
+    await requireJudge(sandbox, JUDGE, MIN_SCHEMA).catch((e: Error) => {
       removeSandbox(sandbox);
       if (ctx.resultsDir) rmSync(ctx.resultsDir, { recursive: true, force: true }); // the folder of a run that made no case
-      fail("this akm has no `akm judge reflect.quality` (`akm judge --list` does not name it). judge-gate needs an akm build with akm#1416, such as akm main.");
-    }
+      fail(`${e.message}. judge-gate needs an akm build with akm#1419 (reflect's review floor in the verdict), such as akm main.`);
+    });
     return { sandbox, close: () => removeSandbox(sandbox) };
   },
   configFor: (ctx) => configFor(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider),

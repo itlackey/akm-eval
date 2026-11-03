@@ -5,12 +5,17 @@
 // A change to what this file asks akm, or to what it records of the answer, is a new version of the eval: change `version` in
 // measurement.ts by hand.
 
-import { type Sandbox, createSandbox, engineConfig, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, createSandbox, engineConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
-import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
+import { hideEndpoint } from "../../../lib/cli.ts";
+import { type JudgeEnvelope, callJudge } from "../../../lib/judge.ts";
 import { type Case, type Row, makeRow } from "./score.ts";
 
 export const NAME = "judge-gate";
+
+/** The judge this eval measures, and the schemaVersion of it that it reads: 2 carries reflect's own route (the review floor, akm#1418) in `reviewNeeded`. */
+export const JUDGE = "reflect.quality";
+export const MIN_SCHEMA = 2;
 
 /** How long akm gets for one case unless --timeout-ms says otherwise: a slow local model takes minutes. */
 export const JUDGE_TIMEOUT_MS = 15 * 60_000;
@@ -49,23 +54,15 @@ export function openSandbox(baseUrl: string, model: string, hasKey: boolean, ove
 }
 
 /**
- * The fields of the verdict that the scorer reads, from what `akm judge reflect.quality --format json` printed, with the model endpoint written
- * as <MODEL_BASE_URL> in its reason (results get shared, and akm's messages name the endpoint it called). The envelope's `verdict` is read as
- * it is; its `engine` is the runner's name. An `error` or `unparseable` outcome is the judge giving no verdict, which akm's reflect sends to a
- * person (score -1, review needed), and the reason is the outcome's. Anything else is kept as it is: the scorer calls it no verdict.
+ * The fields of the verdict that the scorer reads, from the envelope `akm judge reflect.quality --format json` printed, with the model endpoint written
+ * as <MODEL_BASE_URL> in its reason (results get shared, and akm's messages name the endpoint it called). `schemaVersion` is the judge's, kept so that a
+ * stored run says which verdicts it holds (rawOf). The envelope's `engine` is the runner's name. An `error` or `unparseable` outcome is the judge giving no
+ * verdict, which akm's reflect sends to a person (score -1, review needed), and the reason is the outcome's.
  */
-export function verdictOf(parsed: unknown, baseUrl: string): unknown {
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return parsed;
-  const envelope = parsed as Record<string, any>;
-  const engine = typeof envelope.runner?.name === "string" ? envelope.runner.name : undefined;
-  const v: Record<string, unknown> =
-    envelope.outcome === "verdict" && typeof envelope.verdict === "object" && envelope.verdict !== null
-      ? envelope.verdict
-      : envelope.outcome === "error" || envelope.outcome === "unparseable"
-        ? { pass: false, score: -1, reviewNeeded: true, reason: envelope.reason }
-        : {};
+export function verdictOf(envelope: JudgeEnvelope, baseUrl: string): Record<string, unknown> {
+  const v = envelope.outcome === "verdict" ? envelope.verdict! : { pass: false, score: -1, reviewNeeded: true, reason: envelope.reason };
   const { pass, score, reviewNeeded, reason, criteria } = v;
-  return { pass, score, reviewNeeded, reason: typeof reason === "string" ? hideEndpoint(reason, baseUrl) : reason, criteria, engine };
+  return { pass, score, reviewNeeded, reason: typeof reason === "string" ? hideEndpoint(reason, baseUrl) : reason, criteria, engine: envelope.runner?.name, schemaVersion: envelope.schemaVersion };
 }
 
 /** What one case needs of the run: the sandbox with the config written, the model endpoint (masked in the row), and the time limit of one case. */
@@ -78,22 +75,7 @@ interface CaseContext {
 
 /** One case: the source, the candidate, the feedback lines and the ref go to `akm judge reflect.quality` on stdin, and its verdict is scored. */
 export async function judgeCase(c: Case, ctx: CaseContext): Promise<Row> {
-  const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
-  const input = JSON.stringify(judgeInput(c));
-  let run: Awaited<ReturnType<typeof runAkm>>;
-  try {
-    run = await runAkm(ctx.sandbox, ["judge", "reflect.quality", "--format", "json"], { stdin: input, timeoutMs: ctx.timeoutMs ?? JUDGE_TIMEOUT_MS });
-  } catch (e) {
-    return makeRow(c, { error: hide((e as Error).message), seconds: 0 });
-  }
-  const { stdout, stderr, code, ms, timedOut } = run;
-  const seconds = Number((ms / 1000).toFixed(1));
-  if (timedOut) return makeRow(c, { error: hide(exitMessage(code, stderr, stdout)), seconds, timedOut: true });
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    return makeRow(c, { error: hide(exitMessage(code, stderr, stdout)), seconds });
-  }
-  return makeRow(c, { verdict: verdictOf(parsed, ctx.baseUrl), seconds });
+  const call = await callJudge(ctx.sandbox, JUDGE, judgeInput(c), { timeoutMs: ctx.timeoutMs ?? JUDGE_TIMEOUT_MS, hide: (text) => hideEndpoint(text, ctx.baseUrl) });
+  if ("error" in call) return makeRow(c, { error: call.error, seconds: call.seconds, ...(call.timedOut ? { timedOut: true } : {}) });
+  return makeRow(c, { verdict: verdictOf(call.envelope, ctx.baseUrl), seconds: call.seconds });
 }
