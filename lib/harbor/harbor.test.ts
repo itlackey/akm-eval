@@ -706,6 +706,17 @@ describe("loadRunTrials", () => {
     expect(summarize(rows).agent_exits).toEqual({ control: 1, akm: 2 });
   });
 
+  test("counts a crash that the plugin check relabels, as the control's is counted (#161)", () => {
+    const job = tmp();
+    const crash = { exception_info: { exception_type: "NonZeroAgentExitCodeError" }, verifier_result: null };
+    trialDir(job, "t1__a", "opencode", crash);
+    trialDir(job, "t1__b", "akm-opencode", crash, { "akm_plugin_status.json": { live: false, problem: "there is no opencode log" } });
+    const { trials } = loadRunTrials(job);
+    expect(trials.find((t) => t.arm === "akm")).toMatchObject({ error: PLUGIN_ERROR, agent_exit: true });
+    const report = buildReport(trials);
+    expect([report.control.agent_exits, report.akm.agent_exits]).toEqual([1, 1]);
+  });
+
   test("shows a plugin failure that an earlier exception would hide: its exception, no reward, and why", () => {
     const job = tmp();
     // Harbor kept the AgentTimeoutError, the first exception, and lost the one the agent raised after it.
@@ -799,7 +810,7 @@ describe("loadRunTrials", () => {
 });
 
 describe("metricsOf", () => {
-  const trial = (task: string, arm: "control" | "akm", reward: number | null, extra: Record<string, unknown> = {}) => ({ task, arm, trial: `${task}-${arm}`, reward, error: null, akm: arm === "akm" ? { akm_show: 1 } : null, tools: 2, tokens: null, costUsd: null, seconds: 60, timed_out: false, ...extra });
+  const trial = (task: string, arm: "control" | "akm", reward: number | null, extra: Record<string, unknown> = {}) => ({ task, arm, trial: `${task}-${arm}`, reward, error: null, akm: arm === "akm" ? { akm_show: 1 } : null, tools: 2, tokens: null, costUsd: null, seconds: 60, timed_out: false, agent_exit: false, ...extra });
 
   const run = (akmRewards: number[]) => {
     const trials = [
@@ -940,7 +951,7 @@ describe("the committed lockfiles of the pinned releases (#68)", () => {
 });
 
 describe("completionOf and statusOf", () => {
-  const trial = (task: string, arm: "control" | "akm", over: Partial<RunTrial> = {}): RunTrial => ({ task, arm, trial: `${task}__${arm}${Math.random()}`, reward: 1, error: null, akm: null, tools: 1, tokens: null, costUsd: null, seconds: 1, timed_out: false, ...over });
+  const trial = (task: string, arm: "control" | "akm", over: Partial<RunTrial> = {}): RunTrial => ({ task, arm, trial: `${task}__${arm}${Math.random()}`, reward: 1, error: null, akm: null, tools: 1, tokens: null, costUsd: null, seconds: 1, timed_out: false, agent_exit: false, ...over });
   const grid = (tasks: string[], attempts: number): RunTrial[] => tasks.flatMap((t) => (["control", "akm"] as const).flatMap((arm) => Array.from({ length: attempts }, () => trial(t, arm))));
 
   test("expects every task in both arms once per attempt, and counts a full grid as completed", () => {

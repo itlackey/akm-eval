@@ -13,6 +13,8 @@ import { type Arm, type Report, type Trial, buildReport, timedOut } from "./repo
 export interface RunTrial extends Trial {
   /** The agent or its setup ran out of time (AgentTimeoutError, AgentSetupTimeoutError), whatever else the trial is later called. Counted apart from the other errors, so a slower akm shows as one. report.ts counts the timeouts of its tables from this. */
   timed_out: boolean;
+  /** The agent exited non-zero (NonZeroAgentExitCodeError), whatever else the trial is later called. report.ts counts `agent_exits` from this. */
+  agent_exit: boolean;
 }
 
 /** The trials of one arm on one task, counted. */

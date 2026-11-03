@@ -10,7 +10,7 @@ import { dirtyFingerprint } from "../akm/akm.ts";
 import { fail } from "../cli.ts";
 import { type ModelEntry, type ModelLimits, type ModelSettings, loadModels, resolveModel } from "../models.ts";
 import { credentialField, sha256File, sha256Text } from "../provenance.ts";
-import type { Arm, Trial } from "./report.ts";
+import { AGENT_EXIT, type Arm, type Trial } from "./report.ts";
 import type { RunTrial } from "./score.ts";
 import { TIMEOUT_ERRORS, loadTrials } from "./trials.ts";
 
@@ -512,7 +512,7 @@ const distinct = <T>(xs: T[]): T[] => [...new Set(xs)].sort();
 
 /**
  * The trials of a Harbor job folder, as trials.ts reads them, with two things trials.ts cannot see.
- * A trial gets `timed_out` from its exception before anything else is done to it.
+ * A trial gets `timed_out` and `agent_exit` from its exception before anything else is done to it.
  * Harbor keeps the first exception of a trial only, so after an AgentTimeoutError the error that akm_opencode.py raises when the plugin
  * was not live is lost. The akm arm leaves akm_plugin_status.json for that: a trial whose file says the plugin was not live gets
  * AkmPluginNotLoadedError as its exception and no reward, whatever else it hit first, as one whose exception that was already does.
@@ -521,7 +521,7 @@ export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: O
   const observed: Observed & { dependency_trees: string[] } = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null, dependency_trees: [], lockfiles: null };
   if (!existsSync(jobDir)) return { trials: [], observed }; // Harbor never made the job: every cell of the grid is missing
   const trials = loadTrials(jobDir).map((t): RunTrial => {
-    const row: RunTrial = { ...t, timed_out: t.error !== null && TIMEOUT_ERRORS.has(t.error) };
+    const row: RunTrial = { ...t, timed_out: t.error !== null && TIMEOUT_ERRORS.has(t.error), agent_exit: t.error === AGENT_EXIT };
     if (t.arm !== "akm") return row;
     const agent = join(jobDir, t.trial, "agent");
     const status = readJson(join(agent, "akm_plugin_status.json"));

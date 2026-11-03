@@ -54,7 +54,7 @@ As in `evals/agent-ab`: the same model, opencode 1.18.34, task, container and ti
 
 ## How a task is scored
 
-A trial is scored when the verifier gave it a reward; otherwise it is errored and left out of the rates. A trial whose agent ran out of time is still verified and is also counted in `timeouts`. A trial whose agent exited non-zero (`NonZeroAgentExitCodeError`) is counted in `agent_exits`, scored or not, and stays a scored failure.
+A trial is scored when the verifier gave it a reward; otherwise it is errored and left out of the rates. A trial whose agent ran out of time is still verified and is also counted in `timeouts`. A trial whose agent exited non-zero (`NonZeroAgentExitCodeError`) is counted in `agent_exits`, scored or not; a scored one stays a scored failure, one the verifier did not score stays errored.
 
 | Figure | Meaning |
 |---|---|
@@ -68,7 +68,7 @@ A trial is scored when the verifier gave it a reward; otherwise it is errored an
 
 ## What the summary reports
 
-As `evals/agent-ab`: `status`, `aborted_reason`, `completion`, `metrics`, `report`, `timeouts`, `engine`, `config`, `job`, `pins`, the akm fields and the `manifest`, with `dataset` (the pinned digest and any task whose digest differed) and `library` (`assets`, `measured_with`, `sha256`) in place of agent-ab's library digest. `assets_sha256` covers the library, the selected tasks' digests and the attempts. `samples.jsonl` has one line per task with every trial.
+As `evals/agent-ab`: `status`, `aborted_reason`, `completion`, `metrics`, `report`, `timeouts`, `agent_exits`, `engine`, `config`, `job`, `pins`, the akm fields and the `manifest`, with `dataset` (the pinned digest and any task whose digest differed) and `library` (`assets`, `measured_with`, `sha256`) in place of agent-ab's library digest. `assets_sha256` covers the library, the selected tasks' digests and the attempts. `samples.jsonl` has one line per task with every trial.
 
 ## Results
 

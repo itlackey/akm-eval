@@ -86,7 +86,7 @@ Only installed tools and package downloads are shared. Every trial still gets it
 
 ## How a task is scored
 
-A trial is scored when the verifier gave it a reward (1 or 0); otherwise it is errored and left out of the rates. A trial whose agent or setup ran out of time is also counted in `timeouts`; an agent timeout is still verified and keeps its reward. A trial whose agent exited non-zero (Harbor's `NonZeroAgentExitCodeError`) is counted in `agent_exits`, scored or not; the verifier still scores the workspace, so it stays a scored failure, and the count shows how many failures were crashes.
+A trial is scored when the verifier gave it a reward (1 or 0); otherwise it is errored and left out of the rates. A trial whose agent or setup ran out of time is also counted in `timeouts`; an agent timeout is still verified and keeps its reward. A trial whose agent exited non-zero (Harbor's `NonZeroAgentExitCodeError`) is counted in `agent_exits`, scored or not; a scored one stays a scored failure, one the verifier did not score stays errored, and the count shows how many trials were crashes.
 
 | Figure | Meaning |
 |---|---|
@@ -102,7 +102,7 @@ Read `status`, then `completion`, then engagement before the difference: where t
 
 ## What the summary reports
 
-`summary.json`: `status`, `aborted_reason`, `completion` (`expected`, `completed`, `failed`, `missing`, `unexpected`, overall and per arm), `metrics` (per arm `pass_rate`, `passed`, `scored`, `errored`, `timeouts`, `agent_exits`; `delta`; `better`; `engagement`), `report` (with `sign_test` and `flips`), `timeouts` and `agent_exits` by arm, `engine` (model and endpoint host), `config` (the Harbor job, credentials redacted), `job`, `pins`, `akm_version`, `akm_bin`, `akm_build`, `akm_env`, `akm_install`, `assets_sha256` (over the run's copy of the tasks and libraries, and the attempts), `libraries_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one line per task with every trial of both arms (reward, exception, `timed_out`, akm tools called, tokens, time). The run folder also keeps its copy of `tasks/` and `libraries/`, any `akm-packages/`, and Harbor's `jobs/`.
+`summary.json`: `status`, `aborted_reason`, `completion` (`expected`, `completed`, `failed`, `missing`, `unexpected`, overall and per arm), `metrics` (per arm `pass_rate`, `passed`, `scored`, `errored`, `timeouts`, `agent_exits`; `delta`; `better`; `engagement`), `report` (with `sign_test` and `flips`), `timeouts` and `agent_exits` by arm, `engine` (model and endpoint host), `config` (the Harbor job, credentials redacted), `job`, `pins`, `akm_version`, `akm_bin`, `akm_build`, `akm_env`, `akm_install`, `assets_sha256` (over the run's copy of the tasks and libraries, and the attempts), `libraries_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one line per task with every trial of both arms (reward, exception, `timed_out`, `agent_exit`, akm tools called, tokens, time). The run folder also keeps its copy of `tasks/` and `libraries/`, any `akm-packages/`, and Harbor's `jobs/`.
 
 ## Notes
 

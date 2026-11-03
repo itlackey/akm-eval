@@ -33,6 +33,8 @@ export interface Trial {
   digest?: string | null;
   /** The agent, or its setup, ran out of time. The run sets it before it relabels a trial, so a trial that timed out and then failed the plugin check still counts as a timeout. Left out in a trial read straight from Harbor's folder, which says it by its exception. */
   timed_out?: boolean;
+  /** The agent exited non-zero (`NonZeroAgentExitCodeError`). The run sets it before it relabels a trial, so a crash that then failed the plugin check still counts. Left out in a trial read straight from Harbor's folder, which says it by its exception. */
+  agent_exit?: boolean;
   /** The plugin was not shown to be live in this trial, and why. Left out otherwise. */
   plugin_problem?: string;
 }
@@ -234,7 +236,7 @@ export function signTest(akm: number, control: number): number {
 const TIMEOUTS = new Set(["AgentTimeoutError", "AgentSetupTimeoutError"]);
 
 /** The exception Harbor records when the agent exits non-zero. */
-const AGENT_EXIT = "NonZeroAgentExitCodeError";
+export const AGENT_EXIT = "NonZeroAgentExitCodeError";
 
 const scored = (t: Trial): t is Trial & { reward: number } => t.reward !== null;
 /** Whether a trial ran out of time. This is the one count of timeouts: the tables, the printed line, the summary's `timeouts` and its metrics all use it. */
@@ -289,7 +291,7 @@ function summarize(trials: Trial[]): ArmSummary {
     pass_rate: estimate([...perTask(trials).values()]),
     exceptions,
     timeouts: trials.filter(timedOut).length,
-    agent_exits: trials.filter((t) => t.error === AGENT_EXIT).length,
+    agent_exits: trials.filter((t) => t.agent_exit ?? t.error === AGENT_EXIT).length,
     per_trial: {
       minutes: average(ok.map((t) => (t.seconds === null ? null : t.seconds / 60)), 1),
       agent_minutes: average(ok.map((t) => (t.agentSeconds == null ? null : t.agentSeconds / 60)), 1),
