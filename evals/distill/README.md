@@ -81,6 +81,10 @@ akm's judge scores a lesson 1 to 5 on `reusable` (`novelty` before 0.9.27-alpha.
 
 `evals/distill/pass-bar [--rescore] [--cases DIR] RESULTS_DIR...` routes each judged lesson of distill runs under akm's bar (`shipped`) and one that puts grounding in the pass test (`with-grounding`), and counts the good and bad lessons that pass, go to review and are rejected under each. `mismatch` should be 0. It judges lessons by the cases and checks here now, so it refuses a run with a case id the cases here no longer have; `--rescore` leaves those rows out and lists them in `inputs.missing_cases`.
 
+## Lesson updates: 0 or 1 of 40 up to 0.10.261022
+
+The cases stand. The 0 of 40 on every published round from 0.9.32 to 0.10.261022, apart from 1 of 40 on 0.10.261006-beta, was akm's: the update judge rejected the concrete facts the cases require, and the result labelled attempted updates `nothing_reusable`. akm 0.10.261105-beta fixed this with akm#1402 (update outcomes reported as `update_*` skip reasons) and akm#1403 (the judge no longer rejects concrete facts an update adds); akm#1409 then has the update judge reject lines that only record status or contradict the source. The remaining writer gap is akm#1405 (the lesson-update writer drops the memory's facts). In the `reports/0.10.261105-beta` round (lab 35B, `--semantic`), `lesson_updates` was 7 of 40 on 0.10.261105-beta and 0 of 40 on 0.10.261022 re-run on the same harness.
+
 ## Notes
 
 - akm's error messages name its endpoint; the eval writes `<MODEL_BASE_URL>` in its place, so `samples.jsonl` can be shared.
