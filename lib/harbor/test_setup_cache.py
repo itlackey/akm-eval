@@ -118,3 +118,29 @@ def test_harbor_preflight_and_factory_accept_the_cache_option(tmp_path, import_p
     agent = AgentFactory.create_agent_from_config(config, logs_dir=tmp_path / "logs")
     assert agent._setup_cache_dir == Path(cache)
     assert agent.options.setup_cache_dir == cache
+
+
+def test_semantic_files_are_restored_before_the_seed_and_saved_once(tmp_path, monkeypatch):
+    async def scenario():
+        order = []
+        async def fake_exec(self, environment, command, **kwargs):
+            order.append(command.split()[0] if "grep" not in command else "grep")
+            if command.startswith("grep"):
+                return SimpleNamespace(stdout='ONNXRUNTIME_VERSION = "1.24.3"\n')
+            return SimpleNamespace(stdout="")
+        monkeypatch.setattr(akm_opencode.AkmOpenCode, "exec_as_agent", fake_exec)
+        names = []
+        for _ in range(2):
+            agent = akm_opencode.AkmOpenCode(logs_dir=tmp_path / "logs", version="1.18.34", akm_cli_version="0.10.261015", akm_plugin_version="0.10.261015", libraries_dir="/libraries", akm_env={"AKM_EVAL_SEMANTIC_SEARCH": "1"})
+            agent._setup_cache = SetupCache(tmp_path / "runtime")
+            env = Environment()
+            result = await agent._restore_semantic_files(env)
+            names.append(result)
+            await agent._save_semantic_files(env, result)
+        assert names[0][0] == "semantic--x86_64-debian-12-glibc-2.36--ort-1.24.3--Xenova/bge-small-en-v1.5"
+        assert [n[1] for n in names] == ["fetched", "restored"]
+        assert len(list((tmp_path / "runtime").glob("semantic--*.tgz"))) == 1
+        plain = akm_opencode.AkmOpenCode(logs_dir=tmp_path / "logs", version="1.18.34", akm_cli_version="0.10.261015", akm_plugin_version="0.10.261015", libraries_dir="/libraries")
+        plain._setup_cache = SetupCache(tmp_path / "runtime")
+        assert await plain._restore_semantic_files(Environment()) is None
+    asyncio.run(scenario())

@@ -46,7 +46,7 @@ from pydantic import Field, field_validator, model_validator
 
 from harbor.agents.installed.opencode import OpenCode
 from eval_opencode import EvalOpenCode, EvalOpenCodeOptions
-from setup_cache import SetupCache
+from setup_cache import SetupCache, runtime_id
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
@@ -59,6 +59,7 @@ CLI_PREFIX = f"{AKM_ROOT}/cli"  # where akm-cli is installed: npm puts the packa
 CLI_BIN = f"{CLI_PREFIX}/node_modules/.bin/akm"
 PLUGIN_PREFIX = f"{AKM_ROOT}/plugin"  # where the plugin is installed, the same way
 PLUGIN_DIR = f"{PLUGIN_PREFIX}/node_modules/akm-opencode"
+SEMANTIC_MODEL = "Xenova/bge-small-en-v1.5"
 # The lockfiles committed for the pinned releases: one folder per release, named <package>-<version>, with the package.json and the
 # package-lock.json that `npm ci` reads. evals/agent-ab/README.md ("Dependencies") says how one is made.
 LOCKS = Path(__file__).resolve().parent / "locks"
@@ -262,7 +263,10 @@ class AkmOpenCode(EvalOpenCode):
         await self.exec_as_agent(environment, command=f"rm -rf {PACKAGES}")
         await environment.upload_dir(Path(self.options.libraries_dir), LIBRARIES)
         await self.exec_as_root(environment, command=f"chown -R {owner} {LIBRARIES}")
+        semantic_files = await self._restore_semantic_files(environment)
         seeded = await self.exec_as_agent(environment, command=self._seed_command())
+        if semantic_files:
+            await self._save_semantic_files(environment, semantic_files)
         # Boot opencode once with the real config and model, so the plugin is fetched now, not in the measured run.
         # No real provider key is passed: only the start-up is wanted, without a paid model call.
         await self.exec_as_agent(
@@ -273,6 +277,8 @@ class AkmOpenCode(EvalOpenCode):
         checked = await self.exec_as_agent(environment, command=self._check_command())
         locks = {"akm_cli": lock_sha256(self._akm_lock), "plugin": lock_sha256(self._plugin_lock)}
         self._installed = install_record(seeded.stdout or "", checked.stdout or "", {**AKM_ENV, **self.options.akm_env}, trees.stdout or "", locks)
+        if semantic_files:
+            self._installed["semantic_files"] = semantic_files[1]
         self._record(INSTALL_FILE, self._installed)
 
     async def _install_dependencies(self, environment):
@@ -310,6 +316,35 @@ class AkmOpenCode(EvalOpenCode):
                 await self._link_cli(environment)
             owner = shlex.quote(str(environment.default_user or "root"))
             await self.exec_as_root(environment, command=f"chown -R {owner} {CLI_PREFIX} {PLUGIN_PREFIX}")
+
+    async def _semantic_files_name(self, environment) -> str | None:
+        """The setup-cache name of akm's ONNX Runtime and embedding model, or None when there is no semantic run or no cache."""
+        if self._setup_cache is None or self.options.akm_env.get("AKM_EVAL_SEMANTIC_SEARCH") != "1":
+            return None
+        runtime = await runtime_id(environment)
+        if runtime is None:
+            return None
+        # The runtime version is a constant in the installed akm; a release without it fetches no runtime.
+        found = await self.exec_as_agent(environment, command=f"grep -hso 'ONNXRUNTIME_VERSION = \"[0-9.]*\"' {CLI_PREFIX}/node_modules/akm-cli/dist/llm/embedders/onnx-runtime.js || true")
+        version = re.search(r'"([0-9.]+)"', found.stdout or "")
+        return f"semantic--{runtime}--ort-{version[1] if version else 'none'}--{SEMANTIC_MODEL}"
+
+    async def _restore_semantic_files(self, environment) -> tuple[str, str] | None:
+        """Restores `cache/onnxruntime` and `cache/models` before the seed's index fetches them. Returns (name, "restored" | "fetched"), or None for no cache."""
+        name = await self._semantic_files_name(environment)
+        if name is None:
+            return None
+        async with self._setup_cache.lock(name):
+            restored = await self._setup_cache.restore(name, self, environment, AKM_ROOT)
+        how = "restored" if restored else "fetched"
+        self.logger.info(f"AKM-SETUP semantic_files={how}")
+        return name, how
+
+    async def _save_semantic_files(self, environment, semantic_files) -> None:
+        name, how = semantic_files
+        if how == "fetched":
+            async with self._setup_cache.lock(name):
+                await self._setup_cache.save(name, self, environment, AKM_ROOT, "cache/onnxruntime cache/models")
 
     def _akm_target(self) -> str:
         """What `npm install` puts in as akm-cli when there is no lockfile: the tarball of a checkout, or the release the job names."""
@@ -354,7 +389,7 @@ class AkmOpenCode(EvalOpenCode):
         semantic = self.options.akm_env.get("AKM_EVAL_SEMANTIC_SEARCH") == "1"
         semantic_config = (
             "akm config set semanticSearchMode auto --silent && "
-            "akm config set embedding.localModel Xenova/bge-small-en-v1.5 --silent && "
+            f"akm config set embedding.localModel {SEMANTIC_MODEL} --silent && "
             "akm config set embedding.queryTimeoutMs 600000 --silent && "
         ) if semantic else ""
         index = "akm index --full >/dev/null && "
