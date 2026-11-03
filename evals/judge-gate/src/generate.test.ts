@@ -220,8 +220,8 @@ describe("generate", () => {
     expect(made.problems).toEqual([]);
     expect(made.count).toBe(137);
     const rewritten = parseCases(readFileSync(join(out, "assets", CASES), "utf8"));
-    expect(rewritten.filter((c) => c.label === "good")).toHaveLength(41);
-    expect(rewritten.filter((c) => c.severity === "churn")).toHaveLength(29);
+    expect(rewritten.filter((c) => c.label === "good")).toHaveLength(42);
+    expect(rewritten.filter((c) => c.severity === "churn")).toHaveLength(28);
     expect(rewritten.filter((c) => c.severity === "harmful")).toHaveLength(67);
   });
 });
