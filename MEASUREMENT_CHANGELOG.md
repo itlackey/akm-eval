@@ -17,6 +17,9 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- agent-ab and terminal-bench: the summary and report count, per arm, the trials whose Harbor exception is `NonZeroAgentExitCodeError`
+  (`agent_exits`, in `metrics`, at the top level beside `timeouts`, and in the report's arm line), scored or not (#161). Visibility only: the
+  verifier still scores those workspaces, and pass rates, scoring and eval versions are unchanged. Summaries from before lack the field.
 - bakeoff scoring 0.5; collection stays 0.4 (case inputs and the akm invocations are unchanged). Label changes only, no input changes:
   - `consolidate-memory-pool` and `prod-consolidate-full-pool` no longer expect `memories/operator-preference` to be left out of the
     plan. akm 0.10 consolidates `captureMode: hot` memories like any other (akm#1170, CHANGELOG 0.10.26101101), so the plan may include

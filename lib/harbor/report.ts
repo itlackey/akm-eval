@@ -76,6 +76,8 @@ export interface ArmSummary {
   exceptions: Record<string, number>;
   /** Trials whose agent, or its setup, ran out of time (`timedOut`). */
   timeouts: number;
+  /** Trials whose Harbor exception is `NonZeroAgentExitCodeError`: the agent exited non-zero, scored by the verifier or not. A scored one stays a scored failure; this only shows how many ended in a crash. */
+  agent_exits: number;
   /** The mean per scored trial, over those that have the figure: minutes in all, minutes of the agent's own run, and dollars. An errored trial stopped in the setup and says nothing of what a run takes. */
   per_trial: { minutes: number | null; agent_minutes: number | null; cost_usd: number | null };
   tokens: { input: number; cache: number; output: number; cost_usd: number | null };
@@ -231,6 +233,9 @@ export function signTest(akm: number, control: number): number {
 /** The exceptions Harbor records when the agent, or the setup before it, runs out of time. The collector (trials.ts) has the same two, for the row it writes. */
 const TIMEOUTS = new Set(["AgentTimeoutError", "AgentSetupTimeoutError"]);
 
+/** The exception Harbor records when the agent exits non-zero. */
+const AGENT_EXIT = "NonZeroAgentExitCodeError";
+
 const scored = (t: Trial): t is Trial & { reward: number } => t.reward !== null;
 /** Whether a trial ran out of time. This is the one count of timeouts: the tables, the printed line, the summary's `timeouts` and its metrics all use it. */
 export const timedOut = (t: Trial): boolean => t.timed_out ?? (t.error !== null && TIMEOUTS.has(t.error));
@@ -284,6 +289,7 @@ function summarize(trials: Trial[]): ArmSummary {
     pass_rate: estimate([...perTask(trials).values()]),
     exceptions,
     timeouts: trials.filter(timedOut).length,
+    agent_exits: trials.filter((t) => t.error === AGENT_EXIT).length,
     per_trial: {
       minutes: average(ok.map((t) => (t.seconds === null ? null : t.seconds / 60)), 1),
       agent_minutes: average(ok.map((t) => (t.agentSeconds == null ? null : t.agentSeconds / 60)), 1),
@@ -359,7 +365,7 @@ const ci = (e: Estimate | Delta | null, signed = false): string =>
 export function formatReport(r: Report): string[] {
   const row = (name: string, a: ArmSummary) => {
     const why = Object.entries(a.exceptions).filter(([k]) => !TIMEOUTS.has(k)).map(([k, v]) => `${k} ${v}`).join(", ");
-    return `  ${name.padEnd(8)} ${String(a.trials).padStart(3)} trials, ${a.scored} scored, ${a.errored} errored${why ? ` (exceptions: ${why})` : ""}, ${a.timeouts} timed out   pass rate ${ci(a.pass_rate)}`;
+    return `  ${name.padEnd(8)} ${String(a.trials).padStart(3)} trials, ${a.scored} scored, ${a.errored} errored${why ? ` (exceptions: ${why})` : ""}, ${a.timeouts} timed out, ${a.agent_exits} agent exit non-zero   pass rate ${ci(a.pass_rate)}`;
   };
   const e = r.engagement;
   const n = (x: number) => x.toLocaleString("en-US");
@@ -397,6 +403,7 @@ export function sideBySide(title: string, a: { corpus: string; report: Report },
   const sign = (r: Report) => (r.sign_test ? (r.sign_test.n ? `p = ${r.sign_test.p} (akm better on ${r.sign_test.akm}, control on ${r.sign_test.control})` : "no task differs") : "n/a");
   const called = (r: Report) => `${r.engagement.called} of ${r.engagement.trials} akm trials`;
   const late = (r: Report) => `${r.control.timeouts} control trials, ${r.akm.timeouts} akm trials`;
+  const crashed = (r: Report) => `${r.control.agent_exits} control trials, ${r.akm.agent_exits} akm trials`;
   const rows: [string, string, string][] = [
     ["", a.corpus, b.corpus],
     ["control pass rate", rate(a.report.control), rate(b.report.control)],
@@ -405,6 +412,7 @@ export function sideBySide(title: string, a: { corpus: string; report: Report },
     ["sign test", sign(a.report), sign(b.report)],
     ["akm called in", called(a.report), called(b.report)],
     ["timed out", late(a.report), late(b.report)],
+    ["agent exit non-zero", crashed(a.report), crashed(b.report)],
   ];
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
   return [`${title}: ${a.corpus} and ${b.corpus} side by side (not pooled)`, ...rows.map((r) => `  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`)];

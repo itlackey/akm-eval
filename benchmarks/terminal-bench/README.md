@@ -54,7 +54,7 @@ As in `evals/agent-ab`: the same model, opencode 1.18.34, task, container and ti
 
 ## How a task is scored
 
-A trial is scored when the verifier gave it a reward; otherwise it is errored and left out of the rates. A trial whose agent ran out of time is still verified and is also counted in `timeouts`.
+A trial is scored when the verifier gave it a reward; otherwise it is errored and left out of the rates. A trial whose agent ran out of time is still verified and is also counted in `timeouts`. A trial whose agent exited non-zero (`NonZeroAgentExitCodeError`) is counted in `agent_exits`, scored or not, and stays a scored failure.
 
 | Figure | Meaning |
 |---|---|

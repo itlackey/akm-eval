@@ -42,7 +42,7 @@ import {
   withHome,
 } from "./harbor.ts";
 import { buildReport, formatReport, sideBySide } from "./report.ts";
-import { type RunTrial, erroredOf, metricsOf, timeoutsOf } from "./score.ts";
+import { type RunTrial, erroredOf, makeRow, metricsOf, summarize, timeoutsOf } from "./score.ts";
 import { loadTrials } from "./trials.ts";
 
 const dirs: string[] = [];
@@ -687,6 +687,23 @@ describe("loadRunTrials", () => {
     ]);
     expect(trials.find((t) => t.trial === "t1__a")?.reward).toBe(1); // a timeout keeps its reward
     expect(timeoutsOf(trials)).toEqual({ control: 1, akm: 1 });
+  });
+
+  test("counts the trials that ended in NonZeroAgentExitCodeError per arm, scored or not, in the report, metrics and summary (#161)", () => {
+    const job = tmp();
+    const crash = { exception_info: { exception_type: "NonZeroAgentExitCodeError" } };
+    trialDir(job, "t1__a", "opencode", crash); // crashed and was still verified
+    trialDir(job, "t2__a", "opencode");
+    trialDir(job, "t1__b", "akm-opencode", { ...crash, verifier_result: null }); // crashed, no verdict
+    trialDir(job, "t2__b", "akm-opencode", crash);
+    const { trials } = loadRunTrials(job);
+    expect(trials.find((t) => t.trial === "t1__a")?.reward).toBe(1); // the verifier's reward is kept
+    const report = buildReport(trials);
+    expect([report.control.agent_exits, report.akm.agent_exits]).toEqual([1, 2]);
+    expect([metricsOf(report, trials).control.agent_exits, metricsOf(report, trials).akm.agent_exits]).toEqual([1, 2]);
+    expect(formatReport(report).find((l) => l.startsWith("  akm"))).toContain("2 agent exit non-zero");
+    const rows = ["t1", "t2"].map((id) => makeRow({ id }, { trials: trials.filter((t) => t.task === id) }));
+    expect(summarize(rows).agent_exits).toEqual({ control: 1, akm: 2 });
   });
 
   test("shows a plugin failure that an earlier exception would hide: its exception, no reward, and why", () => {

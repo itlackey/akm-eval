@@ -116,6 +116,8 @@ interface Summary {
   config: Record<string, unknown>;
   /** Trials that hit a time limit, by arm. They are counted among the errors too when they got no reward. */
   timeouts: { control: number; akm: number };
+  /** Trials whose agent exited non-zero (NonZeroAgentExitCodeError), by arm, scored or not. A scored one stays a scored failure. */
+  agent_exits: { control: number; akm: number };
   n_errored: number;
   /** The report's main numbers, as numbers, for --repeat's spread. */
   metrics: ReturnType<typeof scoreRows>["metrics"];
@@ -244,6 +246,7 @@ export function summarize(o: {
     engine: { model: o.model, endpoint, endpoint_sha256 },
     config: redactConfig(o.job ?? {}),
     timeouts: scored.timeouts,
+    agent_exits: scored.agent_exits,
     n_errored: scored.n_errored,
     metrics: scored.metrics,
     job: o.job ?? {},
