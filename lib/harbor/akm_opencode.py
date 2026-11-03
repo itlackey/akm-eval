@@ -46,7 +46,7 @@ from pydantic import Field, field_validator, model_validator
 
 from harbor.agents.installed.opencode import OpenCode
 from eval_opencode import EvalOpenCode, EvalOpenCodeOptions
-from setup_cache import SetupCache, runtime_id
+from setup_cache import SetupCache
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
@@ -318,16 +318,13 @@ class AkmOpenCode(EvalOpenCode):
             await self.exec_as_root(environment, command=f"chown -R {owner} {CLI_PREFIX} {PLUGIN_PREFIX}")
 
     async def _semantic_files_name(self, environment) -> str | None:
-        """The setup-cache name of akm's ONNX Runtime and embedding model, or None when there is no semantic run or no cache."""
+        """The setup-cache name of akm's ONNX Runtime and embedding model, or None when there is no semantic run or no ONNX Runtime version."""
         if self._setup_cache is None or self.options.akm_env.get("AKM_EVAL_SEMANTIC_SEARCH") != "1":
             return None
-        runtime = await runtime_id(environment)
-        if runtime is None:
-            return None
-        # The runtime version is a constant in the installed akm; a release without it fetches no runtime.
+        # The runtime version is a constant in the installed akm. A release without it fetches no runtime: no cache. The cache folder is already per container runtime.
         found = await self.exec_as_agent(environment, command=f"grep -hso 'ONNXRUNTIME_VERSION = \"[0-9.]*\"' {CLI_PREFIX}/node_modules/akm-cli/dist/llm/embedders/onnx-runtime.js || true")
         version = re.search(r'"([0-9.]+)"', found.stdout or "")
-        return f"semantic--{runtime}--ort-{version[1] if version else 'none'}--{SEMANTIC_MODEL}"
+        return f"semantic--ort-{version[1]}--{SEMANTIC_MODEL}" if version else None
 
     async def _restore_semantic_files(self, environment) -> tuple[str, str] | None:
         """Restores `cache/onnxruntime` and `cache/models` before the seed's index fetches them. Returns (name, "restored" | "fetched"), or None for no cache."""

@@ -137,10 +137,14 @@ def test_semantic_files_are_restored_before_the_seed_and_saved_once(tmp_path, mo
             result = await agent._restore_semantic_files(env)
             names.append(result)
             await agent._save_semantic_files(env, result)
-        assert names[0][0] == "semantic--x86_64-debian-12-glibc-2.36--ort-1.24.3--Xenova/bge-small-en-v1.5"
+        assert names[0][0] == "semantic--ort-1.24.3--Xenova/bge-small-en-v1.5"
         assert [n[1] for n in names] == ["fetched", "restored"]
         assert len(list((tmp_path / "runtime").glob("semantic--*.tgz"))) == 1
         plain = akm_opencode.AkmOpenCode(logs_dir=tmp_path / "logs", version="1.18.34", akm_cli_version="0.10.261015", akm_plugin_version="0.10.261015", libraries_dir="/libraries")
         plain._setup_cache = SetupCache(tmp_path / "runtime")
         assert await plain._restore_semantic_files(Environment()) is None
+        monkeypatch.setattr(akm_opencode.AkmOpenCode, "exec_as_agent", AsyncMock(return_value=SimpleNamespace(stdout="")))
+        old = akm_opencode.AkmOpenCode(logs_dir=tmp_path / "logs", version="1.18.34", akm_cli_version="0.9.32", akm_plugin_version="0.9.26", libraries_dir="/libraries", akm_env={"AKM_EVAL_SEMANTIC_SEARCH": "1"})
+        old._setup_cache = SetupCache(tmp_path / "runtime")
+        assert await old._restore_semantic_files(Environment()) is None  # no ONNX Runtime version: fetch, no cache
     asyncio.run(scenario())
