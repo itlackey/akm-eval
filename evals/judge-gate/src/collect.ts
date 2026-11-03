@@ -15,17 +15,11 @@ export const NAME = "judge-gate";
 /** How long akm gets for one case unless --timeout-ms says otherwise: a slow local model takes minutes. */
 export const JUDGE_TIMEOUT_MS = 15 * 60_000;
 
-/**
- * `akm improve judge` reads the feedback as one string and judges it as negative feedback only when the
- * string starts with `[negative]`. Reflect passes one line per feedback event and asks whether any line is
- * negative. Putting the negative lines first makes the two agree.
- */
-export function orderFeedback(feedback: string): string {
-  const lines = feedback.split("\n").filter((l) => l.trim() !== "");
-  const negative = lines.filter((l) => l.startsWith("[negative]"));
-  const rest = lines.filter((l) => !l.startsWith("[negative]"));
-  return [...negative, ...rest].join("\n");
-}
+/** The feedback lines akm's reflect passes the judge: one per line, in the order they were given (negative lines are not moved). */
+export const feedbackLines = (feedback: string): string[] => feedback.split("\n").filter((l) => l.trim() !== "");
+
+/** What goes to `akm judge reflect.quality` on stdin for a case. */
+export const judgeInput = (c: Pick<Case, "source" | "candidate" | "feedback" | "ref">): Record<string, unknown> => ({ source: c.source, candidate: c.candidate, feedback: feedbackLines(c.feedback), ...(c.ref ? { ref: c.ref } : {}) });
 
 /** The improve strategy the judge config names, and the one `--strategy` replaces. */
 export const STRATEGY = "default";
@@ -55,12 +49,22 @@ export function openSandbox(baseUrl: string, model: string, hasKey: boolean, ove
 }
 
 /**
- * The fields of akm's verdict that the scorer reads, with the model endpoint written as <MODEL_BASE_URL> in its reason (results get
- * shared, and akm's messages name the endpoint it called). Anything that is not an object is kept as it is: the scorer calls it no verdict.
+ * The fields of the verdict that the scorer reads, from what `akm judge reflect.quality --format json` printed, with the model endpoint written
+ * as <MODEL_BASE_URL> in its reason (results get shared, and akm's messages name the endpoint it called). The envelope's `verdict` is read as
+ * it is; its `engine` is the runner's name. An `error` or `unparseable` outcome is the judge giving no verdict, which akm's reflect sends to a
+ * person (score -1, review needed), and the reason is the outcome's. Anything else is kept as it is: the scorer calls it no verdict.
  */
 export function verdictOf(parsed: unknown, baseUrl: string): unknown {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return parsed;
-  const { pass, score, reviewNeeded, reason, criteria, engine } = parsed as Record<string, unknown>;
+  const envelope = parsed as Record<string, any>;
+  const engine = typeof envelope.runner?.name === "string" ? envelope.runner.name : undefined;
+  const v: Record<string, unknown> =
+    envelope.outcome === "verdict" && typeof envelope.verdict === "object" && envelope.verdict !== null
+      ? envelope.verdict
+      : envelope.outcome === "error" || envelope.outcome === "unparseable"
+        ? { pass: false, score: -1, reviewNeeded: true, reason: envelope.reason }
+        : {};
+  const { pass, score, reviewNeeded, reason, criteria } = v;
   return { pass, score, reviewNeeded, reason: typeof reason === "string" ? hideEndpoint(reason, baseUrl) : reason, criteria, engine };
 }
 
@@ -72,13 +76,13 @@ interface CaseContext {
   timeoutMs?: number;
 }
 
-/** One case: the source, the candidate and the feedback go to `akm improve judge` on stdin, and its verdict is scored. */
+/** One case: the source, the candidate, the feedback lines and the ref go to `akm judge reflect.quality` on stdin, and its verdict is scored. */
 export async function judgeCase(c: Case, ctx: CaseContext): Promise<Row> {
   const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
-  const input = JSON.stringify({ source: c.source, candidate: c.candidate, feedback: orderFeedback(c.feedback) });
+  const input = JSON.stringify(judgeInput(c));
   let run: Awaited<ReturnType<typeof runAkm>>;
   try {
-    run = await runAkm(ctx.sandbox, ["improve", "judge", "--format", "json"], { stdin: input, timeoutMs: ctx.timeoutMs ?? JUDGE_TIMEOUT_MS });
+    run = await runAkm(ctx.sandbox, ["judge", "reflect.quality", "--format", "json"], { stdin: input, timeoutMs: ctx.timeoutMs ?? JUDGE_TIMEOUT_MS });
   } catch (e) {
     return makeRow(c, { error: hide((e as Error).message), seconds: 0 });
   }

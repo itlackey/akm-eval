@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultOverrides } from "../../../lib/akm/overrides.ts";
 import { assemble, explode } from "./generate.ts";
-import { type Case, type Row, STRATEGY, configFor, errorRow, hasVerdict, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases, verdictOf } from "./lib.ts";
+import { type Case, type Row, STRATEGY, configFor, errorRow, hasVerdict, judgeConfig, metrics, feedbackLines, judgeInput, parseCases, rowFromVerdict, selectCases, verdictOf } from "./lib.ts";
 
 const make = (n: number, label: "good" | "bad", extra: Partial<Case> = {}): Case => ({
   id: `id-${label}-${n}`,
@@ -30,15 +30,15 @@ describe("parseCases", () => {
 
   test("a bad case needs a severity of churn or harmful, and a good case has none", () => {
     expect(parseCases(JSON.stringify(make(1, "bad", { severity: "churn" })))[0].severity).toBe("churn");
-    expect(() => parseCases(JSON.stringify({ ...make(1, "bad"), severity: undefined }), "cases.jsonl")).toThrow('cases.jsonl:1 is a bad case with severity "undefined", expected churn or harmful');
+    expect(() => parseCases(JSON.stringify({ ...make(1, "bad"), severity: undefined }), "cases.jsonl")).toThrow('cases.jsonl:1 is a bad case with severity "undefined", expected churn, harmful or other');
     expect(() => parseCases(JSON.stringify({ ...make(1, "bad"), severity: "mild" }))).toThrow('severity "mild"');
     expect(() => parseCases(JSON.stringify(make(1, "good", { severity: "churn" })))).toThrow("only bad cases have one");
   });
 
   test("reads the public cases", () => {
     const cases = parseCases(readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl"), "utf8"));
-    expect(cases).toHaveLength(137);
-    expect(cases.filter((c) => c.label === "good")).toHaveLength(42);
+    expect(cases).toHaveLength(188);
+    expect(cases.filter((c) => c.label === "good")).toHaveLength(91);
   });
 });
 
@@ -82,14 +82,15 @@ describe("the severity of the public bad cases", () => {
   const bad = cases.filter((c) => c.label === "bad");
 
   test("every bad case has one, and no good case does", () => {
-    expect(bad).toHaveLength(95);
-    for (const c of bad) expect(c.severity === "churn" || c.severity === "harmful").toBe(true);
+    expect(bad).toHaveLength(97);
+    for (const c of bad) expect(["churn", "harmful", "other"]).toContain(c.severity as string);
     for (const c of cases.filter((x) => x.label === "good")) expect(c.severity).toBeUndefined();
   });
 
-  test("28 are churn and 67 are harmful. Relabel a case and change these", () => {
-    expect(bad.filter((c) => c.severity === "churn")).toHaveLength(28);
-    expect(bad.filter((c) => c.severity === "harmful")).toHaveLength(67);
+  test("25 are churn, 71 are harmful and 1 is other. Relabel a case and change these", () => {
+    expect(bad.filter((c) => c.severity === "churn")).toHaveLength(25);
+    expect(bad.filter((c) => c.severity === "harmful")).toHaveLength(71);
+    expect(bad.filter((c) => c.severity === "other")).toHaveLength(1);
   });
 
   // A tripwire and no proof. Churn is the form changing with every fact kept, and an intro or a heading may repeat a fact but not make one: a case
@@ -100,9 +101,9 @@ describe("the severity of the public bad cases", () => {
 
   test("a harmful case changes at least one word", () => {
     for (const c of bad.filter((x) => x.severity === "harmful")) {
-      const [source, candidate] = [wordsOf(c.source), wordsOf(c.candidate)];
-      const changed = [...candidate].filter((w) => !source.has(w)).length + [...source].filter((w) => !candidate.has(w)).length;
-      expect({ id: c.id, changed: changed > 0 }).toEqual({ id: c.id, changed: true });
+      // as sequences, not sets: a repair that deletes one stray word of a word the text has elsewhere (53df3ec1) still changes the text
+      const words = (text: string): string[] => withoutStamps(text).toLowerCase().match(/[a-z0-9][a-z0-9_.:/@~#<>=+-]*[a-z0-9]|[a-z0-9]/g) ?? [];
+      expect({ id: c.id, changed: words(c.source).join(" ") !== words(c.candidate).join(" ") }).toEqual({ id: c.id, changed: true });
     }
   });
 });
@@ -133,11 +134,12 @@ describe("selectCases", () => {
   });
 });
 
-describe("orderFeedback", () => {
-  test("puts negative lines first, so a mix is judged as negative feedback", () => {
-    expect(orderFeedback("[positive] a\n[negative] b\n[positive] c")).toBe("[negative] b\n[positive] a\n[positive] c");
-    expect(orderFeedback("[positive] a")).toBe("[positive] a");
-    expect(orderFeedback("")).toBe("");
+describe("judgeInput", () => {
+  test("sends the feedback as lines in the case's order, and the ref when there is one", () => {
+    expect(feedbackLines("[positive] a\n[negative] b\n\n[positive] c")).toEqual(["[positive] a", "[negative] b", "[positive] c"]);
+    expect(feedbackLines("")).toEqual([]);
+    expect(judgeInput({ source: "s", candidate: "c", feedback: "[negative] b", ref: "knowledge/x" })).toEqual({ source: "s", candidate: "c", feedback: ["[negative] b"], ref: "knowledge/x" });
+    expect(judgeInput({ source: "s", candidate: "c", feedback: "" })).toEqual({ source: "s", candidate: "c", feedback: [] });
   });
 });
 
@@ -219,7 +221,9 @@ describe("rowFromVerdict", () => {
   const c = make(1, "good");
   test("maps akm's verdict to an outcome", () => {
     expect(rowFromVerdict(c, { pass: true, score: 4.5, reason: "ok", criteria: { need: 5 }, engine: "judge" }, 1).outcome).toBe("pass");
-    expect(rowFromVerdict(c, { pass: false, reviewNeeded: true, score: 3 }, 1).outcome).toBe("review");
+    expect(rowFromVerdict(c, { pass: false, reviewNeeded: true, score: 3.6 }, 1).outcome).toBe("review");
+    // the judge's own review band starts at 2.5, reflect's at 3.5 (see REFLECT_REVIEW_MIN_SCORE in score.ts, to go with akm#1418)
+    expect(rowFromVerdict(c, { pass: false, reviewNeeded: true, score: 3 }, 1).outcome).toBe("reject");
     expect(rowFromVerdict(c, { pass: false, score: 1.5 }, 1).outcome).toBe("reject");
   });
 
@@ -261,11 +265,18 @@ describe("errorRow", () => {
 });
 
 describe("verdictOf", () => {
-  test("keeps the fields the scorer reads, masks the endpoint in the reason, and leaves a reply that is not an object as it is", () => {
-    const parsed = { ok: true, pass: false, score: 2, reviewNeeded: true, reason: "tried http://host/v1 and failed", criteria: { need: 2 }, engine: "judge", usage: { note: "http://host/v1" } };
+  const envelope = (outcome: string, rest: Record<string, unknown>) => ({ judge: "reflect.quality", schemaVersion: 1, runner: { kind: "connection", name: "judge", model: "m" }, outcome, ...rest });
+  test("keeps the fields of the envelope's verdict that the scorer reads, masks the endpoint in the reason, and leaves a reply that is not an object as it is", () => {
+    const parsed = envelope("verdict", { verdict: { pass: false, score: 2, reviewNeeded: true, reason: "tried http://host/v1 and failed", criteria: { need: 2 }, usage: { note: "http://host/v1" } } });
     expect(verdictOf(parsed, "http://host/v1")).toEqual({ pass: false, score: 2, reviewNeeded: true, reason: "tried <MODEL_BASE_URL> and failed", criteria: { need: 2 }, engine: "judge" });
-    expect(verdictOf({ pass: true, score: 4 }, "http://host/v1")).toEqual({ pass: true, score: 4, reviewNeeded: undefined, reason: undefined, criteria: undefined, engine: undefined });
+    expect(verdictOf(envelope("verdict", { verdict: { pass: true, score: 4 } }), "http://host/v1")).toEqual({ pass: true, score: 4, reviewNeeded: undefined, reason: undefined, criteria: undefined, engine: "judge" });
     for (const reply of [null, 7, "text", [1, 2]]) expect(verdictOf(reply, "http://host/v1")).toBe(reply);
+  });
+
+  test("reads a judge that gave no verdict (error, unparseable) as akm's reflect does: score -1, to a person", () => {
+    for (const outcome of ["error", "unparseable"]) {
+      expect(verdictOf(envelope(outcome, { reason: "failed at http://host/v1" }), "http://host/v1")).toEqual({ pass: false, score: -1, reviewNeeded: true, reason: "failed at <MODEL_BASE_URL>", criteria: undefined, engine: "judge" });
+    }
   });
 });
 

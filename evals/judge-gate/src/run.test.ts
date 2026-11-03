@@ -20,7 +20,7 @@ const EVAL_DIR = join(import.meta.dir, "..");
 const REPO = join(EVAL_DIR, "..", "..");
 
 const dirs: string[] = [];
-const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, FAKE_MS: process.env.FAKE_MS, FAKE_USAGE: process.env.FAKE_USAGE, MODEL_API_KEY: process.env.MODEL_API_KEY, TMPDIR: process.env.TMPDIR };
+const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, FAKE_MS: process.env.FAKE_MS, FAKE_USAGE: process.env.FAKE_USAGE, FAKE_NOJUDGE: process.env.FAKE_NOJUDGE, MODEL_API_KEY: process.env.MODEL_API_KEY, TMPDIR: process.env.TMPDIR };
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
   for (const [k, v] of Object.entries(saved)) {
@@ -52,8 +52,13 @@ import { join } from "node:path";
 import { Database } from "bun:sqlite";
 const [a, b] = process.argv.slice(2);
 const log = (o) => { if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_LOG, JSON.stringify({ t: performance.now() + performance.timeOrigin, ...o }) + "\\n"); };
-if (a === "--version") { log({ at: "version" }); console.log("0.9.99-test"); process.exit(0); }
-if (a !== "improve" || b !== "judge") { console.error("unexpected " + process.argv.slice(2).join(" ")); process.exit(1); }
+if (a === "--version") { log({ at: "version" }); console.log("0.10.261200-test"); process.exit(0); }
+if (a === "judge" && b === "--list") {
+  if (process.env.FAKE_NOJUDGE) { console.error("Unknown command judge"); process.exit(2); }
+  console.log(JSON.stringify({ judges: [{ name: "reflect.quality" }] }));
+  process.exit(0);
+}
+if (a !== "judge" || b !== "reflect.quality") { console.error("unexpected " + process.argv.slice(2).join(" ")); process.exit(1); }
 const input = JSON.parse(await Bun.stdin.text());
 const word = String(input.candidate).split(" ")[0];
 const seen = { feedback: input.feedback, env: process.env.AKM_CONFIG_DIR };
@@ -67,15 +72,18 @@ if (process.env.FAKE_USAGE) {
   db.close();
 }
 log({ at: "end", word });
-if (word === "PASS") console.log(JSON.stringify({ ok: true, engine: "judge", pass: true, score: 4.5, criteria: { need: 5, preservation: 4, quality: 5 }, reason: JSON.stringify(seen) }));
-else if (word === "REVIEW") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, reviewNeeded: true, score: 3, reason: "needs a person" }));
-else if (word === "REJECT") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: 1.5, reason: "churn" }));
-else if (word === "NOVERDICT") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reviewNeeded: true, reason: "judge timeout/error" }));
-else if (word === "UNREADABLE") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reviewNeeded: true, reason: "judge parse failed — routed to review" }));
-else if (word === "REWORDED") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reviewNeeded: true, reason: "the model's reply was not understood" }));
-else if (word === "SILENT") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reviewNeeded: true }));
-else if (word === "FAILCLOSED") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: -1, reason: "no engine configured — cannot judge, failing closed" }));
-else if (word === "LEAK") console.log(JSON.stringify({ ok: true, engine: "judge", pass: false, score: 1.5, reason: "connect to ${BASE_URL}/chat/completions failed" }));
+const out = (verdict) => console.log(JSON.stringify({ judge: "reflect.quality", schemaVersion: 1, runner: { kind: "connection", name: "judge", model: null }, outcome: "verdict", verdict }));
+const none = (outcome, reason) => console.log(JSON.stringify({ judge: "reflect.quality", schemaVersion: 1, runner: { kind: "connection", name: "judge", model: null }, outcome, ...(reason === undefined ? {} : { reason }) }));
+if (word === "PASS") out({ pass: true, score: 4.5, criteria: { need: 5, preservation: 4, quality: 5 }, reason: JSON.stringify(seen) });
+else if (word === "REVIEW") out({ pass: false, reviewNeeded: true, score: 3.6, reason: "needs a person" });
+else if (word === "BAND") out({ pass: false, reviewNeeded: true, score: 3, reason: "the judge's band, not reflect's" });
+else if (word === "REJECT") out({ pass: false, score: 1.5, reason: "churn" });
+else if (word === "NOVERDICT") none("error", "judge timeout/error");
+else if (word === "UNREADABLE") none("unparseable", "judge parse failed \u2014 routed to review");
+else if (word === "REWORDED") none("unparseable", "the model's reply was not understood");
+else if (word === "SILENT") none("unparseable");
+else if (word === "FAILCLOSED") out({ pass: false, score: -1, reason: "no engine configured \u2014 cannot judge, failing closed" });
+else if (word === "LEAK") out({ pass: false, score: 1.5, reason: "connect to ${BASE_URL}/chat/completions failed" });
 else if (word === "HANG") await Bun.sleep(60000);
 else { console.error("boom ${BASE_URL}/chat/completions"); process.exit(70); }
 `;
@@ -113,7 +121,7 @@ function setup(cases: Spec[], env: Record<string, string> = {}) {
   process.env.TMPDIR = own;
   Object.assign(process.env, env);
   const log = process.env.FAKE_LOG;
-  const ctx = { baseUrl: BASE_URL, model: "the-model", hasKey: true, version: "0.9.99-test", label: "t" };
+  const ctx = { baseUrl: BASE_URL, model: "the-model", hasKey: true, version: "0.10.261200-test", label: "t" };
   return { ctx, calls: () => readCalls(log), leftover: () => readdirSync(own), folders: { assets, results: join(root, "results") } };
 }
 
@@ -183,7 +191,7 @@ describe("runCorpus", () => {
       { word: "UNREADABLE", label: "good" },
     ]);
     const summary = await quiet(() => runPublic(ctx, folders));
-    expect(summary).toMatchObject({ eval: "judge-gate", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_cases: 7, n_run: 7, n_scored: 6, n_errored: 1, timeouts: 0, status: "complete", aborted_reason: null });
+    expect(summary).toMatchObject({ eval: "judge-gate", corpus: "public", model: "the-model", akm_version: "0.10.261200-test", n_cases: 7, n_run: 7, n_scored: 6, n_errored: 1, timeouts: 0, status: "complete", aborted_reason: null });
     expect(summary.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     expect(summary.metrics.good).toEqual({ n: 3, passed: 1, rate: 0.3333 });
     expect(summary.metrics.bad).toEqual({ n: 3, passed: 1, rate: 0.3333 });
@@ -221,6 +229,29 @@ describe("runCorpus", () => {
     // Two cases run at a time and each row is appended when its case finishes, so the file is in completion order. Look the rows up by id.
     const severityOf = (id: string) => rows.find((r) => r.id === id).severity;
     expect(["case-1", "case-2", "case-3", "case-4", "case-5", "case-6", "case-7"].map(severityOf)).toEqual(["churn", "churn", "churn", "harmful", "harmful", "harmful", undefined]);
+  });
+
+  test("stops before the first case when the akm has no `akm judge`, whatever its version says", async () => {
+    const { ctx, folders, calls } = setup([{ word: "PASS", label: "good" }], { FAKE_NOJUDGE: "1" });
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("has no `akm judge reflect.quality`");
+    expect(calls().filter((c) => c.at === "start")).toEqual([]);
+    expect(existsSync(folders.results) ? readdirSync(folders.results) : []).toEqual([]); // no empty results folder is left behind
+  });
+
+  test("routes a verdict as reflect does: review from a mean of 3.5, a lower band is a reject, and the headline counts harmful passes on the negative lane", async () => {
+    const { ctx, folders } = setup([
+      { word: "PASS", label: "bad", severity: "harmful", feedback: "[negative] x" },
+      { word: "PASS", label: "bad", severity: "harmful" },
+      { word: "REVIEW", label: "bad", severity: "harmful", feedback: "[negative] x" },
+      { word: "BAND", label: "bad", severity: "harmful", feedback: "[negative] x" },
+      { word: "BAND", label: "good" },
+    ]);
+    const m = (await quiet(() => runPublic(ctx, folders))).metrics;
+    expect(m.harmful_auto_accepted).toEqual({ n: 3, passed: 1, rate: 0.3333 });
+    expect(m.routes.harmful?.negative).toEqual({ pass: 1, review: 1, reject: 1 });
+    expect(m.routes.harmful?.maintenance).toEqual({ pass: 1, review: 0, reject: 0 });
+    expect(m.good_rejected).toEqual({ n: 1, count: 1, rate: 1 });
+    expect(m.review_share).toEqual({ n: 5, count: 1, rate: 0.2 });
   });
 
   test("a score of -1 routed to review is a review whatever the message says, and one routed nowhere is an error", async () => {
@@ -295,9 +326,9 @@ describe("runCorpus", () => {
       // the config in the summary is the config akm ran under, with the endpoint hidden and no secret
       expect(new Set(started.map((c) => JSON.stringify(c.config))).size).toBe(1);
       expect(summary.config).toEqual(redactConfig(hideEndpoint(started[0].config, BASE_URL)));
-      // negative feedback goes first
+      // the feedback goes as lines, in the order the case has them, as reflect passes them
       const seen = JSON.parse(resultsOf(folders).rows[0].reason);
-      expect(seen.feedback).toBe("[negative] stale\n[positive] fine");
+      expect(seen.feedback).toEqual(["[positive] fine", "[negative] stale"]);
       expect(seen.env).toStartWith(started[0].data.replace(/data$/, ""));
     });
 
@@ -439,7 +470,7 @@ describe("runCorpus", () => {
     test("the version of the rubric the labels follow, from the public assets README, for either corpus and for a run that gave up", async () => {
       const readme = readFileSync(join(EVAL_DIR, "assets", "README.md"), "utf8");
       const version = Number(/^rubric_version: (\d+)$/m.exec(readme)?.[1]);
-      expect(version).toBe(2);
+      expect(version).toBe(3);
       const pub = setup([{ word: "PASS", label: "good" }]);
       expect((await quiet(() => runPublic(pub.ctx, pub.folders))).rubric_version).toBe(version);
       expect(resultsOf(pub.folders).summary.rubric_version).toBe(version);
@@ -457,7 +488,7 @@ describe("runCorpus", () => {
     const { summary: stored } = resultsOf(folders);
     expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms"].sort());
     expect(Object.keys(summary).sort()).toEqual([...Object.keys(stored), "results_dir"].sort()); // what runCorpus returns also names the folder, which the file does not
-    expect(stored).toMatchObject({ concurrency: 2, timeout_ms: 900_000, timeouts: 0, rubric_version: 2 });
+    expect(stored).toMatchObject({ concurrency: 2, timeout_ms: 900_000, timeouts: 0, rubric_version: 3 });
   });
 });
 
@@ -480,7 +511,7 @@ describe("the manifest of a run", () => {
     expect(readManifest(stored).kind).toBe("manifest");
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(manifest).toMatchObject({ manifest_version: 1, eval: "judge-gate", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, eval_settings: {} });
-    expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
+    expect(manifest.akm).toEqual({ version: "0.10.261200-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: "default", config_patch_sha256: null, timeout_ms: 900_000, seed: null }); // the effective timeout of a case, which used to be recorded as null
     const loaded = parseCases(readFileSync(join(folders.assets, "cases.jsonl"), "utf8"));
     expect(Object.keys(manifest.cases)).toEqual(loaded.map((c) => c.id));
@@ -509,7 +540,7 @@ describe("the manifest of a run", () => {
       expect(MEASUREMENT.score(byId.get(row.id) as Case, (read as { raw: Raw }).raw)).toEqual(row);
     }
     // what akm printed is in the row, as the scorer read it, with the endpoint masked and only the fields it reads
-    expect(rows.find((r) => r.id === "case-2").verdict).toEqual({ pass: false, score: 3, reviewNeeded: true, reason: "needs a person", engine: "judge" });
+    expect(rows.find((r) => r.id === "case-2").verdict).toEqual({ pass: false, score: 3.6, reviewNeeded: true, reason: "needs a person", engine: "judge" });
     expect(rows.find((r) => r.id === "case-4").verdict).toEqual({ pass: false, score: -1, reviewNeeded: true, reason: "judge timeout/error", engine: "judge" });
     expect(rows.find((r) => r.id === "case-8")).not.toHaveProperty("verdict"); // akm printed none
   });
@@ -551,7 +582,7 @@ describe("the command", () => {
       expect(r.calls.filter((c) => c.at === "version")).toHaveLength(1); // akm is probed once
       expect(new Set(r.calls.filter((c) => c.at === "start").map((c) => c.data)).size).toBe(1); // and the eight cases go through one sandbox
       expect(r.leftover).toEqual([]); // which is removed, the probe's too
-      expect(r.stored).toMatchObject({ n_run: 8, status: "complete", rubric_version: 2 });
+      expect(r.stored).toMatchObject({ n_run: 8, status: "complete", rubric_version: 3 });
       expect(Object.keys(r.stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms", "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
     }
     expect([mostAtOnce(plain.calls), plain.stored.concurrency, plain.stored.timeout_ms, plain.stored.manifest.settings.timeout_ms]).toEqual([2, 2, 900_000, 900_000]);
@@ -578,7 +609,7 @@ describe("the usage text", () => {
     expect(text).toContain("  --concurrency  run N cases at a time");
     expect(text).toContain("Default: 2.\n");
     expect(text).toContain("  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 900000.\n");
-    expect(text).toEndWith(`\n\nTested with akm 0.9.25-alpha.2 or later on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
+    expect(text).toEndWith(`\n\nTested with akm 0.10.261105 or later on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
     expect(text).not.toMatch(/--yes|-y\b/);
   });
 });

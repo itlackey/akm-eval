@@ -141,13 +141,6 @@ const PAIR_JUDGE: Canned[] = [
  */
 export const CONTRACTS: Record<string, Contract> = {
   "evals/retrieval": { canned: [], success: {} },
-  // The value that fits the judge's schema scores every criterion 1, which is a verdict (reject). A reply akm cannot read is routed to review
-  // with no score.
-  "evals/judge-gate": {
-    canned: [],
-    success: { field: "outcome", values: ["pass", "review", "reject"], also: each("score", (v) => typeof v === "number", "a number: a verdict") },
-    failure: { field: "outcome", values: ["review"], also: each("score", (v) => v === null, "null: no verdict") },
-  },
   // akm takes a patch whose fields fit the schema.
   "evals/reflect": { canned: [], success: { field: "outcome", values: ["proposal"] }, failure: { field: "outcome", values: ["unusable"] } },
   // akm queues a lesson whose description has under 20 characters or whose when_to_use has under 15 for review with a note that it is invalid,

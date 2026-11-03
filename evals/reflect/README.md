@@ -86,7 +86,7 @@ evals/reflect/run --config-patch evals/reflect/patches/judge-on.json --label jud
 evals/reflect/run --config-patch evals/reflect/patches/judge-on.json --retrieval-queries --label judge-queries
 ```
 
-`evals/reflect/defect-filter --akm-src DIR` replays the defect filter of the akm checkout DIR on edits whose quality is known: `--reflect RESULTS_DIR` (a run made with `patches/defect-filter-off.json`; others are refused) or `--judge-gate public|private` (the 137 labelled proposals of judge-gate: 106 made by reflect, 31 written to the rubric). It prints, per set, how many good and bad edits the filter refused and by which rule. A replay reads each note from the cases here now, so it refuses a run with a case id the cases here no longer have; `--rescore` leaves those proposals out and lists them in `inputs.missing_cases`.
+`evals/reflect/defect-filter --akm-src DIR` replays the defect filter of the akm checkout DIR on edits whose quality is known: `--reflect RESULTS_DIR` (a run made with `patches/defect-filter-off.json`; others are refused) or `--judge-gate public|private` (the 188 labelled proposals of judge-gate (reflect revisions, rebuilt or written through `applyReflectPatch`)). It prints, per set, how many good and bad edits the filter refused and by which rule. A replay reads each note from the cases here now, so it refuses a run with a case id the cases here no longer have; `--rescore` leaves those proposals out and lists them in `inputs.missing_cases`.
 
 ## Notes
 

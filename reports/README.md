@@ -2,6 +2,8 @@
 
 Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
+> **judge-gate rounds before rubric version 3 do not compare.** The 13 judge-gate rounds published here (rubric version 2 or none, measurement 0.3 or earlier) scored 137 or fewer revisions, 101 of which reflect cannot produce (they edit the body), through `akm improve judge`, with feedback reordered and the judge's 2.5 review band. Rubric 3 (measurement 0.4, akm-eval#179) has other cases, other labels and reflect's routes, so their figures are not comparable with any new judge-gate run. They are left as they were: they cannot be rescored, because the inputs changed.
+
 - [`flint-don-2026-10-25/README.md`](flint-don-2026-10-25/README.md): Flint on Apple M4 Pro with AKM 0.10.261011-beta; full GGUF bakeoff, pilots, official rec INT4 diagnostics, and a [full 55-case rec capture](flint-don-2026-10-25/rec/budget-run.md) with explicit completion budgets, raw outputs and native timing counters. Earlier preflight/budget failures remain preserved.
 - [`no-change-132-2026-10-21/README.md`](no-change-132-2026-10-21/README.md): bakeoff 0.3 scores memory inference's explicit no-change decision; a paired 19-case Flash-Next pilot of the 0.2 and 0.3 harnesses on one akm `release/0.10.0` build (no model-quality claim), with the remaining scope and date cases.
 - [`memory-lifecycle-125/README.md`](memory-lifecycle-125/README.md): manual, opt-in real-akm checks that memory claims, evidence and scopes survive extraction, acceptance, improvement and recall; all 12 pass on akm `release/0.10.0` at `d2369845a`.
