@@ -240,7 +240,7 @@ describe("runCorpus", () => {
 
   test("stops before the first case when the akm's reflect.quality is schemaVersion 1, which does not carry reflect's route", async () => {
     const { ctx, folders, calls } = setup([{ word: "PASS", label: "good" }], { FAKE_SCHEMA: "1" });
-    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("has schemaVersion 1, and this eval reads 2 or later");
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("has schemaVersion 1, and this eval reads 2");
     expect(calls().filter((c) => c.at === "start")).toEqual([]);
     expect(existsSync(folders.results) ? readdirSync(folders.results) : []).toEqual([]);
   });

@@ -15,7 +15,7 @@ export const NAME = "judge-gate";
 
 /** The judge this eval measures, and the schemaVersion of it that it reads: 2 carries reflect's own route (the review floor, akm#1418) in `reviewNeeded`. */
 export const JUDGE = "reflect.quality";
-export const MIN_SCHEMA = 2;
+export const SCHEMA = 2;
 
 /** How long akm gets for one case unless --timeout-ms says otherwise: a slow local model takes minutes. */
 export const JUDGE_TIMEOUT_MS = 15 * 60_000;

@@ -7,7 +7,10 @@ import { exitMessage } from "./cli.ts";
 /** Where akm sends a proposal after its judge: pass (accepted), review (a person decides) or reject. */
 export type Route = "pass" | "review" | "reject";
 
-/** The route of a judge verdict that has `pass` and `reviewNeeded`, as `reflect.quality` and `distill.lesson` print them: akm's own, since the verdict carries it. */
+/**
+ * The route of a judge verdict that has `pass` and `reviewNeeded`, as akm routes `reflect.quality` and `distill.lesson` on a new lesson: akm's own, since the
+ * verdict carries it. A lesson update routes on `pass` alone (distill.ts `proposeLessonUpdate`), so it is not this.
+ */
 export const routeOf = (verdict: { pass?: unknown; reviewNeeded?: unknown }): Route => (verdict.pass === true ? "pass" : verdict.reviewNeeded ? "review" : "reject");
 
 /** What `akm judge <name> --format json` prints. `verdict` is there on outcome `verdict`, `reason` on `error` and `unparseable` (the judge gave no verdict). */
@@ -52,11 +55,12 @@ export async function callJudge(sandbox: Sandbox, name: string, input: unknown, 
 }
 
 /**
- * Asks akm whether judge `name` is there at `schemaVersion` `min` or later, and returns the version. A version number does not say that (`akm judge`
+ * Asks akm whether judge `name` is there at exactly `schemaVersion` `version`. akm bumps a judge's schemaVersion when its input or verdict changes shape,
+ * so a later one may mean something this eval does not read. A version number does not say that (`akm judge`
  * was cut into no release for a while), and a judge of an older schema prints verdicts an eval would misread (#51), so the eval asks before its first case.
  * Throws a message that says which of the two it is.
  */
-export async function requireJudge(sandbox: Sandbox, name: string, min: number): Promise<number> {
+export async function requireJudge(sandbox: Sandbox, name: string, version: number): Promise<void> {
   const listed = await runAkm(sandbox, ["judge", "--list", "--format", "json"], { timeoutMs: 120_000 }).catch(() => undefined);
   let judges: unknown;
   try {
@@ -66,8 +70,7 @@ export async function requireJudge(sandbox: Sandbox, name: string, min: number):
   }
   const found = Array.isArray(judges) ? judges.find((j) => j?.name === name) : undefined;
   if (!found) throw new Error(`this akm has no \`akm judge ${name}\` (\`akm judge --list\` does not name it)`);
-  if (typeof found.schemaVersion !== "number" || found.schemaVersion < min) {
-    throw new Error(`this akm's \`${name}\` has schemaVersion ${found.schemaVersion ?? "none"}, and this eval reads ${min} or later`);
+  if (found.schemaVersion !== version) {
+    throw new Error(`this akm's \`${name}\` has schemaVersion ${found.schemaVersion ?? "none"}, and this eval reads ${version}`);
   }
-  return found.schemaVersion;
 }

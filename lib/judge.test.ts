@@ -73,13 +73,13 @@ describe("callJudge", () => {
 });
 
 describe("requireJudge", () => {
-  test("returns the schemaVersion of a judge at the version asked for or later", async () => {
-    expect(await requireJudge(sandbox(), "reflect.quality", 2)).toBe(2);
-    expect(await requireJudge(sandbox({ FAKE_SCHEMA: "3" }), "reflect.quality", 2)).toBe(3);
+  test("accepts a judge at the version asked for", async () => {
+    await requireJudge(sandbox(), "reflect.quality", 2);
   });
 
-  test("refuses an older schemaVersion, or none, and says which", async () => {
-    await expect(requireJudge(sandbox({ FAKE_SCHEMA: "1" }), "reflect.quality", 2)).rejects.toThrow("has schemaVersion 1, and this eval reads 2 or later");
+  test("refuses any other schemaVersion, or none, and says which", async () => {
+    await expect(requireJudge(sandbox({ FAKE_SCHEMA: "1" }), "reflect.quality", 2)).rejects.toThrow("has schemaVersion 1, and this eval reads 2");
+    await expect(requireJudge(sandbox({ FAKE_SCHEMA: "3" }), "reflect.quality", 2)).rejects.toThrow("has schemaVersion 3, and this eval reads 2");
     await expect(requireJudge(sandbox({ FAKE_SCHEMA: "none" }), "reflect.quality", 2)).rejects.toThrow("has schemaVersion none");
   });
 
