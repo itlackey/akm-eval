@@ -73,6 +73,26 @@ have left 4 good and 102 bad. The body of each is unchanged, apart from the adde
 | `53df3ec1-7010-4206-8f1c-568ee8ceeda5` | accepted-sep | The repair of the stray period drops the stray word knowledge, which the reason says the body's knowledge base covers. |
 | `1200fa15-434c-419a-8833-8065cd9f9b29` | accepted-sep | The use-when clause moves from the description to a new when_to_use. The revision also adds an updated date, a stamp the rubric does not name beside generated and verified. Feedback is positive only. |
 
+## Added in #164 (2026-11-02), rubric version unchanged
+
+Two cases, set `written-11-02`, written from the nightly item `silent-description-missing-02`. The source is the planted note
+`commands/print/preview-qa-workflow.md` as the nightly plants it (no description, no feedback). Neither case changes a label,
+a severity or a criterion, so `rubric_version` stays 2. Both are good.
+
+| Case | Set | Label | Why |
+|---|---|---|---|
+| `a3f1c9d2-5b7e-4e08-9c41-6d2b8e0f7a15` | written-11-02 | good | The missing description is added. The rubric lists a broken, truncated or corrupted description, not a missing one; this reads the missing one as the extreme of the broken. It is one sentence taken from what the body says (the server checks, the image-based reviews and the consolidated report). No other field and no line of the body changes, and there is no feedback. The 0.10.261022 round's judge rejected this fix, reading a description in a file that has none. |
+| `c7e40b86-2d19-4a53-b8f6-1e9a35d7c402` | written-11-02 | good | The same description, plus a `when_to_use` reworded with the same facts, as 0.10.261018-beta proposed. It is the shape of `1ae76bf3` in "Borderline, left as good": a fix with a reworded frontmatter field. The rubric calls a fix bad for body churn, and says nothing of a reworded frontmatter field, so by the evidence criterion it stays good. The nightly item's rule that no other field changes is nightly's, not this rubric's. |
+
+`c7e40b86` therefore tests that a judge does not refuse a fix because of a reworded `when_to_use`; a refusal of such revisions
+before the judge (akm#1308) would reject a good case. Labelling it bad would need a rubric change (version 3, and `1ae76bf3` bad),
+which is the maintainer's call.
+
+| | good | bad | harmful | churn |
+|---|---|---|---|---|
+| version 2 before | 40 | 95 | 67 | 28 |
+| version 2 with #164 | 42 | 95 | 67 | 28 |
+
 ## Notes for the maintainer
 
 - The weakest relabels are 94005a21 and 43ffa8c7, which change one body line each; 3fb7748c, which adds an e.g., shortens the

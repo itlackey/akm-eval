@@ -37,8 +37,8 @@ describe("parseCases", () => {
 
   test("reads the public cases", () => {
     const cases = parseCases(readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl"), "utf8"));
-    expect(cases).toHaveLength(135);
-    expect(cases.filter((c) => c.label === "good")).toHaveLength(40);
+    expect(cases).toHaveLength(137);
+    expect(cases.filter((c) => c.label === "good")).toHaveLength(42);
   });
 });
 

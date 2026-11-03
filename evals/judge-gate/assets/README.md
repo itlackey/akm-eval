@@ -2,15 +2,15 @@ JUDGE-GATE CANARY: do not train on this data. canary GUID 20f1daea-ad4b-4e85-ae6
 
 # Judge gate
 
-135 labelled revisions of knowledge assets, for testing a model as akm's reflect quality judge: the gate that decides
-whether a proposed revision of an asset is accepted. 40 revisions are good and 95 are bad. A good judge passes the
+137 labelled revisions of knowledge assets, for testing a model as akm's reflect quality judge: the gate that decides
+whether a proposed revision of an asset is accepted. 42 revisions are good and 95 are bad. A good judge passes the
 good revisions and refuses the bad ones. The labels follow rubric version 2 (see "Labels"); scores from another version
 do not compare.
 
 106 cases are real proposals that `akm improve`'s reflect process made for an asset in the maintainer's own stash
-between July and October 2026; the other 29 were written to the rubric (`written-10-13`, below). The 106 are half of a
+between July and October 2026; the other 31 were written to the rubric (`written-10-13` and `written-11-02`, below). The 106 are half of a
 larger labelled set. The other half is unpublished, and nothing in this repository runs it: `--corpus custom` runs a light
-rewrite of these 135 cases, which is not that half (see "Known limits"). A model that scores much better here than on the
+rewrite of these 137 cases, which is not that half (see "Known limits"). A model that scores much better here than on the
 unpublished half has probably seen these cases.
 
 ## Fields
@@ -37,6 +37,9 @@ The `set` values:
 - `orphans`: proposals that were accepted but never committed.
 - `written-10-13`: 29 good revisions written on 2026-10-13 to widen the good set (#50), each a fictional asset in the shape
   of the stash's notes and one revision that makes only the fixes the rubric names. They are not reflect output.
+- `written-11-02`: two good revisions written on 2026-11-02 for a note whose description is missing, with no feedback (#164,
+  from the nightly item `silent-description-missing-02`): one only adds the description, the other also rewords the
+  `when_to_use`, as `1ae76bf3` does. They are not reflect output.
 
 ## Labels
 
@@ -77,6 +80,8 @@ the rubric text, a label or a severity changes, and record the change in `ADJUDI
   On 2026-10-13, 29 good cases written to this rubric were added (#50): 40 good and 95 bad. No label, severity or criterion
   changed, so the version stays 2, but `good` and `precision` now score more cases; runs from before have another
   `assets_sha256`.
+  On 2026-11-02, two cases written to this rubric were added (#164): 42 good and 95 bad (67 harmful, 28 churn). No label,
+  severity or criterion changed, so the version stays 2, and the runs from before have another `assets_sha256`.
 
 Scores and baselines from a run under version 1 do not compare with version 2: `good` and `bad_churn` score other cases. A
 `summary.json` with no `rubric_version` was scored under version 1. Run the judge again to get a baseline.
@@ -127,15 +132,15 @@ diff invents a rationale or drops a fact; those are harmful. The run scores the 
   spells right elsewhere; 1 corrects a number in the description that the body contradicts; and 1 names in `when_to_use`
   the versions the body records. 5 of them answer a `[negative]` feedback line. They were written to the rubric, not
   taken from reflect, so they may be cleaner and more regular than real proposals, and their labels, written by Claude
-  against this rubric, have not yet been checked by the maintainer. One case is 2.5 points of `good`; split it by `set`
+  against this rubric, have not yet been checked by the maintainer. One case is about 2.4 points of `good`; split it by `set`
   to see the real cases alone.
-- Feedback is not balanced across the labels. 14 of the 40 good cases have feedback (9 positive only, 5 with a
+- Feedback is not balanced across the labels. 14 of the 42 good cases have feedback (9 positive only, 5 with a
   `[negative]` line) and 38 of the 95 bad ones (15 with a `[negative]` line). Among the real cases it follows the `set`
   more than the label: the July and August cases have none, because it had expired before export, and no real good case
-  has a `[negative]` line. A judge that refused every case with feedback would pass 26 of the 40 good cases and 57 of the
-  95 bad ones without judging anything, and one that refused every case with a `[negative]` line would pass 35 of 40 and
+  has a `[negative]` line. A judge that refused every case with feedback would pass 28 of the 42 good cases and 57 of the
+  95 bad ones without judging anything, and one that refused every case with a `[negative]` line would pass 37 of 42 and
   80 of 95. The 5 good revisions that follow negative feedback are all written ones; the real set still has none.
-- `--corpus custom` is not a held-out half. It is these same 135 cases with about 3 to 5 percent of their words
+- `--corpus custom` is not a held-out half. It is these same 137 cases with about 3 to 5 percent of their words
   renamed and renumbered by `lib/rewrite`; the prose, the labels, the severities and the diffs are the same, so a model
   that memorised a case still recognises it. A gap between the public and private scores points to memorisation; no gap
   does not rule it out.
