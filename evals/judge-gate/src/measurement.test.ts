@@ -8,7 +8,7 @@ import { basename, join } from "node:path";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { casesSha256 } from "./inputs.ts";
-import { type Case, type Raw, type Row, judgeConfig, orderFeedback, parseCases } from "./lib.ts";
+import { type Case, type Raw, type Row, judgeConfig, parseCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
@@ -55,7 +55,7 @@ function stored(options: { without?: string[]; name?: string; custom?: { folder:
     config_patch: null,
     config: JSON.parse(JSON.stringify(config)),
     assets_sha256: casesSha256(PUBLIC),
-    rubric_version: 2,
+    rubric_version: 3,
     seed: null,
     status: "complete",
     aborted_reason: null,
@@ -94,9 +94,11 @@ describe("the digests of a case", () => {
     expect(digest({ ...c, labelReason: "Another reason, which the scorer does not read.", kind: "another", canary: "another canary" })).toEqual(was);
   });
 
-  test("the input is what goes to akm, with the negative feedback first: reordered feedback of the same lines is the same input", () => {
-    const c = { ...(PUBLIC_CASES[0] as Case), feedback: "[positive] fine\n[negative] stale" };
-    expect(digest(c).input_sha256).toBe(digest({ ...c, feedback: orderFeedback(c.feedback) }).input_sha256);
+  test("the input is what goes to akm judge reflect.quality: the feedback as lines in the case's order, and the ref", () => {
+    const c = { ...(PUBLIC_CASES[0] as Case), feedback: "[positive] fine\n[negative] stale", ref: "knowledge/x" };
+    expect(MEASUREMENT.input(c)).toEqual({ source: c.source, candidate: c.candidate, feedback: ["[positive] fine", "[negative] stale"], ref: "knowledge/x" });
+    expect(digest(c).input_sha256).not.toBe(digest({ ...c, feedback: "[negative] stale\n[positive] fine" }).input_sha256);
+    expect(digest(c).input_sha256).not.toBe(digest({ ...c, ref: "knowledge/y" }).input_sha256);
   });
 });
 
@@ -134,7 +136,7 @@ describe("rescoring a stored run", () => {
     expect(rowsOf(out)).toEqual(rowsOf(dir));
     expect(result).toMatchObject({ changed: [], dropped: [] });
     const [s, o] = [summaryOf(out), summaryOf(dir)];
-    expect(s).toMatchObject({ label: "golden-rescored", n_run: FIXTURE_CASES.length, metrics: o.metrics, n_errored: o.n_errored, timeouts: o.timeouts, rubric_version: 2 });
+    expect(s).toMatchObject({ label: "golden-rescored", n_run: FIXTURE_CASES.length, metrics: o.metrics, n_errored: o.n_errored, timeouts: o.timeouts, rubric_version: 3 });
     expect(manifestProblems(s.manifest)).toEqual([]);
     expect(readManifest(s).kind).toBe("manifest");
     expect(s.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", dropped: [] });

@@ -24,7 +24,7 @@ Runs the defect filter of the akm checkout DIR on each labelled edit and counts 
                 does not have the filter off (its defectFilter lists empty) is refused, with or without --rescore.
                 The source of each edit is read from the current cases, by case id.
   --rescore     omit proposals whose case no longer exists, reporting the missing case ids.
-  --judge-gate  the 137 labelled proposals of evals/judge-gate (106 made by reflect, 31 written to the rubric), public or private.
+  --judge-gate  the 153 labelled proposals of evals/judge-gate, public or private.
 
 Prints JSON: for each set of edits, the good and bad ones, how many the filter refused and by which rule, and the refused edits.
 A --reflect set also carries "inputs": the corpus folder the replay read, and any missing case ids.`;

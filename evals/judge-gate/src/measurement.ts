@@ -7,10 +7,10 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
-import { NAME, orderFeedback } from "./collect.ts";
+import { NAME, judgeInput } from "./collect.ts";
 import { CASES } from "./inputs.ts";
 import { parseCases } from "./lib.ts";
-import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
+import { type Case, type Raw, type Row, errored, laneOf, makeRow, rawOf, summarize } from "./score.ts";
 
 /**
  * The folder of the cases a run read. The public ones are in the repository. A custom corpus records its folder when it was inside it
@@ -27,16 +27,16 @@ function assetsOf(root: string, summary: Record<string, any>): string {
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.3",
+  version: "0.4",
   loadCases: (root, summary) => {
     const file = join(assetsOf(root, summary), CASES);
     return parseCases(readFileSync(file, "utf8"), file);
   },
   caseId: (c) => c.id,
-  // What goes to `akm improve judge` on stdin: the source, the candidate and the feedback with its negative lines first.
-  input: (c) => ({ source: c.source, candidate: c.candidate, feedback: orderFeedback(c.feedback) }),
-  // Everything makeRow reads of the case: its label and severity, and the set the row copies. The reason for the label is for readers.
-  labels: (c) => ({ label: c.label, severity: c.severity ?? null, set: c.set }),
+  // What goes to `akm judge reflect.quality` on stdin: the source, the candidate, the feedback lines and the ref.
+  input: judgeInput,
+  // Everything makeRow reads of the case: its label and severity, its lane (from the feedback) and the set the row copies. The reason for the label is for readers.
+  labels: (c) => ({ label: c.label, severity: c.severity ?? null, lane: laneOf(c.feedback), set: c.set }),
   rawOf,
   score: makeRow,
   errored,

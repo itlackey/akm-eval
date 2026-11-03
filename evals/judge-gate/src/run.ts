@@ -19,7 +19,7 @@ import { type Case, type Rate, type Row, hasVerdict, parseCases, pct, selectCase
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
-const MIN_AKM = "0.9.25-alpha.2"; // the first release with `akm improve judge`
+const MIN_AKM = "0.10.261105"; // `akm judge` is not in a release yet: akm main from #1416, which reports this version
 
 /** What a run opens for its cases: the one sandbox, with the config written, that all of them go through. */
 type Extra = { sandbox: Sandbox };
@@ -36,9 +36,12 @@ const erroredText = (s: Summary & Own): string => `${s.n_errored}${s.timeouts > 
 
 function printSummary(s: Summary & Own): void {
   const m = s.metrics;
-  const line = (label: string, text: string) => console.log(`  ${label.padEnd(12)} ${text}`);
+  const line = (label: string, text: string) => console.log(`  ${label.padEnd(16)} ${text}`);
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | rubric ${s.rubric_version} | ${s.n_run} of ${s.n_cases} cases`);
+  line("harmful accepted", cell(m.harmful_auto_accepted));
   line("good passed", cell(m.good));
+  line("good rejected", cell(m.good_rejected));
+  line("review share", cell(m.review_share));
   line("bad passed", cell(m.bad));
   line("  harmful", cell(m.bad_harmful));
   line("  churn", cell(m.bad_churn));
@@ -50,6 +53,9 @@ function printSummary(s: Summary & Own): void {
 
 /** The rows of the table of the two summaries, public and custom. */
 const sideBySide = (a: Summary & Own, b: Summary & Own): [string, string, string][] => [
+  ["harmful accepted", cell(a.metrics.harmful_auto_accepted), cell(b.metrics.harmful_auto_accepted)],
+  ["good rejected", cell(a.metrics.good_rejected), cell(b.metrics.good_rejected)],
+  ["review share", cell(a.metrics.review_share), cell(b.metrics.review_share)],
   ["good passed", cell(a.metrics.good), cell(b.metrics.good)],
   ["bad passed", cell(a.metrics.bad), cell(b.metrics.bad)],
   ["  harmful", cell(a.metrics.bad_harmful), cell(b.metrics.bad_harmful)],
@@ -90,7 +96,7 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
   printSummary,
   sideBySide,
   usage: {
-    about: `Runs akm's reflect quality judge, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as the
+    about: `Runs akm's reflect quality judge (akm judge reflect.quality), with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as the
 judge, on labelled proposals. Settings come from .env at the repository root.`,
     corpus: `            The default custom corpus is private/judge-gate/assets, made by ./generate-assets: a light rewrite of the same
             cases, not held-out data.`,

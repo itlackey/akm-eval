@@ -62,6 +62,6 @@ describe("rubricVersion", () => {
   });
 
   test("the public assets state one", () => {
-    expect(rubricVersion(join(import.meta.dir, "..", "assets"))).toBe(2);
+    expect(rubricVersion(join(import.meta.dir, "..", "assets"))).toBe(3);
   });
 });

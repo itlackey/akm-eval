@@ -342,10 +342,10 @@ describe("the command line", () => {
 });
 
 describe("judgeGateEdits", () => {
-  test("is the 137 labelled proposals of the public judge-gate set", () => {
+  test("is the 153 labelled proposals of the public judge-gate set", () => {
     const edits = judgeGateEdits("public");
-    expect(edits.length).toBe(137);
-    expect(edits.filter((e) => e.label === "good").length).toBe(42); // rubric version 2 (evals/judge-gate/assets/ADJUDICATION.md)
+    expect(edits.length).toBe(153);
+    expect(edits.filter((e) => e.label === "good").length).toBe(64); // rubric version 3 (evals/judge-gate/assets/ADJUDICATION.md)
     expect(edits.every((e) => e.source.length > 0 && e.candidate.length > 0)).toBe(true);
   });
 });

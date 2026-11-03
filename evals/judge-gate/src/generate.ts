@@ -84,7 +84,7 @@ const technical = (word: string): boolean => word.length >= 3 && /[0-9]|[/_@#~]|
 
 const wordsOf = (text: string): string[] => text.split(/\s+/).filter(Boolean);
 
-/** The negative lines of a feedback: orderFeedback and akm's judge key on the `[negative]` prefix. */
+/** The negative lines of a feedback: akm's judge keys on the `[negative]` prefix. */
 const negatives = (feedback: string): number => feedback.split("\n").filter((l) => l.startsWith("[negative]")).length;
 
 /**
