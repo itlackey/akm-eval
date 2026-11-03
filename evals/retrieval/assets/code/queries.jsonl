@@ -1,0 +1,30 @@
+{"id": "c01", "query": "createOpencodeClient baseUrl", "kind": "identifier", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/sdk", "knowledge/skills/ai-skills/opencode-extensions/references/sdk-docs"]}
+{"id": "c02", "query": "experimental.session.compacting output.context.push", "kind": "identifier", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/plugins", "knowledge/skills/ai-skills/opencode-extensions/references/plugins-docs"]}
+{"id": "c03", "query": "exiftool -GTS_PDFXVersion -GTS_PDFXConformance", "kind": "flag", "expected": ["knowledge/skills/print/pdfx-print-pipeline/references/DRIVETHRURPG"]}
+{"id": "c04", "query": "-webkit-print-color-adjust: exact", "kind": "snippet", "expected": ["knowledge/skills/print/pdfx-print-pipeline/references/CSS_PRINT"]}
+{"id": "c05", "query": "target-counter(attr(href), page)", "kind": "snippet", "expected": ["knowledge/skills/print/pagedjs/references/css-patterns"]}
+{"id": "c06", "query": "--fields Microsoft.VSTS.Common.Priority", "kind": "config-key", "expected": ["knowledge/skills/administrative/tracker/references/AZURE_DEVOPS_WORKITEM_CHEATSHEET"]}
+{"id": "c07", "query": "codex exec -c model_reasoning_effort", "kind": "config-key", "expected": ["knowledge/skills/ai-skills/agent-cli-tools/references/codex"]}
+{"id": "c08", "query": "jq .num_turns cost_usd duration_ms", "kind": "identifier", "expected": ["knowledge/skills/ai-skills/agent-cli-tools/references/claude-code", "knowledge/skills/ai-skills/agent-cli-tools/references/qwen-code"]}
+{"id": "c09", "query": "NODE_EXTRA_CA_CERTS", "kind": "env-var", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/network"]}
+{"id": "c10", "query": "new AxeBuilder({ page }).withTags", "kind": "identifier", "expected": ["skills/e2e-testing/test-implementation"]}
+{"id": "c11", "query": "base.extend WorkerFixtures sharedConfig", "kind": "identifier", "expected": ["knowledge/playwright/best-practices"]}
+{"id": "c12", "query": "forbidOnly: !!process.env.CI", "kind": "config-key", "expected": ["workflows/playwright-full-coverage", "scripts/skills/e2e-testing/references/playwright-ts-full-config.ts"]}
+{"id": "c13", "query": "window.__PAGED_RENDERED__", "kind": "identifier", "expected": ["workflows/print-spread-qa-loop"]}
+{"id": "c14", "query": "fta exclude_directories __fixtures__", "kind": "config-key", "expected": ["skills/coding/fta-code-quality", "knowledge/skills/coding/fta-code-quality/references/fta-reference"]}
+{"id": "c15", "query": "withBleed TrimSize", "kind": "identifier", "expected": ["knowledge/skills/print/pdfx-print-pipeline/references/TRIM_SIZES"]}
+{"id": "c16", "query": "pkg.scripts fs.writeFileSync package.json", "kind": "snippet", "expected": ["commands/add-package-script"]}
+{"id": "c17", "query": "openrouter allow_fallbacks", "kind": "config-key", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/providers"]}
+{"id": "c18", "query": "AICORE_DEPLOYMENT_ID AICORE_RESOURCE_GROUP", "kind": "env-var", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/providers"]}
+{"id": "c19", "query": "reasoningEffort textVerbosity", "kind": "config-key", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/models", "knowledge/skills/ai-skills/opencode-extensions/references/agents-docs"]}
+{"id": "c20", "query": "aws ecs update-service --force-new-deployment", "kind": "flag", "expected": ["skills/coding/cli-workflow-creator"]}
+{"id": "c21", "query": "codex exec --skip-git-repo-check -i image.png", "kind": "flag", "expected": ["knowledge/skills/ai-skills/agent-cli-tools/references/image-input", "knowledge/skills/ai-skills/agent-cli-tools/references/codex"]}
+{"id": "c22", "query": "/fields/Custom.BusinessValue json-patch", "kind": "config-key", "expected": ["knowledge/skills/administrative/tracker/references/azure-devops-cli-first"]}
+{"id": "c23", "query": "aws sts assume-role QDeveloperRole", "kind": "flag", "expected": ["knowledge/skills/ai-skills/agent-cli-tools/references/amazon-q-cli"]}
+{"id": "c24", "query": "pg_dump $DB_NAME | gzip", "kind": "snippet", "expected": ["knowledge/skills/coding/cli-workflow-creator/references/examples"]}
+{"id": "c25", "query": "Error: Endpoint 'embeddings' referenced but not defined in endpoints section", "kind": "error", "expected": ["knowledge/skills/ai-skills/llm-delegation-tool/references/troubleshooting"]}
+{"id": "c26", "query": "throw new Error(\"Cannot access .env files\")", "kind": "error", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/plugins"]}
+{"id": "c27", "query": "ERROR: Not in a git repo. Run: git init", "kind": "error", "expected": ["knowledge/skills/ai-skills/agent-cli-tools/references/aider"]}
+{"id": "c28", "query": "findEndpointForModel", "kind": "identifier", "expected": ["knowledge/skills/ai-skills/llm-delegation-tool/references/implementation-guide"]}
+{"id": "c29", "query": "--max-pages 20 --use-caching", "kind": "flag", "expected": ["skills/print/pdf-layout-reviewer"]}
+{"id": "c30", "query": "table-layout: fixed; overflow-wrap: break-word", "kind": "snippet", "expected": ["knowledge/skills/print/pagedjs/references/troubleshooting"]}
