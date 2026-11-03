@@ -17,6 +17,11 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- judge-gate collection 0.2 -> 0.3 (#164): two cases added, so the selected inputs change (137 cases, 41 good and 96 bad; `assets_sha256` changes).
+  Set `written-11-02`: the nightly note `silent-description-missing-02` with only a correct description added and no feedback (good), and the
+  same with a reworded `when_to_use`, as 0.10.261018-beta proposed (bad, `churn`). No existing case, label, severity or criterion changed, the
+  rubric stays version 2, and scoring is unchanged. Runs of 0.2 compare with 0.3 by case, not by totals: `good`, `bad`, `bad_churn` and
+  `precision` now score 137 cases. The cases add a description to a source that has none, which none of the 135 did.
 - bakeoff scoring 0.5; collection stays 0.4 (case inputs and the akm invocations are unchanged). Label changes only, no input changes:
   - `consolidate-memory-pool` and `prod-consolidate-full-pool` no longer expect `memories/operator-preference` to be left out of the
     plan. akm 0.10 consolidates `captureMode: hot` memories like any other (akm#1170, CHANGELOG 0.10.26101101), so the plan may include

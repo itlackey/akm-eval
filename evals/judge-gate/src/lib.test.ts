@@ -37,8 +37,8 @@ describe("parseCases", () => {
 
   test("reads the public cases", () => {
     const cases = parseCases(readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl"), "utf8"));
-    expect(cases).toHaveLength(135);
-    expect(cases.filter((c) => c.label === "good")).toHaveLength(40);
+    expect(cases).toHaveLength(137);
+    expect(cases.filter((c) => c.label === "good")).toHaveLength(41);
   });
 });
 
@@ -82,13 +82,13 @@ describe("the severity of the public bad cases", () => {
   const bad = cases.filter((c) => c.label === "bad");
 
   test("every bad case has one, and no good case does", () => {
-    expect(bad).toHaveLength(95);
+    expect(bad).toHaveLength(96);
     for (const c of bad) expect(c.severity === "churn" || c.severity === "harmful").toBe(true);
     for (const c of cases.filter((x) => x.label === "good")) expect(c.severity).toBeUndefined();
   });
 
-  test("28 are churn and 67 are harmful. Relabel a case and change these", () => {
-    expect(bad.filter((c) => c.severity === "churn")).toHaveLength(28);
+  test("29 are churn and 67 are harmful. Relabel a case and change these", () => {
+    expect(bad.filter((c) => c.severity === "churn")).toHaveLength(29);
     expect(bad.filter((c) => c.severity === "harmful")).toHaveLength(67);
   });
 

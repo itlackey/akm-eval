@@ -186,20 +186,20 @@ describe("the public cases", () => {
   const cases = publicCases();
   const a = audit(cases, rubricVersion(ASSETS), readFileSync(join(ASSETS, ADJUDICATION), "utf8"));
 
-  test("are under rubric version 2, with 40 good and 95 bad, 67 of them harmful and 28 churn", () => {
-    expect(a).toMatchObject({ rubric_version: 2, n_cases: 135, severity: { harmful: 67, churn: 28 } });
-    expect(a.labels.good.n).toBe(40);
-    expect(a.labels.bad.n).toBe(95);
+  test("are under rubric version 2, with 41 good and 96 bad, 67 of them harmful and 29 churn", () => {
+    expect(a).toMatchObject({ rubric_version: 2, n_cases: 137, severity: { harmful: 67, churn: 29 } });
+    expect(a.labels.good.n).toBe(41);
+    expect(a.labels.bad.n).toBe(96);
   });
 
   test("have the feedback the README states: 14 of the good and 38 of the bad, 5 of the good with a [negative] line", () => {
-    expect(a.labels.good.feedback).toEqual({ none: 26, positive_only: 9, negative: 5 });
-    expect(a.labels.bad.feedback).toEqual({ none: 57, positive_only: 23, negative: 15 });
-    expect(a.feedback_shortcuts.refuse_any_feedback).toEqual({ good_passed: 26, bad_passed: 57 });
-    expect(a.feedback_shortcuts.refuse_negative_feedback).toEqual({ good_passed: 35, bad_passed: 80 });
+    expect(a.labels.good.feedback).toEqual({ none: 27, positive_only: 9, negative: 5 });
+    expect(a.labels.bad.feedback).toEqual({ none: 58, positive_only: 23, negative: 15 });
+    expect(a.feedback_shortcuts.refuse_any_feedback).toEqual({ good_passed: 27, bad_passed: 58 });
+    expect(a.feedback_shortcuts.refuse_negative_feedback).toEqual({ good_passed: 36, bad_passed: 81 });
   });
 
-  test("cover the sets the README says: no good case from night-10-01, queue-10-01 or orphans, and the 29 written ones all good", () => {
+  test("cover the sets the README says: no good case from night-10-01, queue-10-01 or orphans, and the 29 written-10-13 ones all good", () => {
     expect(a.sets).toEqual({
       "accepted-aug": { good: 4, bad: 27 },
       "accepted-jul": { good: 3, bad: 27 },
@@ -208,13 +208,14 @@ describe("the public cases", () => {
       "orphans": { good: 0, bad: 4 },
       "queue-10-01": { good: 0, bad: 5 },
       "written-10-13": { good: 29, bad: 0 },
+      "written-11-02": { good: 1, bad: 1 },
     });
   });
 
   test("have no good case that disagrees with the rubric: none uses a churn word, none edits the body beyond a title and the fixes the rubric names", () => {
     expect(a.reason_disagreements).toEqual([]);
     expect(a.body_disagreements).toEqual([]);
-    expect(a.good_body).toEqual({ unchanged: 25, title: 5, deduplicated: 7, corrected: 3, edited: 0 });
+    expect(a.good_body).toEqual({ unchanged: 26, title: 5, deduplicated: 7, corrected: 3, edited: 0 });
     expect(disagrees(a)).toBe(false);
   });
 
@@ -228,8 +229,8 @@ describe("the public cases", () => {
       return { ...rest, label: "good", labelReason: c.labelReason.slice(0, c.labelReason.indexOf(marker)) };
     });
     const before = audit(undone, 1);
-    expect(before.labels.good.n).toBe(57); // the 28 of version 1, and the 29 of written-10-13
-    expect(before.severity).toEqual({ harmful: 67, churn: 11 });
+    expect(before.labels.good.n).toBe(58); // the 28 of version 1, the 29 of written-10-13 and the 1 of written-11-02
+    expect(before.severity).toEqual({ harmful: 67, churn: 12 });
     expect(before.reason_disagreements).toHaveLength(10);
     expect(before.body_disagreements).toHaveLength(16);
     const found = new Set([...before.reason_disagreements.map((d) => d.id), ...before.body_disagreements]);
@@ -273,7 +274,7 @@ describe("the seven borderline cases (#43)", () => {
     const cases = publicCases();
     expect(readAdjudication(record).borderline.map((b) => b.id).sort()).toEqual(SEVEN);
     expect(SEVEN.map((id) => cases.find((c) => c.id === id)?.label)).toEqual(SEVEN.map(() => "good"));
-    expect(cases.filter((c) => c.label === "good")).toHaveLength(40);
+    expect(cases.filter((c) => c.label === "good")).toHaveLength(41);
     expect(rubricVersion(ASSETS)).toBe(2);
   });
 
@@ -298,7 +299,7 @@ describe("the command", () => {
   test("prints the audit of the public cases and exits 0", () => {
     const { code, out } = run();
     expect(code).toBe(0);
-    expect(out).toContain("judge-gate audit | rubric_version 2 | 135 cases");
+    expect(out).toContain("judge-gate audit | rubric_version 2 | 137 cases");
     expect(out).toContain("label reason uses a churn word: 0");
     expect(out).toContain("candidate edits the body beyond a title and the fixes the rubric names: 0");
     expect(out).toContain("17 labels changed, 7 borderline cases left as they were");
@@ -307,7 +308,7 @@ describe("the command", () => {
   test("prints JSON with --json", () => {
     const { code, out } = run("--json");
     expect(code).toBe(0);
-    expect(JSON.parse(out)).toMatchObject({ rubric_version: 2, n_cases: 135, labels: { good: { n: 40 }, bad: { n: 95 } }, reason_disagreements: [], body_disagreements: [] });
+    expect(JSON.parse(out)).toMatchObject({ rubric_version: 2, n_cases: 137, labels: { good: { n: 41 }, bad: { n: 96 } }, reason_disagreements: [], body_disagreements: [] });
   });
 
   test("exits 1 and names the case when a good case disagrees with the rubric", () => {
