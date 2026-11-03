@@ -83,7 +83,7 @@ akm's judge scores a lesson 1 to 5 on `reusable` (`novelty` before 0.9.27-alpha.
 
 ## Lesson updates: 0 or 1 of 40 up to 0.10.261022
 
-The cases stand. The 0 of 40 on every published round from 0.9.32 to 0.10.261022, apart from 1 of 40 on 0.10.261006-beta, was akm's: the update judge rejected the concrete facts the cases require, and the result labelled attempted updates `nothing_reusable`. akm 0.10.261105-beta fixed this with akm#1402 (update outcomes reported as `update_*` skip reasons) and akm#1403 (the judge no longer rejects concrete facts an update adds); akm#1409 then has the update judge reject lines that only record status or contradict the source. The remaining writer gap is akm#1405 (the lesson-update writer drops the memory's facts). 0.10.261105-beta, `lesson_updates`: **TODO: figure pending, fill in when the round is confirmed** (stable 0.10.261022 re-run at the same harness: 0/40).
+The cases stand. The 0 of 40 on every published round from 0.9.32 to 0.10.261022, apart from 1 of 40 on 0.10.261006-beta, was akm's: the update judge rejected the concrete facts the cases require, and the result labelled attempted updates `nothing_reusable`. akm 0.10.261105-beta fixed this with akm#1402 (update outcomes reported as `update_*` skip reasons) and akm#1403 (the judge no longer rejects concrete facts an update adds); akm#1409 then has the update judge reject lines that only record status or contradict the source. The remaining writer gap is akm#1405 (the lesson-update writer drops the memory's facts). In the `reports/0.10.261105-beta` round (lab 35B, `--semantic`), `lesson_updates` was 7 of 40 on 0.10.261105-beta and 0 of 40 on 0.10.261022 re-run on the same harness.
 
 ## Notes
 
