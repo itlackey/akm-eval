@@ -184,6 +184,8 @@ The fixture tests use fake AKM/model processes. In the Docker workflow, the imag
 
 ## Work on the repository
 
+Agents and contributors: start with [`AGENTS.md`](AGENTS.md).
+
 - **Run from a worktree.** A new worktree or clone has none of the gitignored local files. Copy or link `.env`, `models.json` and `private` (a folder or a link) into it from your main checkout. Without `models.json` the Harbor evals have no `limits` for the model: they warn, and their runs are not comparable with runs that had limits.
 - **Run akm by hand.** Set `AKM_BUNDLE_DIR`, `AKM_CONFIG_DIR`, `AKM_DATA_DIR`, `AKM_CACHE_DIR`, `AKM_STATE_DIR` and the `XDG_*` folders to temporary folders, as the evals do (`sandboxEnv` in `lib/akm/akm.ts`). With only the `XDG_*` folders set, akm still indexes your default stash, though its database goes to the temporary folder.
 - **gh.** `gh issue view`, `gh pr view` and `gh pr edit` can fail on this repository with a GraphQL error about the deprecation of Projects (classic). The `--json` forms of the view commands and `gh api repos/itlackey/akm-eval/...` work (`gh api --method PATCH repos/itlackey/akm-eval/pulls/N` in place of `gh pr edit`).
