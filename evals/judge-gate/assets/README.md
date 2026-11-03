@@ -97,8 +97,8 @@ Otherwise the revision is bad, with one severity:
 - `churn`: every fact survives and nothing false is added, but a changed field fixes no real problem. This covers rewording a
   sound field, and a change that answers feedback the lane says justifies no change. A revision that fixes a real problem and
   also rewords a sound field is churn.
-- `other`: not worth accepting for another reason. Name the reason. In this pool there are two: a partial repair that keeps a
-  garbled fragment, and a contentless placeholder that misdescribes the asset.
+- `other`: not worth accepting for another reason. Name the reason. In this pool there is one: a contentless placeholder that
+  misdescribes the asset.
 
 ### Readings where the prompt is silent or ambiguous
 

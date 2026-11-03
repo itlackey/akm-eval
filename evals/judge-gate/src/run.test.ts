@@ -235,6 +235,7 @@ describe("runCorpus", () => {
     const { ctx, folders, calls } = setup([{ word: "PASS", label: "good" }], { FAKE_NOJUDGE: "1" });
     await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("has no `akm judge reflect.quality`");
     expect(calls().filter((c) => c.at === "start")).toEqual([]);
+    expect(existsSync(folders.results) ? readdirSync(folders.results) : []).toEqual([]); // no empty results folder is left behind
   });
 
   test("routes a verdict as reflect does: review from a mean of 3.5, a lower band is a reject, and the headline counts harmful passes on the negative lane", async () => {

@@ -7,9 +7,10 @@
 // The flags, the setup, the pool of workers and the summary are lib/run.ts. This file is what is judge-gate's: the spec that says what a case
 // is and how it is shown. Every case of a run goes through one akm sandbox, two at a time unless --concurrency says otherwise.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { type Sandbox, removeSandbox, runAkm } from "../../../lib/akm/akm.ts";
+import { fail } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { type CtxInput, type EvalSpec, type Summary, defaultResults as resultsIn, runCorpus as runIn, runEval } from "../../../lib/run.ts";
 import { CASES, casesSha256, rubricVersion } from "./inputs.ts";
@@ -84,7 +85,8 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
     const listed = await runAkm(sandbox, ["judge", "--list", "--format", "json"], { timeoutMs: 120_000 }).catch(() => undefined);
     if (!listed || listed.code !== 0 || !listed.stdout.includes("reflect.quality")) {
       removeSandbox(sandbox);
-      throw new Error("this akm has no `akm judge reflect.quality` (`akm judge --list` does not name it). judge-gate needs an akm build with akm#1416, such as akm main.");
+      if (ctx.resultsDir) rmSync(ctx.resultsDir, { recursive: true, force: true }); // the folder of a run that made no case
+      fail("this akm has no `akm judge reflect.quality` (`akm judge --list` does not name it). judge-gate needs an akm build with akm#1416, such as akm main.");
     }
     return { sandbox, close: () => removeSandbox(sandbox) };
   },
