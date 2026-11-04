@@ -23,7 +23,9 @@
 // What akm runs with: its own folders, and from the environment of the caller only what a process needs to start and to reach the
 // network: PATH, HOME, the locale, the proxy and certificate settings, the author for a commit, and the like (see ALLOWED_ENV).
 // Everything else stays behind, a credential or not, whatever its name (MYSQL_PWD, GH_PAT, DATABASE_URL, SESSION_COOKIE), so a secret
-// that no name pattern thought of never reaches akm. The exceptions are the variables that the akm config of the sandbox names as
+// that no name pattern thought of never reaches akm. A harness judge (a program of the operator's, such as opencode or claude) would read the
+// operator's own setup through HOME: ~/.claude and its CLAUDE.md, MCP servers, opencode's config. So { isolateHome: true } gives akm a HOME and a
+// cache folder inside the sandbox, which are empty. The exceptions are the variables that the akm config of the sandbox names as
 // $NAME (or ${NAME}): writeConfig reads the config it writes and gives akm those and no others, so a config with two engines gets the
 // key of each, and a key that the config does not name never reaches akm. { keepModelKey: true } gives akm MODEL_API_KEY whatever the
 // config says.
@@ -56,6 +58,7 @@ export interface AkmResult {
 type RunOptions = { stdin?: string; timeoutMs?: number };
 
 const FOLDERS = ["bundle", "config", "data", "cache", "state", "xdg-config", "xdg-data", "xdg-state"];
+const HOME_FOLDERS = ["home", "xdg-cache"];
 /** How long runAkm lets a command run when the caller sets no timeout: a command that calls a model can take minutes. */
 export const DEFAULT_TIMEOUT_MS = 15 * 60_000;
 
@@ -118,7 +121,7 @@ const allowed = (name: string): boolean => ALLOWED_ENV.some((re) => re.test(name
  * is inside a git repository with `git ls-files`, which leaves out what the repository ignores, so a sandbox in an ignored folder, such
  * as a TMPDIR in a checkout's .cache/, would index no asset. git finds no repository there, and akm walks the bundle itself.
  */
-function sandboxEnv(dir: string, keep: string[], semantic: boolean): Record<string, string> {
+function sandboxEnv(dir: string, keep: string[], semantic: boolean, isolateHome: boolean): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined && (allowed(k) || keep.includes(k))) env[k] = v;
   return {
@@ -132,6 +135,7 @@ function sandboxEnv(dir: string, keep: string[], semantic: boolean): Record<stri
     XDG_DATA_HOME: join(dir, "xdg-data"),
     XDG_STATE_HOME: join(dir, "xdg-state"),
     GIT_CEILING_DIRECTORIES: dir,
+    ...(isolateHome ? { HOME: join(dir, "home"), XDG_CACHE_HOME: join(dir, "xdg-cache") } : {}),
     ...(semantic ? { HF_HOME: MODEL_CACHE } : {}),
   };
 }
@@ -241,6 +245,9 @@ export function useAkm(values: { akm?: string }, fail: (message: string) => neve
   env.AKM_BIN = commandLine(absoluteWords(words));
 }
 
+/** `isolateHome`: akm's HOME and XDG_CACHE_HOME are folders of the sandbox, so a program akm starts finds none of the operator's files (see the top of this file). */
+export type SandboxOptions = { keepModelKey?: boolean; semantic?: boolean; isolateHome?: boolean };
+
 /**
  * Makes a sandbox in the folder `dir`, which it makes if need be: akm's own folders and config in it, unless the folder has a config already. akm is `AKM_BIN`, a command
  * line such as `bun /path/to/akm/src/cli.ts` (see parseCommand), or `akm`. akm gets only the variables the top of this file lists, and
@@ -249,15 +256,15 @@ export function useAkm(values: { akm?: string }, fail: (message: string) => neve
  * embedder, whose model and ONNX Runtime are kept in the repository's .cache/ and downloaded once. akm answers such a query with
  * searchMode "semantic", and an eval that scores it has to check that.
  */
-export function sandboxIn(dir: string, opts: { keepModelKey?: boolean; semantic?: boolean } = {}): Sandbox {
-  for (const folder of FOLDERS) mkdirSync(join(dir, folder), { recursive: true });
+export function sandboxIn(dir: string, opts: SandboxOptions = {}): Sandbox {
+  for (const folder of opts.isolateHome ? [...FOLDERS, ...HOME_FOLDERS] : FOLDERS) mkdirSync(join(dir, folder), { recursive: true });
   const semantic = opts.semantic ?? false;
   if (semantic) {
     mkdirSync(MODEL_CACHE, { recursive: true });
     linkOnnxRuntime(dir); // writeConfig does too, but not for a folder with a config: a kept index, whose cache index-cache.ts removed
   }
   const keep = opts.keepModelKey ? ["MODEL_API_KEY"] : [];
-  const sandbox: Sandbox = { dir, cmd: akmCommand(), env: sandboxEnv(dir, keep, semantic), keep };
+  const sandbox: Sandbox = { dir, cmd: akmCommand(), env: sandboxEnv(dir, keep, semantic, opts.isolateHome ?? false), keep };
   const path = join(dir, "config", "config.json");
   if (!existsSync(path)) writeConfig(sandbox, semantic ? semanticConfig() : plainConfig());
   else {
@@ -269,7 +276,7 @@ export function sandboxIn(dir: string, opts: { keepModelKey?: boolean; semantic?
 }
 
 /** A sandbox in a new temp folder, akm-eval-<name>-<random>, for removeSandbox to remove. See sandboxIn. */
-export function createSandbox(name: string, opts: { keepModelKey?: boolean; semantic?: boolean } = {}): Sandbox {
+export function createSandbox(name: string, opts: SandboxOptions = {}): Sandbox {
   const dir = mkdtempSync(join(tmpdir(), `akm-eval-${name}-`));
   try {
     return sandboxIn(dir, opts);
@@ -421,6 +428,16 @@ export function writeConfig(sandbox: Sandbox, config: unknown): void {
     sandbox.env.HF_HOME = MODEL_CACHE;
     linkOnnxRuntime(sandbox.dir);
   }
+}
+
+/**
+ * Writes opencode's config for a sandbox made with isolateHome: the only config the opencode that akm starts reads, since its
+ * XDG_CONFIG_HOME is the sandbox's. The caller gives it the provider of the model under test and nothing else.
+ */
+export function writeOpencodeConfig(sandbox: Sandbox, config: unknown): void {
+  const folder = join(sandbox.env.XDG_CONFIG_HOME ?? join(sandbox.dir, "xdg-config"), "opencode");
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, "opencode.json"), `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
 }
 
 /** What a timeout is called in a message, such as `timed out after 900s`. */

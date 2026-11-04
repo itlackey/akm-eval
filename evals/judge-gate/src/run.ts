@@ -2,7 +2,7 @@
 // judge-gate: runs akm's reflect quality judge, with the model under test as the judge, on labelled
 // proposals. See ../README.md.
 //
-//   evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]
+//   evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--harness opencode] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]
 //
 // The flags, the setup, the pool of workers and the summary are lib/run.ts. This file is what is judge-gate's: the spec that says what a case
 // is and how it is shown. Every case of a run goes through one akm sandbox, two at a time unless --concurrency says otherwise.
@@ -15,7 +15,7 @@ import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { requireJudge } from "../../../lib/judge.ts";
 import { type CtxInput, type EvalSpec, type Summary, defaultResults as resultsIn, runCorpus as runIn, runEval } from "../../../lib/run.ts";
 import { CASES, casesSha256, rubricVersion } from "./inputs.ts";
-import { JUDGE, JUDGE_TIMEOUT_MS, SCHEMA, NAME, STRATEGY, configFor, judgeCase, openSandbox } from "./collect.ts";
+import { HARNESSES, JUDGE, JUDGE_TIMEOUT_MS, SCHEMA, NAME, STRATEGY, configFor, judgeCase, openSandbox } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { type Case, type Rate, type Row, type Share, hasVerdict, parseCases, pct, selectCases, summarize } from "./lib.ts";
 
@@ -23,8 +23,21 @@ const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const MIN_AKM = "0.10.261105"; // `akm judge` is not in a release yet: akm main from #1416, which reports this version
 
-/** What a run opens for its cases: the one sandbox, with the config written, that all of them go through. */
-type Extra = { sandbox: Sandbox };
+/** What the run records of the harness the judge ran on: its name, the version it printed in the run's own sandbox, and that its HOME was the sandbox's. */
+type HarnessRecord = { name: string; version: string; isolated_home: true };
+
+/** What a run opens for its cases: the one sandbox, with the config written, that all of them go through. `harness` is --harness. */
+type Extra = { sandbox: Sandbox; harness?: string; harnessRecord?: HarnessRecord };
+
+/** The version a harness prints, run as the judge runs it: in the sandbox's environment. It also makes the harness's database before the cases need it. */
+function harnessVersion(sandbox: Sandbox, name: string): string {
+  const run = Bun.spawnSync([name, "--version"], { env: sandbox.env, cwd: sandbox.dir, stdout: "pipe", stderr: "pipe", timeout: 60_000 });
+  const version = run.stdout.toString().trim().match(/\d+\.\d+\.\d+\S*/)?.[0];
+  if (run.exitCode !== 0 || !version) throw new Error(`could not run \`${name} --version\`: is ${name} installed and on PATH?`);
+  // opencode makes its database on its first command, and two first commands at once fail with "database is locked". The cases run two at a time.
+  Bun.spawnSync([name, "session", "list"], { env: sandbox.env, cwd: sandbox.dir, stdout: "ignore", stderr: "ignore", timeout: 60_000 });
+  return version;
+}
 
 /** The fields of a judge-gate summary that come from its rows and from the rubric, besides those every eval has. */
 type Own = ReturnType<typeof summarize> & {
@@ -81,14 +94,22 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
   assetsSha256: (folder) => casesSha256(folder),
   // The sandbox holds the config, so one is opened for the cases of a run and removed after them; that counts its model calls for the summary.
   openRun: async (ctx) => {
-    const sandbox = openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider);
+    const sandbox = openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider, ctx.harness);
+    let harnessRecord: HarnessRecord | undefined;
+    try {
+      if (ctx.harness) harnessRecord = { name: ctx.harness, version: harnessVersion(sandbox, ctx.harness), isolated_home: true };
+    } catch (e) {
+      removeSandbox(sandbox);
+      if (ctx.resultsDir) rmSync(ctx.resultsDir, { recursive: true, force: true });
+      fail((e as Error).message);
+    }
     // A version number does not say that `akm judge` is there at the schema this eval reads, so ask akm.
     await requireJudge(sandbox, JUDGE, SCHEMA).catch((e: Error) => {
       removeSandbox(sandbox);
       if (ctx.resultsDir) rmSync(ctx.resultsDir, { recursive: true, force: true }); // the folder of a run that made no case
       fail(`${e.message}. judge-gate needs an akm build with akm#1419 (reflect's review floor in the verdict), such as akm main.`);
     });
-    return { sandbox, close: () => removeSandbox(sandbox) };
+    return { sandbox, harnessRecord, close: () => removeSandbox(sandbox) };
   },
   configFor: (ctx) => configFor(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider),
   runCase: judgeCase,
@@ -100,7 +121,13 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
     return `${c.label.padEnd(4)} ${row.outcome.padEnd(6)} ${row.seconds}s  ${c.id.slice(0, 8)}${note ? `  ${note.slice(0, 120)}` : ""}`;
   },
   // The private cases are a rewrite of the public ones, so their labels follow the public rubric.
-  summaryExtras: () => ({ rubric_version: rubricVersion(join(EVAL_DIR, "assets")) }),
+  summaryExtras: (_cases, _rows, ctx) => ({ rubric_version: rubricVersion(join(EVAL_DIR, "assets")), ...(ctx.harnessRecord ? { harness: ctx.harnessRecord } : {}) }),
+  manifestExtras: (ctx) => (ctx.harnessRecord ? { eval_settings: { harness: ctx.harnessRecord.name, harness_version: ctx.harnessRecord.version, isolated_home: true } } : {}),
+  options: { harness: { type: "string" } },
+  prepare: (values) => {
+    if (values.harness !== undefined && !(HARNESSES as readonly string[]).includes(values.harness)) throw new Error(`--harness must be one of ${HARNESSES.join(", ")}, not "${values.harness}"`);
+    return () => ({ harness: values.harness as string | undefined });
+  },
   printSummary,
   sideBySide,
   usage: {
@@ -109,6 +136,9 @@ judge, on labelled proposals. Settings come from .env at the repository root.`,
     corpus: `            The default custom corpus is private/judge-gate/assets, made by ./generate-assets: a light rewrite of the same
             cases, not held-out data.`,
     limit: "run N cases, in the good/bad proportion of the whole set, with at least one of each from 2 cases on",
+    flags: "[--harness opencode]",
+    extra: `  --harness opencode  put the judge on the opencode harness (\`akm judge --harness\`) in place of the default connection, with the model under test.
+            It runs in an empty HOME with an opencode config of its own, so it reads nothing of your setup. The summary records the harness and its version.`,
   },
 };
 

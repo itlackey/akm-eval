@@ -32,12 +32,13 @@ const isEnvelope = (x: unknown): x is JudgeEnvelope => {
   return (e.outcome === "verdict" && typeof e.verdict === "object" && e.verdict !== null) || ((e.outcome === "error" || e.outcome === "unparseable") && e.verdict === undefined);
 };
 
-/** Runs `akm judge <name>` on `input` in the sandbox. */
-export async function callJudge(sandbox: Sandbox, name: string, input: unknown, opts: { timeoutMs: number; hide?: (text: string) => string }): Promise<JudgeCall> {
+/** Runs `akm judge <name>` on `input` in the sandbox, on the default connection, or on `harness` with `model` (the harness's own spelling of it) when the call names one. */
+export async function callJudge(sandbox: Sandbox, name: string, input: unknown, opts: { timeoutMs: number; hide?: (text: string) => string; harness?: { name: string; model: string } }): Promise<JudgeCall> {
   const hide = opts.hide ?? ((t: string) => t);
   let run: Awaited<ReturnType<typeof runAkm>>;
+  const runner = opts.harness ? ["--harness", opts.harness.name, "--model", opts.harness.model] : [];
   try {
-    run = await runAkm(sandbox, ["judge", name, "--format", "json"], { stdin: JSON.stringify(input), timeoutMs: opts.timeoutMs });
+    run = await runAkm(sandbox, ["judge", name, ...runner, "--format", "json"], { stdin: JSON.stringify(input), timeoutMs: opts.timeoutMs });
   } catch (e) {
     return { error: hide((e as Error).message), seconds: 0, timedOut: false };
   }

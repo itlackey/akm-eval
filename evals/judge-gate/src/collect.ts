@@ -5,7 +5,7 @@
 // A change to what this file asks akm, or to what it records of the answer, is a new version of the eval: change `version` in
 // measurement.ts by hand.
 
-import { type Sandbox, createSandbox, engineConfig, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, createSandbox, engineConfig, writeConfig, writeOpencodeConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
 import { type JudgeEnvelope, callJudge } from "../../../lib/judge.ts";
@@ -46,10 +46,34 @@ export function judgeConfig(baseUrl: string, model: string, hasKey: boolean, str
 /** The config the eval writes: the judge config with the strategy of the overrides as the default, and the config patch, if any, merged into it after. */
 export const configFor = (baseUrl: string, model: string, hasKey: boolean, overrides: Overrides, provider = "openai"): Record<string, any> => patchedConfig(judgeConfig(baseUrl, model, hasKey, overrides.strategy, provider), overrides);
 
-/** A sandbox for the run, with the config written: every case of the run goes through it. The config names the model key as $MODEL_API_KEY. */
-export function openSandbox(baseUrl: string, model: string, hasKey: boolean, overrides: Overrides = defaultOverrides(STRATEGY), provider = "openai"): Sandbox {
-  const sandbox = createSandbox(NAME, { keepModelKey: true });
-  writeConfig(sandbox, configFor(baseUrl, model, hasKey, overrides, provider));
+/** The harnesses a run can put the judge on. Only opencode: a harness judge runs in an empty HOME, and claude has no login there. */
+export const HARNESSES = ["opencode"] as const;
+
+/** The provider of the model under test in the opencode config of a harness run: opencode's model is `eval/<the model's name>`. */
+const HARNESS_PROVIDER = "eval";
+export const harnessModel = (model: string): string => `${HARNESS_PROVIDER}/${model}`;
+
+/**
+ * The config of the opencode a harness judge runs: the model under test as the only provider, at the run's endpoint with temperature 0 and no
+ * reasoning, as the connection runner has them. Nothing else: opencode reads no config but this one (see isolateHome in lib/akm/akm.ts).
+ */
+export function opencodeConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
+  return {
+    $schema: "https://opencode.ai/config.json",
+    provider: { [HARNESS_PROVIDER]: { npm: "@ai-sdk/openai-compatible", name: HARNESS_PROVIDER, options: { baseURL: baseUrl, ...(hasKey ? { apiKey: "{env:MODEL_API_KEY}" } : {}) }, models: { [model]: { name: model, options: { reasoningEffort: "none" } } } } },
+    agent: { build: { temperature: 0 } },
+  };
+}
+
+/**
+ * A sandbox for the run, with the config written: every case of the run goes through it. The config names the model key as $MODEL_API_KEY.
+ * On a harness the sandbox has a HOME of its own and an opencode config of its own, so the judge reads nothing of the operator's setup.
+ */
+export function openSandbox(baseUrl: string, model: string, hasKey: boolean, overrides: Overrides = defaultOverrides(STRATEGY), provider = "openai", harness?: string): Sandbox {
+  const sandbox = createSandbox(NAME, { keepModelKey: true, isolateHome: harness !== undefined });
+  const config = configFor(baseUrl, model, hasKey, overrides, provider);
+  writeConfig(sandbox, harness === undefined ? config : { ...config, harnesses: { [harness]: {} } });
+  if (harness !== undefined) writeOpencodeConfig(sandbox, opencodeConfig(baseUrl, model, hasKey));
   return sandbox;
 }
 
@@ -71,11 +95,14 @@ interface CaseContext {
   baseUrl: string;
   /** The time limit of one case, in milliseconds. A run always sets it (--timeout-ms); without it JUDGE_TIMEOUT_MS applies. */
   timeoutMs?: number;
+  /** The harness the judge runs on (--harness), and the model under test. Absent: the default connection. */
+  harness?: string;
+  model?: string;
 }
 
 /** One case: the source, the candidate, the feedback lines and the ref go to `akm judge reflect.quality` on stdin, and its verdict is scored. */
 export async function judgeCase(c: Case, ctx: CaseContext): Promise<Row> {
-  const call = await callJudge(ctx.sandbox, JUDGE, judgeInput(c), { timeoutMs: ctx.timeoutMs ?? JUDGE_TIMEOUT_MS, hide: (text) => hideEndpoint(text, ctx.baseUrl) });
+  const call = await callJudge(ctx.sandbox, JUDGE, judgeInput(c), { timeoutMs: ctx.timeoutMs ?? JUDGE_TIMEOUT_MS, hide: (text) => hideEndpoint(text, ctx.baseUrl), ...(ctx.harness && ctx.model ? { harness: { name: ctx.harness, model: harnessModel(ctx.model) } } : {}) });
   if ("error" in call) return makeRow(c, { error: call.error, seconds: call.seconds, ...(call.timedOut ? { timedOut: true } : {}) });
   return makeRow(c, { verdict: verdictOf(call.envelope, ctx.baseUrl), seconds: call.seconds });
 }
