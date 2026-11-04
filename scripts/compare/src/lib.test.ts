@@ -181,6 +181,16 @@ describe("per-case agreement", () => {
     expect(g).toMatchObject({ cases: 2, same: 2, no_majority: { a: 1, b: 0 }, only: { a: 0, b: 1 } });
   });
 
+  test("an errored row is a crash, not an outcome: the case is left out and counted, and in a --repeat set the run does not vote", () => {
+    const withError = (text: string, errorAt: number[]): Run => { const r = outcomes(text); for (const i of errorAt) r.rows[i]!.outcome = "error"; return r; };
+    const g = agreementOf(withError("pprr", [1]), outcomes("pprr"))!;
+    expect(g).toMatchObject({ cases: 3, same: 3, errored: { a: 1, b: 0 }, flips: [] });
+    // c1: p, error, error -> p; c2: error in every run -> errored.
+    const s = agreementOf({ dir: "set", summary: {}, rows: [], repeats: [withError("pp", [1]), withError("pp", [0, 1]), withError("pp", [0, 1])] }, outcomes("pp"))!;
+    expect(s).toMatchObject({ cases: 1, same: 1, errored: { a: 1, b: 0 }, no_majority: { a: 0, b: 0 } });
+    expect(renderPair({ ...comparePair(fixture("judge-gate"), fixture("judge-gate", "after")), agreement: g })).toContain("Left out: 1 errored.");
+  });
+
   test("runs whose samples carry no outcome have no agreement; rows of an eval that does are shown by compare", () => {
     expect(agreementOf({ dir: "x", summary: {}, rows: [{ id: "a" }] }, outcomes("p"))).toBeUndefined();
     const a = fixture("judge-gate"), b = fixture("judge-gate", "after");
@@ -198,5 +208,6 @@ describe("per-case agreement", () => {
     expect(set.summary.metrics).toEqual({ good: { passed: 2, n: 5 } });
     expect(set.summary.label).toBe("x (mean of 2 runs)");
     expect(agreementOf(fixture("judge-gate"), set)?.b).toBe("the majority of 2 runs");
+    expect(comparePair(fixture("judge-gate"), set).warnings).toContain(`${dir}: a --repeat set of 2 runs; its metrics are their means, and its other rows (cases, timing, usage, settings) are the first run's.`);
   });
 });

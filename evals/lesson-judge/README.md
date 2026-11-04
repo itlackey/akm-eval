@@ -17,7 +17,7 @@ evals/lesson-judge/run --cases ~/notes/lesson-judge
 
 `--limit N` keeps the good/bad proportion, with at least one of each from 2 cases on. `--strategy` and `--config-patch` change the akm config the eval writes. `--concurrency N` sets how many cases run at a time (default 2, all through one akm sandbox) and `--timeout-ms N` how many milliseconds akm gets for one (default 900000, 15 minutes). There is no `--corpus custom` rewrite: the cases are what akm's distill built on real runs, and a rewrite would change that. A custom corpus is `--cases DIR`. `--harness opencode` puts the judge on your opencode in place of the default connection, in a sandbox HOME with an opencode config of its own, as judge-gate does (see [judge-gate's README](../judge-gate/README.md)).
 
-The model must return one JSON object when asked. A case is up to about 2k tokens. The eval sets temperature 0 and thinking off. Only the connection runner is measured. The harness isolation a harness judge needs exists (`isolateHome` in `lib/akm/akm.ts`, used by `evals/judge-gate/run --harness opencode`), but this eval has no `--harness` flag yet.
+The model must return one JSON object when asked. A case is up to about 2k tokens. The eval sets temperature 0 and thinking off. Only the connection runner is measured: `--harness opencode` works, but no harness run of this eval is reported.
 
 ## What the judge is sent
 
@@ -104,7 +104,7 @@ A judge that passes everything has good 100% and bad 100%; one that refuses ever
 - **Feedback is rare.** The distill eval's cases carry none, so no real input has any; 14 hand-written cases have feedback lines recorded with `akm feedback`.
 - **The 26 lesson-update memories `upd-15` to `upd-40` were not given to the real writer**, so their updates are hand-written; the real updates (12) are from `upd-01` to `upd-14` and `dup-04`.
 - **`related` entries carry no `path`.** akm's pipeline passes each related asset with the `path` of its file, and `akm judge` refuses an input with an extra field, so the cases keep `ref` and `content`, which are all the judge reads.
-- **Connection runner only.** The isolation a harness judge needs is built (`isolateHome`), but only judge-gate has the `--harness` flag so far.
+- **Connection runner only.** `--harness opencode` runs the judge on an isolated opencode (`isolateHome`), but no harness run of this eval is reported.
 
 ## Licence
 

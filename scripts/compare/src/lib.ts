@@ -63,33 +63,34 @@ export function loadRun(path: string): Run {
 export interface Agreement {
   /** What each side was: "one run" or "the majority of N runs". */
   a: string; b: string;
-  /** The cases both sides have an outcome for. Cases without a majority (every run gave another outcome) and cases only one side has are left out of it and counted below. */
+  /** The cases both sides have an outcome for. Cases that errored (no outcome in any run), cases without a majority (no outcome given by more runs than any other) and cases only one side has are left out of it and counted below. */
   cases: number;
   same: number;
   share: number | null;
   /** Cohen's kappa over the cases, or null when chance already explains all the agreement (both sides gave one outcome throughout). */
   kappa: number | null;
-  /** Cases left out for want of a majority, per side, and cases only one side has. */
+  /** Cases left out, per side: errored (an `error` row is a crash, not an outcome of the judge; in a --repeat set, a case no run gave an outcome for), for want of a majority, and cases only one side has. */
+  errored: { a: number; b: number };
   no_majority: { a: number; b: number };
   only: { a: number; b: number };
   flips: { id: string; a: string; b: string }[];
 }
 
-/** The outcome of each case of a run: its row's, or for a --repeat set the one most of its runs gave. Null for a case with no majority. Undefined when a row has no string outcome. */
+/** The outcome of each case of a run: its row's, or for a --repeat set the one most of its runs gave. Null for a case with no majority, "error" for one with no outcome but `error`. Undefined when a row has no string outcome. */
 function outcomesOf(run: Run): { outcomes: Map<string, string | null>; basis: string } | undefined {
   const members = run.repeats ?? [run];
   const tally = new Map<string, Map<string, number>>();
   for (const member of members) for (const row of member.rows) {
     if (typeof row.outcome !== "string") return undefined;
     const t = tally.get(row.id) ?? new Map<string, number>();
-    t.set(row.outcome, (t.get(row.outcome) ?? 0) + 1);
+    if (row.outcome !== "error") t.set(row.outcome, (t.get(row.outcome) ?? 0) + 1); // a crash does not vote
     tally.set(row.id, t);
   }
   if (tally.size === 0) return undefined;
   const outcomes = new Map<string, string | null>();
   for (const [id, t] of tally) {
     const ranked = [...t.entries()].sort((x, y) => y[1] - x[1]);
-    outcomes.set(id, ranked.length > 1 && ranked[0]![1] === ranked[1]![1] ? null : ranked[0]![0]);
+    outcomes.set(id, ranked.length === 0 ? "error" : ranked.length > 1 && ranked[0]![1] === ranked[1]![1] ? null : ranked[0]![0]);
   }
   return { outcomes, basis: run.repeats ? `the majority of ${members.length} runs` : "one run" };
 }
@@ -99,11 +100,15 @@ export function agreementOf(a: Run, b: Run): Agreement | undefined {
   const x = outcomesOf(a), y = outcomesOf(b);
   if (!x || !y) return undefined;
   const pairs: [string, string, string][] = [];
-  const out: Agreement = { a: x.basis, b: y.basis, cases: 0, same: 0, share: null, kappa: null, no_majority: { a: 0, b: 0 }, only: { a: 0, b: 0 }, flips: [] };
+  const out: Agreement = { a: x.basis, b: y.basis, cases: 0, same: 0, share: null, kappa: null, errored: { a: 0, b: 0 }, no_majority: { a: 0, b: 0 }, only: { a: 0, b: 0 }, flips: [] };
   for (const [id, oa] of x.outcomes) {
     if (!y.outcomes.has(id)) { out.only.a++; continue; }
     const ob = y.outcomes.get(id)!;
-    if (oa === null || ob === null) { if (oa === null) out.no_majority.a++; if (ob === null) out.no_majority.b++; continue; }
+    if (oa === null || ob === null || oa === "error" || ob === "error") {
+      if (oa === "error") out.errored.a++; else if (oa === null) out.no_majority.a++;
+      if (ob === "error") out.errored.b++; else if (ob === null) out.no_majority.b++;
+      continue;
+    }
     pairs.push([id, oa, ob]);
   }
   for (const id of y.outcomes.keys()) if (!x.outcomes.has(id)) out.only.b++;
@@ -152,7 +157,9 @@ export function comparePair(a: Run, b: Run): PairReport {
   validateRows(a); validateRows(b);
   const am = object(a.summary.manifest) ? a.summary.manifest : {}, bm = object(b.summary.manifest) ? b.summary.manifest : {};
   const warnings: string[] = [];
-  for (const run of [a, b]) {
+  for (const set of [a, b].filter(r => r.repeats))
+    warnings.push(`${set.dir}: a --repeat set of ${set.repeats!.length} runs; its metrics are their means, and its other rows (cases, timing, usage, settings) are the first run's.`);
+  for (const run of [a, b].flatMap(r => r.repeats ?? [r])) {
     if (run.samplesMissing) warnings.push(`${run.dir}: samples.jsonl is missing; showing summary values.`);
     if (run.running) warnings.push(`${run.dir}: .running marker exists; showing the saved snapshot.`);
     if (run.summary.status !== undefined && run.summary.status !== "complete")
@@ -199,7 +206,7 @@ export function renderPair(report: PairReport): string {
   if (g) {
     const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
     lines.push("", `Per-case agreement (A: ${g.a}; B: ${g.b}): ${g.same} of ${g.cases} cases have the same outcome (${pct(g.share)}); Cohen's kappa ${g.kappa === null ? "undefined (chance explains all of it)" : g.kappa.toFixed(3)}.`);
-    const left = [g.no_majority.a + g.no_majority.b > 0 ? `${g.no_majority.a + g.no_majority.b} with no majority outcome` : "", g.only.a + g.only.b > 0 ? `${g.only.a + g.only.b} in only one run` : ""].filter(Boolean);
+    const left = [g.errored.a + g.errored.b > 0 ? `${g.errored.a + g.errored.b} errored` : "", g.no_majority.a + g.no_majority.b > 0 ? `${g.no_majority.a + g.no_majority.b} with no majority outcome` : "", g.only.a + g.only.b > 0 ? `${g.only.a + g.only.b} in only one run` : ""].filter(Boolean);
     if (left.length) lines.push(`Left out: ${left.join(", ")}.`);
     if (g.flips.length) {
       const shown = g.flips.slice(0, 60);

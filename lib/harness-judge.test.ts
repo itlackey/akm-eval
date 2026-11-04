@@ -44,6 +44,13 @@ for (const e of EVALS) {
       expect(oc.permission).toEqual({ "*": "deny" });
     });
 
+    test("its run takes --harness opencode and says so in its usage", () => {
+      const done = Bun.spawnSync(["bun", join(import.meta.dir, "..", "evals", e.name, "src", "run.ts"), "--help"], { stdout: "pipe", stderr: "pipe" });
+      expect(done.exitCode).toBe(0);
+      expect(done.stdout.toString()).toContain("[--harness opencode]");
+      expect(done.stdout.toString()).toContain("  --harness opencode  put the judge on the opencode harness");
+    });
+
     test("on a connection the sandbox keeps the caller's HOME, and has no harness and no opencode config", () => {
       const box = e.open(URL, "the-model", true);
       boxes.push(box);
