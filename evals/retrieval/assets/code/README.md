@@ -38,4 +38,4 @@ Two queries have no relevant asset under the judge, so the set scores 28: `c18`,
 
 - 30 queries: one query moves a mean by about 0.03.
 - The judge reads the first 16,000 characters of an asset.
-- The pool is what akm 0.10 at `f8f97704` and a BM25 returned. A change that surfaces other assets lowers `judged_10`. `label` cannot grade them yet: it pools an own set only from keyword search, so results that came from semantic search alone are dropped, and in this set it refuses the queries' `expected` refs until akm-eval#150's fix is merged.
+- The pool is what akm 0.10 at `f8f97704` and a BM25 returned. A change that surfaces other assets lowers `judged_10`. `label` cannot grade them yet: it pools an own set only from keyword search, so results that came from semantic search alone are dropped.

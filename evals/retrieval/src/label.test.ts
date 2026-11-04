@@ -487,6 +487,19 @@ describe("labelCollection", () => {
     expect(seen).toEqual([]);
   });
 
+  test("public: an expected ref akm no longer indexes stops the run only when the qrels do not grade it for that query", async () => {
+    const files = { "a.md": "print the pdf with bleed and margins\n" };
+    const queries = [{ id: "q1", query: "alpha", kind: "direct", expected: ["commands/old-a"] }];
+    const answers: Answers = { alpha: { search: ["a"], curate: ["a"] } };
+    const graded = setup(files, queries, [{ id: "q1", ref: "commands/old-a", grade: 3, reason: "an older akm's ref" }], answers);
+    const ok = await printed(() => labelCollection("public", graded.ctx(stubJudge({ "knowledge/a": 1 }).judge), graded.folders));
+    expect(ok.result).toBe(0);
+    const ungraded = setup(files, queries, [], answers);
+    const stopped = await printed(() => labelCollection("public", ungraded.ctx(stubJudge({}).judge), ungraded.folders));
+    expect(stopped.result).toBe(2);
+    expect(stopped.err.join("\n")).toContain("q1 expects commands/old-a, which is not an asset akm indexes in the library");
+  });
+
   test("own: says where the set goes when its folder holds none, and creates nothing", async () => {
     const root = tmp();
     const folders: Folders = { library: join(root, "library"), assets: join(root, "own"), results: join(root, "results"), bundles: join(root, "bundles.json") };
@@ -854,10 +867,10 @@ describe("stampLegacy (#49)", () => {
 
   test("the library's own qrels all record the digest of their asset and a judge, and the digests are those of asset files", () => {
     const rows = parseQrels(readFileSync(join(import.meta.dir, "..", "assets", "qrels.jsonl"), "utf8"));
-    expect(rows.length).toBe(1876);
+    expect(rows.length).toBe(2033);
     expect(rows.filter((r) => !/^[0-9a-f]{64}$/.test(r.asset_sha256 ?? "")).length).toBe(0);
     expect(rows.filter((r) => r.judge === undefined).length).toBe(0);
-    expect(new Set(rows.map((r) => r.judge))).toEqual(new Set([LEGACY_JUDGE, "chat/qwen3.8-27b", "codex-review"])); // original grades plus the documented coverage expansion
+    expect(new Set(rows.map((r) => r.judge))).toEqual(new Set([LEGACY_JUDGE, "chat/qwen3.8-27b", "codex-review", "fast/qwen3.6-35b-a3b", "claude-review"])); // original grades plus the documented coverage expansions
   });
 
   test("the command: --stamp-legacy is for the public library, and says so for a set of your own", () => {

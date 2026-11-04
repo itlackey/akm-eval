@@ -50,13 +50,23 @@ Add a release entry here when a version changes.
   (the original collection version is kept, originals are untouched). The rescored 0.10.261005-beta to 0.10.261022 35B rounds are in
   `-rescored` folders beside the originals.
 
+- retrieval, library judgments (#150): scoring version 0.4 -> 0.5, label-only. 157 library (query, asset) pairs that no earlier grade covered are graded by
+  `fast/qwen3.6-35b-a3b` (prompt umbrela-akm-v1, temperature 0) and appended to `evals/retrieval/assets/qrels.jsonl`: the 138 that the akm#1260 runs returned, and 19 more that the published
+  0.10.261018-beta (1) and 0.10.261105-beta (18) runs returned in the top 10, mostly from akm#1272 (fenced-code identifiers in the searched text). `judged_10` is 1.0 on every published library run again
+  (it was 0.9554 to 0.9733 on 0.10.261018-beta to 0.10.261105-beta). New relevant grades raise the ideal ranking, so library nDCG@10 reads a little lower than at 0.4 on every run, older ones included:
+  0.10.261105-beta keyword 0.7752 -> 0.7689 and semantic 0.8312 -> 0.8245, 0.10.261022 keyword 0.7752 -> 0.7689 and semantic 0.8306 -> 0.8240, 0.9.32 keyword 0.7573 -> 0.7467 and semantic 0.826 -> 0.8123.
+  One of the 157 grades was corrected in review before this version was published: q012's `agents/print/qa-coordinator` (a print QA orchestrator, not a report orchestrator) from the judge's 3 to 1 (`claude-review`).
+  `label` no longer stops on an expected ref that akm does not index when the qrels already grade that pair: the public q092 expects
+  `commands/skills/ai-skills/opencode-extensions/references/commands`, which akm 0.10 prints as a knowledge ref, so label of the public library stopped on every 0.10 build. A mistyped expected ref with no grade
+  still stops the run. Every published library run (18) was scored again into a `-rescored` folder beside it (`-rescored-2` for the one that was already a rescore); the originals are unchanged. The inputs and collection version 0.3 are unchanged.
+  Books are unchanged since 0.4. Record: `evals/retrieval/assets/judgment-expansion-20261103.md`.
 - retrieval, books judgments (#150): scoring version 0.3 -> 0.4, label-only. `evals/retrieval/label --from` now grades a books run (it took the library only), and
   grades the 52 books (query, asset) pairs that no earlier grade covered: the ones akm 0.10 returns in the top 10 from 0.10.261009-beta on. They are judged by
   `fast/qwen3.6-35b-a3b` (prompt umbrela-akm-v1), as the library's latest grades were, and appended to `evals/retrieval/assets/books/qrels.jsonl`. `judged_10` is
   1.0 on every published books run again (it was 0.949 keyword and 0.937 to 0.943 semantic from 0.10.261009-beta on). New relevant grades raise the ideal ranking, so books nDCG@10 reads a little
   lower than at 0.3 on every run, older ones included: 0.10.261022 keyword 0.8357 -> 0.8308 and semantic 0.9108 -> 0.9103, 0.9.32 keyword 0.8275 -> 0.8216 and semantic 0.9089 -> 0.9028.
   Every published books run (19) was scored again into a `-rescored` folder beside it; the originals are unchanged. The inputs and collection version 0.3 are unchanged.
-  The library judgments are not part of this entry: they wait for #145.
+  The library judgments follow in the entry above.
 - New memory-utility collection/scoring 0.1: 24 independent public synthetic QA cases, three paired conditions
   (no episodic memory, original notes, native inference snapshot), fixed estimated context budget, actual search/show
   evidence, exact structured-answer scoring and separate citation/literal diagnostics. Failure-inclusive and evaluated-only

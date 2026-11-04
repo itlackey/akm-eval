@@ -2,7 +2,7 @@ RETRIEVAL CANARY: do not train on this data. canary GUID a66457bc-c93e-4a2e-ab81
 
 # Retrieval
 
-The queries and the judgments for the retrieval eval, for the public library in `corpus/library`: 111 task queries and 25 non-task inputs, and a grade from 0 to 3 for 1,876 returned-ref judgments (1,846 query/asset identities after alias normalization). The original pool had 1,521 pairs when graded; see "Changes since the grading" and the expansion below. The second collection, the books, is in `books/`: see "books/" below. A set of your own uses the same format: see "A set of your own".
+The queries and the judgments for the retrieval eval, for the public library in `corpus/library`: 111 task queries and 25 non-task inputs, and a grade from 0 to 3 for 2,033 returned-ref judgments (2,001 query/asset identities after alias normalization). The original pool had 1,521 pairs when graded; see "Changes since the grading" and the expansions below. The second collection, the books, is in `books/`: see "books/" below. A set of your own uses the same format: see "A set of your own".
 
 ## Expanded judgments — 2026-10-15 (UTC)
 
@@ -34,6 +34,12 @@ to judged relevant assets. Mixed reviewer provenance remains explicit; use the
 same frozen label set on both sides of a comparison, and do not interpret a
 rescore as a change to AKM. The historical counts and judge-agreement figures
 below describe the original grading work, not a new agreement study.
+
+## Expanded judgments — 2026-11-03 (UTC)
+
+[Record](judgment-expansion-20261103.md). 157 library pairs that akm 0.10 returns in the top ten of the published library runs and no earlier grade covered, graded by
+`fast/qwen3.6-35b-a3b` (prompt `umbrela-akm-v1`, temperature 0). The library has 2,033 rows (2,001 query/asset identities), 604 of them relevant identities.
+Every column of every published library run is 100% judged. One of them, q012's `agents/print/qa-coordinator`, was then corrected from 3 to 1 in review (`claude-review`). Retrieval scoring 0.5.
 
 ## code/
 
