@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox, writeOpencodeConfig } from "./akm.ts";
-import { opencodeConfig } from "../../evals/judge-gate/src/collect.ts";
+import { opencodeConfig } from "../judge.ts";
 
 const CANARIES = ["CANARY-CLAUDE-MD", "CANARY-SKILL", "CANARY-AGENTS-SKILL", "CANARY-AGENTS-MD", "CANARY-OPENCODE-INSTRUCTIONS", "CANARY-CONFIG-CONTENT"];
 let operator: string;

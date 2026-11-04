@@ -15,7 +15,7 @@ evals/lesson-judge/run --cases evals/lesson-judge/assets/held-out    # the held-
 evals/lesson-judge/run --cases ~/notes/lesson-judge
 ```
 
-`--limit N` keeps the good/bad proportion, with at least one of each from 2 cases on. `--strategy` and `--config-patch` change the akm config the eval writes. `--concurrency N` sets how many cases run at a time (default 2, all through one akm sandbox) and `--timeout-ms N` how many milliseconds akm gets for one (default 900000, 15 minutes). There is no `--corpus custom` rewrite: the cases are what akm's distill built on real runs, and a rewrite would change that. A custom corpus is `--cases DIR`.
+`--limit N` keeps the good/bad proportion, with at least one of each from 2 cases on. `--strategy` and `--config-patch` change the akm config the eval writes. `--concurrency N` sets how many cases run at a time (default 2, all through one akm sandbox) and `--timeout-ms N` how many milliseconds akm gets for one (default 900000, 15 minutes). There is no `--corpus custom` rewrite: the cases are what akm's distill built on real runs, and a rewrite would change that. A custom corpus is `--cases DIR`. `--harness opencode` puts the judge on your opencode in place of the default connection, in a sandbox HOME with an opencode config of its own, as judge-gate does (see [judge-gate's README](../judge-gate/README.md)).
 
 The model must return one JSON object when asked. A case is up to about 2k tokens. The eval sets temperature 0 and thinking off. Only the connection runner is measured. The harness isolation a harness judge needs exists (`isolateHome` in `lib/akm/akm.ts`, used by `evals/judge-gate/run --harness opencode`), but this eval has no `--harness` flag yet.
 
