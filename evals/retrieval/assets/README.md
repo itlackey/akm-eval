@@ -35,6 +35,10 @@ same frozen label set on both sides of a comparison, and do not interpret a
 rescore as a change to AKM. The historical counts and judge-agreement figures
 below describe the original grading work, not a new agreement study.
 
+## code/
+
+A set of your own in this format, committed: 30 code-shaped lookups (flags, identifiers, config keys, environment variables, error strings, snippets) whose answers sit inside fenced code of `corpus/library`, graded by the judge endpoint `fast/qwen3.6-35b-a3b`. Run it with `--cases evals/retrieval/assets/code`; `code/library` is a link to the public library. It is not a collection of a default run, and `./generate-assets` does not touch it. See [`code/README.md`](code/README.md).
+
 ## queries.jsonl
 
 One JSON object per line.

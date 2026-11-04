@@ -41,6 +41,10 @@ Results go to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (`priva
 
 A separate, optional set for akm's date filters (`--since`, `--until` on `akm search`) and its recency tie-break: [its README](assets/dated/README.md). It has filter queries, tie-break queries and controls, and a sentinel guard. A filter query's qrels carry a `sentinel`, a banned asset outside the window that an unfiltered search ranks first. A build that ignores the flags, or refuses them, does not get its filter queries scored: the summary counts them under `unsupported` and gives the reason, and `by_kind` reports the kinds apart. The public collections and the eval's version are unchanged.
 
+## A code set: `--cases evals/retrieval/assets/code`
+
+A committed set of 30 code-shaped lookups (a flag, an identifier, a config key) whose answers sit inside fenced code of the public library; it measures akm#1272 (fenced-code identifiers in search): [its README](assets/code/README.md). The public collections and the eval's version are unchanged.
+
 ## How a query is scored
 
 Each judgment grades an asset 0 to 3 for a query: 3 is exactly the asset to load, 2 relevant and useful, 1 same topic but no help, 0 unrelated. Grade 2 or 3 is relevant. A task query with no relevant asset is not scored, and is counted with the abstentions. A result naming a section (`ref#section`) counts as the asset.
