@@ -19,8 +19,10 @@ const tests: Record<string, [string, string]> = {
   consolidate: ["Memory consolidation", "Can AKM retire duplicate or superseded notes without losing unique information?"],
   promotion: ["Proposal selection", "Can AKM accept useful promotion proposals and reject duplicates, stale content and temporary facts?"],
   bakeoff: ["Core model tasks", "Can the model produce correct memories, metadata repairs, session summaries and consolidation plans?"],
+  "pair-judge": ["Pair comparison", "Can AKM's consolidate judge list what each note holds alone, so that it retires a note only when the other keeps every claim?"],
   "judge-gate": ["Lesson approval", "Can AKM's judge approve useful lessons while catching harmful or unnecessary ones?"],
   "drain-judge": ["Promotion judgment", "Can the drain's judgment accept useful promotions and reject duplicates, stale content and temporary facts, one proposal at a time?"],
+  "lesson-judge": ["Lesson review", "Can AKM's lesson judge pass useful new lessons and updates while catching status notes, restated rules and claims the source does not make?"],
   distill: ["Lesson creation", "Can AKM turn useful memories into accurate lessons, update existing lessons and avoid unnecessary ones?"],
   retrieval: ["Library search", "How well does AKM rank relevant assets for queries with human relevance judgments?"],
   skillret: ["Skill search", "How well does keyword or semantic search rank relevant skills across the SkillRet benchmark?"],
@@ -101,6 +103,22 @@ export function scores(summary: Record<string, unknown>): Score[] {
       ratio("Good promotions accepted", "good_accepted.rate", "good_accepted.count", "good_accepted.n", "Useful promotions accepted out of all labelled good promotions.");
       ratio("Bad promotions accepted", "bad_accepted.rate", "bad_accepted.count", "bad_accepted.n", "Ephemeral, duplicate or stale promotions the judgment accepted: they would be written with no one looking; zero is the target.", true);
       ratio("Good promotions rejected", "good_rejected.rate", "good_rejected.count", "good_rejected.n", "Useful promotions the judgment rejected outright: work lost.", true);
+      ratio("Bad corpus promotions accepted", "bad_by_origin.corpus.rate", "bad_by_origin.corpus.count", "bad_by_origin.corpus.n", "Bad promotions from another eval's corpus that the judgment accepted.", true);
+      ratio("Bad hand-written promotions accepted", "bad_by_origin.hand-written.rate", "bad_by_origin.hand-written.count", "bad_by_origin.hand-written.n", "Bad promotions written for this eval that the judgment accepted; most of the bad cases are these.", true);
+      break;
+    case "lesson-judge":
+      ratio("Good new lessons passed", "good.new.rate", "good.new.passed", "good.new.n", "Useful new lessons the judge passed to a person, out of all labelled good new lessons.");
+      ratio("Bad new lessons passed", "bad.new.rate", "bad.new.passed", "bad.new.n", "Status notes, one-run reports, duplicates and ungrounded new lessons the judge passed; zero is the target.", true);
+      ratio("Good lesson updates passed", "good.update.rate", "good.update.passed", "good.update.n", "Useful updates to an existing lesson that the judge passed.");
+      ratio("Bad lesson updates passed", "bad.update.rate", "bad.update.passed", "bad.update.n", "Restating, off-rule and ungrounded updates that the judge passed; zero is the target.", true);
+      break;
+    case "pair-judge":
+      ratio("Unsafe retirements", "unsafe.rate", "unsafe.count", "unsafe.n", "Retirements of a note that holds a claim the other lacks, out of the pairs where one was possible; zero is the target.", true);
+      ratio("Safe retirements found", "found.rate", "found.count", "found.n", "Cases with a safely removable note where the judge led to retiring a safe one.");
+      ratio("Retirements that were safe", "precision.value", "precision.safe", "precision.retired", "Safe retirements out of all retirements the judge led to.");
+      ratio("Relation right", "relation.rate", "relation.count", "relation.n", "Verdicts with the labelled relation (duplicate, subsumed or overlap) and, for a subsumed pair, the labelled redundant note.");
+      ratio("Claims found", "claims.found_rate", "claims.found", "claims.labelled", "Labelled claims that the judge listed for the right note.");
+      ratio("Judge gave no verdict", "failed.rate", "failed.count", "failed.n", "Calls where the judge returned no verdict; akm retires nothing.", true);
       break;
     case "distill":
       ratio("Good lessons created", "good_lessons.rate", "good_lessons.good", "good_lessons.n", "Lesson-worthy cases whose new lesson passed every check.");
