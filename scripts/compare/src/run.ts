@@ -7,9 +7,10 @@ import { comparePair, loadRun, renderPair } from "./lib.ts";
 const USAGE = `Usage: scripts/compare/run A B [--json FILE] [--md FILE]
 
 Show stored quality, performance, usage and settings for two saved runs.
-A and B are results folders or their summary.json files. Legacy, stopped and
+A and B are results folders, their summary.json files, or the repeat-summary.json of a --repeat set. Legacy, stopped and
 mismatched runs remain readable. Numeric deltas are B minus A; missing values
-stay blank. Runs no models, never rescores, and never
+stay blank. Runs whose samples have case ids and outcomes also get per-case
+agreement and the cases that flipped. Runs no models, never rescores, and never
 changes the saved results.
 
   --json FILE  also save the report as JSON

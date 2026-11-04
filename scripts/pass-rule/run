@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Routes the saved criterion scores of judge-gate and lesson-judge runs again under another pass rule, with no model call. See README.md.
+#
+#   scripts/pass-rule/run [--count A,B] [--pass-at N] [--review-at N] [--reject-at N|none] RESULTS_DIR...
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+command -v bun > /dev/null || { echo "pass-rule: bun is needed. See https://bun.sh" >&2; exit 2; }
+exec bun "$here/src/run.ts" "$@"

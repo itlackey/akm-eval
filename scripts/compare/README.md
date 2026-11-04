@@ -11,6 +11,12 @@ Missing values stay blank. Versions, models, configurations and cache settings
 are shown so you can interpret the differences. There are no hash, manifest,
 version or completion requirements and no automatic winner.
 
+When the samples of both runs carry a case `id` and an `outcome` (the judge evals' do), the report adds
+per-case agreement: the share of cases with the same outcome, Cohen's kappa, and the cases that flipped (id, outcome A, outcome B).
+Give a `--repeat` set as its `*-repeat-summary.json`: the table then shows the mean of each metric over its runs, and the agreement
+compares each case's majority outcome (the one most runs gave; a case with no majority is left out and counted). The report says
+which of the two each side was.
+
 Legacy results, stopped runs and summary-only results are readable. The command
 reports saved status and stale `.running` markers. It never collects new output,
 rescales scores or changes source results. Malformed JSON and duplicate sample

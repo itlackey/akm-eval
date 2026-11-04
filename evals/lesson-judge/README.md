@@ -17,7 +17,7 @@ evals/lesson-judge/run --cases ~/notes/lesson-judge
 
 `--limit N` keeps the good/bad proportion, with at least one of each from 2 cases on. `--strategy` and `--config-patch` change the akm config the eval writes. `--concurrency N` sets how many cases run at a time (default 2, all through one akm sandbox) and `--timeout-ms N` how many milliseconds akm gets for one (default 900000, 15 minutes). There is no `--corpus custom` rewrite: the cases are what akm's distill built on real runs, and a rewrite would change that. A custom corpus is `--cases DIR`.
 
-The model must return one JSON object when asked. A case is up to about 2k tokens. The eval sets temperature 0 and thinking off. Only the connection runner is measured; a harness runner needs harness isolation (#153), which does not exist yet.
+The model must return one JSON object when asked. A case is up to about 2k tokens. The eval sets temperature 0 and thinking off. Only the connection runner is measured. The harness isolation a harness judge needs exists (`isolateHome` in `lib/akm/akm.ts`, used by `evals/judge-gate/run --harness opencode`), but this eval has no `--harness` flag yet.
 
 ## What the judge is sent
 
@@ -82,7 +82,7 @@ The case's input goes to `akm judge distill.lesson`, and akm's verdict becomes t
 | `seconds` | mean, median and max seconds per call |
 | `baselines` | what a judge that passes everything and one that refuses everything would score on the same cases |
 
-Tokens per call are in `model_calls` (`prompt_tokens`, `completion_tokens`, means over the calls the provider counted, null when it counted none); akm reports no cost, so cost is unknown, not 0. With 25 or so cases in a group, one case is 4 points of its rate: read a gap of a case or two as noise. The criterion scores of every case are in `samples.jsonl`, so a pass rule can be tried offline on them (#153).
+Tokens per call are in `model_calls` (`prompt_tokens`, `completion_tokens`, means over the calls the provider counted, null when it counted none); akm reports no cost, so cost is unknown, not 0. With 25 or so cases in a group, one case is 4 points of its rate: read a gap of a case or two as noise. The criterion scores of every case are in `samples.jsonl`, so a pass rule can be tried offline on them: `scripts/pass-rule/run RESULTS_DIR...` (see its README).
 
 `summary.json`: `metrics`, the counts run, scored and errored, `timeouts`, `status` and `aborted_reason`, `rubric_version`, the model, akm version and build, `strategy`, `config_patch`, `concurrency`, `timeout_ms`, the akm `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `model_calls`, `assets_sha256`, `corpus_folder` and the `manifest`. `samples.jsonl` has one row per case: the label and kind, akm's verdict as printed (or its error), the route, the criterion scores, the reason and the seconds.
 
@@ -104,7 +104,7 @@ A judge that passes everything has good 100% and bad 100%; one that refuses ever
 - **Feedback is rare.** The distill eval's cases carry none, so no real input has any; 14 hand-written cases have feedback lines recorded with `akm feedback`.
 - **The 26 lesson-update memories `upd-15` to `upd-40` were not given to the real writer**, so their updates are hand-written; the real updates (12) are from `upd-01` to `upd-14` and `dup-04`.
 - **`related` entries carry no `path`.** akm's pipeline passes each related asset with the `path` of its file, and `akm judge` refuses an input with an extra field, so the cases keep `ref` and `content`, which are all the judge reads.
-- **Connection runner only.** A harness judge needs harness isolation (#153), which is not built.
+- **Connection runner only.** The isolation a harness judge needs is built (`isolateHome`), but only judge-gate has the `--harness` flag so far.
 
 ## Licence
 

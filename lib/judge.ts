@@ -13,6 +13,35 @@ export type Route = "pass" | "review" | "reject";
  */
 export const routeOf = (verdict: { pass?: unknown; reviewNeeded?: unknown }): Route => (verdict.pass === true ? "pass" : verdict.reviewNeeded ? "review" : "reject");
 
+/**
+ * How akm turns the criterion scores of a quality judge into a verdict (judgeQuality in akm's src/commands/improve/stage.ts). `counted` are the criteria
+ * in the mean and the pass test; a criterion left out (a lesson's `grounding`) is scored and shown, and counts only toward `rejectAt`. The lowest counted
+ * criterion at `passAt` or more passes; otherwise a mean of `reviewAt` or more is `reviewNeeded`, and a lower one is refused. A criterion at `rejectAt` or
+ * less refuses the proposal whatever the mean is; null for a judge with no such floor.
+ */
+export interface PassRule {
+  counted: string[];
+  passAt: number;
+  reviewAt: number;
+  rejectAt: number | null;
+}
+
+/** The rules akm ships: reflect's review floor is 3.5 and has no reject floor; a lesson counts reusable and nonRedundancy, reviews from 2.5 and rejects a criterion of 2 or less. */
+export const SHIPPED_RULES: Record<string, PassRule> = {
+  "reflect.quality": { counted: ["need", "preservation", "quality"], passAt: 4, reviewAt: 3.5, rejectAt: null },
+  "distill.lesson": { counted: ["reusable", "nonRedundancy"], passAt: 4, reviewAt: 2.5, rejectAt: 2 },
+};
+
+/** The verdict's `pass` and `reviewNeeded` for these criterion scores under `rule`. Null when a counted criterion is missing or is not a number. */
+export function applyRule(criteria: Record<string, unknown>, rule: PassRule): { pass: boolean; reviewNeeded: boolean } | null {
+  const counted = rule.counted.map((k) => criteria[k]);
+  if (counted.length === 0 || !counted.every((x): x is number => typeof x === "number")) return null;
+  const all = Object.values(criteria).filter((x): x is number => typeof x === "number");
+  if (rule.rejectAt !== null && Math.min(...all) <= rule.rejectAt) return { pass: false, reviewNeeded: false };
+  if (Math.min(...counted) >= rule.passAt) return { pass: true, reviewNeeded: false };
+  return { pass: false, reviewNeeded: counted.reduce((a, b) => a + b, 0) / counted.length >= rule.reviewAt };
+}
+
 /** What `akm judge <name> --format json` prints. `verdict` is there on outcome `verdict`, `reason` on `error` and `unparseable` (the judge gave no verdict). */
 export interface JudgeEnvelope {
   judge: string;

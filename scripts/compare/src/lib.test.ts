@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { comparePair, loadRun, renderPair, type Run } from "./lib.ts";
+import { agreementOf, comparePair, loadRun, renderPair, type Run } from "./lib.ts";
 
 const fixtures = join(import.meta.dir, "fixtures");
 const fixture = (suite = "reflect", side = "before") => loadRun(join(fixtures, suite, side));
@@ -147,4 +147,56 @@ test("cold and warm indexes display timings and the changed cache setting", () =
   a.summary.semantic_index = "cold"; b.summary.semantic_index = "warm";
   a.summary.index_seconds = { semantic: 40 }; b.summary.index_seconds = { semantic: .2 };
   expect(comparePair(a, b).rows.find(r => r.key === "semantic_index_s")).toMatchObject({ a: 40, b: .2, delta: -39.8 });
+});
+
+describe("per-case agreement", () => {
+  /** A run of samples that have a case id and an outcome, "pass" and "reject" spelled p and r. */
+  const outcomes = (text: string): Run => ({ dir: "x", summary: {}, rows: [...text].map((o, i) => ({ id: `c${i + 1}`, outcome: ({ p: "pass", r: "reject", v: "review" } as Record<string, string>)[o] })) });
+  const set = (...texts: string[]): Run => ({ dir: "set", summary: {}, rows: [], repeats: texts.map(t => outcomes(t)) });
+
+  test("two runs that differ in 2 of 10 cases: 80% the same, kappa 0.6 (chance agreement 0.5), and the flipped cases", () => {
+    // A: 5 pass, 5 reject. B: 5 pass, 5 reject, with c5 and c10 turned round. pe = .5*.5 + .5*.5 = .5, kappa = (.8 - .5) / (1 - .5).
+    const g = agreementOf(outcomes("ppppprrrrr"), outcomes("pppprrrrrp"))!;
+    expect(g).toMatchObject({ cases: 10, same: 8, share: 0.8, a: "one run", b: "one run" });
+    expect(g.kappa).toBeCloseTo(0.6, 10);
+    expect(g.flips).toEqual([{ id: "c5", a: "pass", b: "reject" }, { id: "c10", a: "reject", b: "pass" }]);
+  });
+
+  test("three outcomes: 5 of 8 the same, kappa 3/7 (chance agreement 22/64)", () => {
+    const g = agreementOf(outcomes("pprrvvpr"), outcomes("prrrvppv"))!;
+    expect(g).toMatchObject({ cases: 8, same: 5, share: 0.625 });
+    expect(g.kappa).toBeCloseTo(3 / 7, 10);
+    expect(g.flips.map(f => `${f.id}:${f.a}>${f.b}`)).toEqual(["c2:pass>reject", "c6:review>pass", "c8:reject>review"]);
+  });
+
+  test("identical runs have kappa 1; a single outcome on both sides leaves kappa undefined", () => {
+    expect(agreementOf(outcomes("prvr"), outcomes("prvr"))).toMatchObject({ share: 1, kappa: 1, flips: [] });
+    expect(agreementOf(outcomes("pppp"), outcomes("pppp"))).toMatchObject({ share: 1, kappa: null });
+  });
+
+  test("a --repeat set counts for each case's majority outcome; a case with no majority, and a case one side lacks, are left out and counted", () => {
+    // Three runs of c1..c3: c1 is p p r (pass), c2 is r r r (reject), c3 is p r v (no majority). B has c4, which the set lacks.
+    const g = agreementOf(set("ppp", "prr", "rrv"), outcomes("prvr"))!;
+    expect(g.a).toBe("the majority of 3 runs");
+    expect(g).toMatchObject({ cases: 2, same: 2, no_majority: { a: 1, b: 0 }, only: { a: 0, b: 1 } });
+  });
+
+  test("runs whose samples carry no outcome have no agreement; rows of an eval that does are shown by compare", () => {
+    expect(agreementOf({ dir: "x", summary: {}, rows: [{ id: "a" }] }, outcomes("p"))).toBeUndefined();
+    const a = fixture("judge-gate"), b = fixture("judge-gate", "after");
+    const g = comparePair(a, b).agreement;
+    expect(g?.cases).toBe(a.rows.length);
+    expect(renderPair(comparePair(a, b))).toContain("Per-case agreement (A: one run; B: one run)");
+  });
+
+  test("a repeat-summary.json loads as its runs: compare shows the mean of their metrics and the majority outcomes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "compare-repeat-")); folders.push(dir);
+    for (const [i, side] of [["r1", "before"], ["r2", "after"]]) cpSync(join(fixtures, "judge-gate", side!), join(dir, `x-${i}`), { recursive: true });
+    writeFileSync(join(dir, "2026-01-01-x-repeat-summary.json"), JSON.stringify({ eval: "judge-gate", label: "x", repeat: 2, runs: ["x-r1", "x-r2"], metrics: { good: { passed: { min: 1, max: 3, mean: 2 }, n: { min: 5, max: 5, mean: 5 } } } }));
+    const set = loadRun(join(dir, "2026-01-01-x-repeat-summary.json"));
+    expect(set.repeats?.length).toBe(2);
+    expect(set.summary.metrics).toEqual({ good: { passed: 2, n: 5 } });
+    expect(set.summary.label).toBe("x (mean of 2 runs)");
+    expect(agreementOf(fixture("judge-gate"), set)?.b).toBe("the majority of 2 runs");
+  });
 });

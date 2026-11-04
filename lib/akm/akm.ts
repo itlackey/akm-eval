@@ -25,7 +25,9 @@
 // Everything else stays behind, a credential or not, whatever its name (MYSQL_PWD, GH_PAT, DATABASE_URL, SESSION_COOKIE), so a secret
 // that no name pattern thought of never reaches akm. A harness judge (a program of the operator's, such as opencode or claude) would read the
 // operator's own setup through HOME: ~/.claude and its CLAUDE.md, MCP servers, opencode's config. So { isolateHome: true } gives akm a HOME and a
-// cache folder inside the sandbox, which are empty. The exceptions are the variables that the akm config of the sandbox names as
+// cache folder inside the sandbox, which are empty, and tells opencode to read no project config and no Claude Code files: it looks for AGENTS.md,
+// CLAUDE.md, .claude/skills and opencode.json in every folder above its working folder too, and a sandbox in a TMPDIR under your HOME has your
+// own ~/.claude among them. The exceptions are the variables that the akm config of the sandbox names as
 // $NAME (or ${NAME}): writeConfig reads the config it writes and gives akm those and no others, so a config with two engines gets the
 // key of each, and a key that the config does not name never reaches akm. { keepModelKey: true } gives akm MODEL_API_KEY whatever the
 // config says.
@@ -135,7 +137,7 @@ function sandboxEnv(dir: string, keep: string[], semantic: boolean, isolateHome:
     XDG_DATA_HOME: join(dir, "xdg-data"),
     XDG_STATE_HOME: join(dir, "xdg-state"),
     GIT_CEILING_DIRECTORIES: dir,
-    ...(isolateHome ? { HOME: join(dir, "home"), XDG_CACHE_HOME: join(dir, "xdg-cache") } : {}),
+    ...(isolateHome ? { HOME: join(dir, "home"), XDG_CACHE_HOME: join(dir, "xdg-cache"), OPENCODE_DISABLE_PROJECT_CONFIG: "1", OPENCODE_DISABLE_CLAUDE_CODE: "1" } : {}),
     ...(semantic ? { HF_HOME: MODEL_CACHE } : {}),
   };
 }
@@ -245,7 +247,7 @@ export function useAkm(values: { akm?: string }, fail: (message: string) => neve
   env.AKM_BIN = commandLine(absoluteWords(words));
 }
 
-/** `isolateHome`: akm's HOME and XDG_CACHE_HOME are folders of the sandbox, so a program akm starts finds none of the operator's files (see the top of this file). */
+/** `isolateHome`: akm's HOME and XDG_CACHE_HOME are folders of the sandbox, and opencode reads no project or Claude Code files, so a program akm starts finds none of the operator's (see the top of this file). */
 export type SandboxOptions = { keepModelKey?: boolean; semantic?: boolean; isolateHome?: boolean };
 
 /**

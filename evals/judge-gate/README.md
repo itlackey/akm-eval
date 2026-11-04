@@ -21,6 +21,19 @@ evals/judge-gate/run --cases ~/notes/judge-gate
 
 The model must return one JSON object when asked. A case is up to about 7k tokens, so 16k of context is safe. The eval sets temperature 0 and thinking off; a model that thinks anyway is slow (about a minute a case on a 27B). Cloud endpoints that reject unknown request fields may refuse the thinking switches: run them through a local gateway.
 
+### On a harness
+
+`--harness opencode` puts the judge on your opencode (`akm judge reflect.quality --harness opencode --model eval/<model>`) in place of the default connection, with the model under test. The judge must not read your own setup, or it would differ from machine to machine, so the run gives akm a HOME and a cache folder inside its sandbox and an opencode config that holds the model under test as its only provider (temperature 0, reasoning off), and nothing else. Your `~/.claude` and its `CLAUDE.md` and skills, your MCP servers and your opencode config cannot reach the model (`lib/akm/isolation.test.ts` plants each in a HOME and shows it does not). That is a sandbox HOME and not a container, as agent-ab uses, because the judge is one model call that needs no tools and no files, not an agent working in a task folder.
+
+The summary records `harness` (`name`, the `version` that `opencode --version` printed in the sandbox, `isolated_home`) and the manifest's `eval_settings` the same, so `scripts/compare` shows a harness run as a changed setting. What a harness run is not the same as:
+
+- opencode sends its own system prompt and tools with the judge's prompt (about 12k prompt tokens a call on opencode 1.x against about 3k on a connection), and a second small request that titles the session. The model does not call any tool: the sandbox has no akm plugin, so the `akm_show` the judge's prompt offers is not there.
+- opencode 1 cannot be restricted to reading tools (akm reports it), and runs in akm's scratch folder.
+- Only opencode is wired. `claude` would need a login in an empty HOME, and the run does not set one up.
+- The first opencode command in a sandbox makes its database, and two at once fail with "database is locked", so the run makes it once before the first case.
+
+Compare a harness run with a connection run through `scripts/compare/run`, which shows how many cases keep their outcome, Cohen's kappa and the cases that flipped. Give each side as its `*-repeat-summary.json` to compare a `--repeat` set's majority outcomes.
+
 ## Run your own set
 
 `--cases DIR`: a folder with a `cases.jsonl` in the format of `assets/README.md`.
