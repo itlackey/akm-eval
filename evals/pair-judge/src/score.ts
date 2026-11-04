@@ -107,12 +107,19 @@ export function distinctive(claim: string, otherNote: string): string[] {
   return [...new Set(words(claim))].filter((w) => !there.has(w) && !STOP.has(w));
 }
 
-/** Does a judge's item state the claim? When it holds at least a third (rounded up, and one at least) of the claim's distinctive words. A claim with none (two claims that differ in the order of their words) cannot be matched: see ClaimTally.unmatchable. */
+/**
+ * Does a judge's item state the claim? When it holds at least a third (rounded up, and one at least) of the claim's distinctive words, or when every word of it that
+ * the other note lacks is in the claim (a short item that quotes the claim's identifier: `Node 22.3` for "CI uses Node 22.3, since the March upgrade."). A claim with
+ * no distinctive word (two claims that differ in the order of their words) cannot be matched: see ClaimTally.unmatchable.
+ */
 export function matches(item: string, claim: string, otherNote: string): boolean {
   const need = distinctive(claim, otherNote);
   if (need.length === 0) return false;
   const have = new Set(words(item));
-  return need.filter((w) => have.has(w)).length >= Math.ceil(need.length / 3);
+  if (need.filter((w) => have.has(w)).length >= Math.ceil(need.length / 3)) return true;
+  const own = distinctive(item, otherNote);
+  const inClaim = new Set(words(claim));
+  return own.length > 0 && own.every((w) => inClaim.has(w));
 }
 
 /** What the judge's two lists came to against the labels (see tallyClaims). */

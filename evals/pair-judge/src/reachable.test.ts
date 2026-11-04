@@ -36,8 +36,14 @@ describe("problemWith", () => {
   test("the gap between the dates must be the same", () => {
     expect(problemWith(pair(), [judged(note("a", T1), note("b", "2026-11-02T00:00:00.000Z"))])).toContain("after a in the case and");
   });
-  test("a note's updated date is its created date unless the note says otherwise, in both", () => {
+  test("a note's updated date is its created date unless the note says otherwise, in both, and the same text when it says otherwise", () => {
     expect(problemWith(pair(), [judged(note("a", T1, "2026-11-02T00:00:00.000Z"), note("b", T2))])).toContain("the updated date of memories/a");
+    expect(problemWith({ ...pair(), a: note("a", T1, "2026-11-02") }, [judged(note("a", T1), note("b", T2))])).toContain("the updated date of memories/a");
+    expect(problemWith({ ...pair(), a: note("a", T1, "2026-11-02") }, [judged(note("a", T1, "2026-11-01"), note("b", T2))])).toContain("the updated date of memories/a");
+    expect(problemWith({ ...pair(), a: note("a", T1, "2026-11-02") }, [judged(note("a", T1, "2026-11-02"), note("b", T2))])).toBeNull();
+  });
+  test("a created date is written as akm writes one, an ISO instant", () => {
+    expect(problemWith(pair("2026-11-01", T2), [judged(note("a", T1), note("b", T2))])).toContain("not written as akm writes one");
   });
 });
 

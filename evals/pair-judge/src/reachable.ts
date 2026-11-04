@@ -1,5 +1,5 @@
 // Is a case an input akm's consolidate pair pass sends its judge? The notes of every case are planted as memories in a sandbox bundle, indexed, and akm's own
-// pass is run on them (capture.ts); a case is reachable when the pass judges its pair, the older note first, with the dates in the same relation.
+// pass is run on them (capture.ts); a case is reachable when the pass judges its pair, the older note first, with the dates in the same relation and written as akm writes them.
 //
 //   bun evals/pair-judge/src/reachable.ts --akm ~/code/akm [--cases DIR]...
 //
@@ -45,7 +45,10 @@ export function problemWith(c: Case, judged: Judged[]): string | null {
   if (tied !== (Date.parse(pair.a.created) === Date.parse(pair.b.created))) return `the dates are ${tied ? "equal in the case and not in akm's input" : "not equal in the case and equal in akm's input"}`;
   for (const [mine, theirs] of pair.a.ref === c.a.ref ? [[c.a, pair.a], [c.b, pair.b]] as const : [[c.a, pair.b], [c.b, pair.a]] as const) {
     if (mine.type !== theirs.type) return `${mine.ref} is a ${theirs.type} to akm, not a ${mine.type}`;
-    if ((mine.updated === mine.created) !== (theirs.updated === theirs.created)) return `the updated date of ${mine.ref} is ${mine.updated === mine.created ? "its created date in the case and not in akm's input" : "not its created date in the case and is in akm's input"}`;
+    // akm writes a created date as an ISO instant, and an updated date as the note's own `updated`, or else its created date: the judge reads both as text.
+    if (mine.created !== new Date(Date.parse(mine.created)).toISOString()) return `the created date of ${mine.ref} is not written as akm writes one (${new Date(Date.parse(mine.created)).toISOString()})`;
+    const updated = mine.updated === mine.created ? theirs.created : mine.updated;
+    if (theirs.updated !== updated) return `the updated date of ${mine.ref} is ${theirs.updated === theirs.created ? "its created date" : theirs.updated} in akm's input, and ${mine.updated} in the case`;
   }
   const gap = (x: Judged["a"], y: Judged["a"]) => Date.parse(y.created) - Date.parse(x.created);
   const caseGap = Date.parse(c.b.created) - Date.parse(c.a.created);

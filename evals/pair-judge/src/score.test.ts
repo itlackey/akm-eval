@@ -69,7 +69,7 @@ describe("the claim matcher", () => {
   test("the distinctive words of a claim are those the other note lacks", () => {
     expect(distinctive("The retry limit is 5.", "The worker retries. Dead jobs go to jobs-dead.")).toEqual(["retry", "limit", "5"]);
   });
-  test("an item matches a claim when it holds at least half of the distinctive words", () => {
+  test("an item matches a claim when it holds at least a third of the distinctive words", () => {
     const against = "Dead jobs are kept for 30 days.";
     const claim = "Dead jobs are kept for 7 days.";
     expect(distinctive(claim, against)).toEqual(["7"]);
@@ -77,7 +77,16 @@ describe("the claim matcher", () => {
     expect(matches("kept 30 days", claim, against)).toBe(false);
     const long = "Variable fonts are not allowed, because the print pipeline cannot flatten them.";
     expect(matches("variable fonts not allowed", long, "Licence files are kept next to each font.")).toBe(true);
-    expect(matches("fonts", long, "Licence files are kept next to each font.")).toBe(false);
+    expect(matches("fonts are embedded", long, "Licence files are kept next to each font.")).toBe(false);
+  });
+  test("a short item matches when every word of it the other note lacks is in the claim", () => {
+    const against = "# Pellam CI\n\nCI uses Node 20.11. Builds run on Linux.";
+    const claim = "CI uses Node 22.3, since the March upgrade.";
+    expect(distinctive(claim, against)).toEqual(["22.3", "since", "march", "upgrade"]);
+    expect(matches("Node 22.3", claim, against)).toBe(true);
+    expect(matches("CI uses Node 22.3", claim, against)).toBe(true);
+    expect(matches("Node 22.3 on macOS", claim, against)).toBe(false);
+    expect(matches("CI uses Node", claim, against)).toBe(false);
   });
   test("a claim with no word the other note lacks matches nothing", () => {
     expect(matches("the lowest", "Priority 0 is the lowest.", "Priority 0 is the lowest.")).toBe(false);

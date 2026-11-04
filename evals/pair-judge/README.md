@@ -31,9 +31,9 @@ The model must return one JSON object when asked. A case is about 1.2k tokens in
 
 ## The cases
 
-`assets/cases.jsonl` (92) and `assets/heldout/cases.jsonl` (20): pairs of fictional memories, in six kinds: 24 `duplicate`, 22 `subsumed`, 19 `supersedes`, 16 `contradicts`, 21 `overlap` and 10 `lookalike` (two different things written to one layout). The notes are the 160 of consolidate's 80 cases and the 80 of its pool; the pairs are what akm's pass sent on a real run over them, 108 of the 120 pairs there are, and 4 more are hand-written (the same pairs as long notes). 19 pairs have equal dates. The labels are mine, drafted against the judge's prompt and recorded in `assets/ADJUDICATION.md`, where the calls to read first are under Open. `assets/README.md` has the fields, the rubric, the claim matcher, the make-up and the limits. `assets/retired.jsonl` holds the 7 consolidate pairs the pass never judges (different subjects); the scorer does not read it.
+`assets/cases.jsonl` (92) and `assets/heldout/cases.jsonl` (20): pairs of fictional memories, in six kinds: 24 `duplicate`, 22 `subsumed`, 19 `supersedes`, 16 `contradicts`, 21 `overlap` and 10 `lookalike` (two different things written to one layout). The notes are the 160 of consolidate's 80 cases and the 80 of its pool; the pairs are what akm's pass sent on a real run over them, 108 of the 115 pairs there are (80 cases and 35 pool pairs; the pass judged every pool pair), and 4 more are hand-written (the same pairs as long notes). 19 pairs have equal dates. The labels were drafted against the judge's prompt and reviewed independently; `assets/ADJUDICATION.md` records them, and its Review section settles the calls a reader might reverse. `assets/README.md` has the fields, the rubric, the claim matcher, the make-up and the limits. `assets/retired.jsonl` holds the 7 consolidate pairs the pass never judges (different subjects); the scorer does not read it.
 
-`bun evals/pair-judge/src/reachable.ts --akm DIR` plants every case's notes in a sandbox, runs the pass with a stub model, and checks that it judges each pair, the older note first, with the gap between the dates the case has (`AKM_CHECKOUT=DIR bun test evals/pair-judge/src/reachable.test.ts` runs it as a test). `src/capture.ts` is the pass run it uses.
+`bun evals/pair-judge/src/reachable.ts --akm DIR` plants every case's notes in a sandbox, runs the pass with a stub model, and checks that it judges each pair, the older note first, with the gap between the dates the case has and the dates written as akm writes them (`AKM_CHECKOUT=DIR bun test evals/pair-judge/src/reachable.test.ts` runs it as a test). `src/capture.ts` is the pass run it uses.
 
 **Held-out:** 20 ids, every fifth `pair-pass` case of each kind in id order, listed in `assets/README.md`. The default run does not score them; `--cases evals/pair-judge/assets/heldout` runs them. Run them to confirm a decision, not to choose it.
 
@@ -60,7 +60,7 @@ The case goes to `akm judge consolidate.pair` as `{ a, b }`, and the verdict bec
 
 Tokens and cost are not in the verdict. `summary.json` has `model_calls`, from akm's own record of each call: calls, errors, and the mean prompt and completion tokens and seconds, and null where akm records none. akm reports no cost; it is unknown, not 0.
 
-One case is 1.1 points of `found` per 65 cases with a safe note, and about 1.1 of `unsafe` per 88 exposed. A change is worth keeping when `found` rises and `unsafe` does not.
+On the default run (92 cases), one case is 1.9 points of `found` (54 cases with a safe note) and 1.4 points of `unsafe` (72 exposed). A change is worth keeping when `found` rises and `unsafe` does not.
 
 ## What the summary reports
 
