@@ -1,7 +1,6 @@
 ---
-description: "Retired legacy CRM plan normalization strategy"
-evidence: Agent's analysis of plan values at ts=08:48:21 and user instruction at
-  ts=08:49:54.
+description: "Ledgerline once kept a hand-edited plan_aliases.csv for CRM plan names."
+evidence: "User instruction at ts=08:49:54, which replaced the alias file."
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,4 +14,4 @@ provenance:
     - resource: claude:buried-07
 ---
 
-Previously, we normalized CRM export plan names by converting them to lowercase and mapping the legacy 'legacy-2019' value to 'starter'. This approach was retired on March 15, 2026, due to maintenance overhead and inconsistency risks. It has been replaced by the Unified Plan Schema (UPS) integration, which enforces standardized casing and mapping at the source system level. This note is kept for historical reference only to document the transition from manual normalization to automated schema enforcement. Teams should no longer implement the legacy lowercase mapping logic in new codebases. Refer to the UPS documentation for current implementation guidelines. This change ensures long-term consistency across Finance dashboards and billing systems without requiring post-export transformations.
+Ledgerline used to clean CRM plan names with `plan_aliases.csv`, a lookup file that a finance analyst edited by hand whenever a new spelling appeared. Rows with no alias were dropped from the plan report. The file was retired in October 2026 and the lookup moved into the export script.

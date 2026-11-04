@@ -1,5 +1,0 @@
----
-description: "Guidelines for handling timezone-specific business logic in Berlin."
----
-
-Financial data and customer churn rates rely on the Europe/Berlin temporal context rather than the standard UTC baseline. To ensure accuracy, all date intervals and monetary computations must align with this specific regional clock. Developers must explicitly convert timestamp values to this zone before performing any analysis. Failure to do so risks off-by-one discrepancies during daily rollovers, which are common when databases default to UTC. When filtering records in the `customers` or `invoices` schemas, always apply the cast syntax `timestamptz 'YYYY-MM-DD 00:00 Europe/Berlin'` to define start or end points. This explicit conversion guarantees that boundary conditions are evaluated correctly according to local business hours. Do not assume implicit timezone handling; always force the conversion to prevent logical errors caused by midnight shifts between UTC and Central European Time. Adhering to this protocol ensures consistent reporting across all financial dashboards and audit trails.

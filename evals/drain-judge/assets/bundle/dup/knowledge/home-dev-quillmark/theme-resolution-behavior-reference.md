@@ -1,5 +1,0 @@
----
-description: "Document the missing default theme fallback in the Go renderer module."
----
-
-The function located at `internal/render/theme.go` named `ResolveTheme` currently exhibits a critical flaw regarding missing keys. When a caller requests a theme identifier that does not exist within the internal map, the system does not revert to a standard configuration. Instead, it yields an empty struct instance of type `Theme{}`. This behavior leads to silent errors in subsequent rendering stages because those components anticipate populated data structures. To correct this issue, the implementation must be updated to return the value associated with `themes[DefaultThemeName]` whenever the primary lookup fails. This ensures that a valid, non-empty theme object is always provided to downstream processes, preventing undefined behavior caused by zero-value structs. The change addresses the lack of a fallback mechanism by explicitly defining the default theme as the recovery path for invalid inputs.

@@ -1,21 +1,9 @@
 ---
-description: "Status report on v2.4.0 release pipeline failure due to lightweight tag issue"
+description: "Release 2.4.0 on 2026-08-26: commit pushed but the release job has not started."
 captureMode: hot
 beliefState: asserted
 type: memory
-updated: 2026-08-27
+updated: 2026-08-26
 ---
 
-As of November 12, 2026, the v2.4.0 release pipeline remains stalled. The initial commit `a1b2c3d` was pushed to origin, but the corresponding tag `v2.4.0` was not propagated because it was created as a lightweight tag. The CI/CD trigger, configured to listen for annotated tag pushes, did not fire. Consequently, the automated build and deployment jobs have not initiated. 
-
-Current status: 
-- Commit `a1b2c3d` is live on the remote repository.
-- Tag `v2.4.0` exists only locally.
-- Release job queue is empty for this version.
-
-Pending actions: 
-1. Delete the local lightweight tag.
-2. Recreate it as an annotated tag: `git tag -a v2.4.0 -m "Release v2.4.0"`.
-3. Push the tag to trigger the workflow.
-
-This incident highlights a gap in our pre-release checklist. We are updating the documentation to mandate annotated tags for all future releases to prevent similar delays.
+Release 2.4.0, 2026-08-26 15:40: the release commit is on main, but the release workflow has not run, two hours after the push. The Actions page shows no run for the tag. The release announcement is on hold, and the team is checking whether the tag reached the remote.

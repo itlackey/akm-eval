@@ -1,5 +1,0 @@
----
-description: "Resolving search pod restart loops by implementing a startup probe to accommodate slow index loading."
----
-
-When the catalog size increased, the search infrastructure experienced continuous container restarts because the index initialization time exceeded the liveness check window. Specifically, the application required approximately 70 seconds to become ready for the `/healthz` endpoint, whereas the existing liveness configuration triggered after only 20 seconds and terminated the process following three consecutive failures spaced ten seconds apart. To resolve this, a `startupProbe` was introduced targeting the same health endpoint. This new probe utilized a `periodSeconds` value of 10 and a `failureThreshold` of 12, effectively granting the containers a two-minute grace period for initialization. Crucially, the liveness mechanism remains dormant until the startup probe confirms the application is ready, preventing premature termination. This adjustment ensures stable deployment cycles without interrupting the necessary startup sequence.

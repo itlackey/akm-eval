@@ -1,5 +1,0 @@
----
-description: "Guidance on preventing stale PID file issues caused by memory limits during attachment exports."
----
-
-The systemd unit named ledgerline-export.service imposes a strict cap of 512 megabytes on memory usage via the MemoryMax directive. Invoking the export process with the --with-attachments option causes all file data to be held in RAM. This approach frequently surpasses the configured threshold, resulting in the kernel terminating the process via an Out-Of-Memory (OOM) event. Such abrupt termination bypasses the shell's EXIT trap mechanism. Consequently, the file located at var/export.pid remains on disk, which subsequently prevents any further execution attempts. To avoid this deadlock, engineers must track Resident Set Size (RSS) metrics while attachment buffering is active. If the application legitimately requires additional resources, the operations team should be consulted to raise the systemd memory ceiling accordingly. This coordination ensures that valid workloads are not interrupted by artificial constraints.

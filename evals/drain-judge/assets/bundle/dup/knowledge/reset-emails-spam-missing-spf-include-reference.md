@@ -1,5 +1,0 @@
----
-description: "Documenting the SPF misconfiguration that caused email delivery failures for the Quarry application's password reset functionality."
----
-
-On August 3, 2026, the Quarry platform migrated its outbound messaging infrastructure to a different provider. This transition triggered a critical issue where authentication checks failed because the domain's Sender Policy Framework (SPF) TXT record had not been updated to authorize the new mail servers. Consequently, recipients utilizing two major email hosting services experienced their password recovery messages being routed to junk folders instead of their primary inboxes. To resolve this, administrators appended the new provider's identifier using the `include:` mechanism to the existing SPF record. This adjustment allowed the new servers to pass validation checks. Following the update, delivery issues were resolved by the subsequent day. The configuration currently permits both the legacy and new services to send mail. The old provider will remain listed until its scheduled decommissioning at the end of the current month.

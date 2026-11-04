@@ -1,5 +1,0 @@
----
-description: "Diagnosing hidden disk space consumption caused by open file descriptors on deleted inodes."
----
-
-When disk capacity appears exhausted despite low visible file sizes, the discrepancy often stems from active processes retaining handles to removed data. To confirm this scenario, juxtapose the output of `df` against `du`. A significant divergence where `df` indicates near-full utilization while `du` shows minimal usage signals that space is allocated to unlinked files. To locate the specific culprits, execute `sudo lsof +L1 /mount/point`. This command lists open file descriptors pointing to files with a link count of one or zero. Once identified, you can recover the storage by either restarting the associated service or directly truncating the file through the proc filesystem at `/proc/<pid>/fd/<fd>`. This approach ensures that the operating system releases the blocks previously occupied by the deleted content, effectively freeing up the disk space without requiring a reboot.

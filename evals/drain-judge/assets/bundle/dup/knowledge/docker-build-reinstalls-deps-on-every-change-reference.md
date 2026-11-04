@@ -1,5 +1,0 @@
----
-description: "Optimizing Docker build times for the Kestrel API by reordering COPY instructions to leverage layer caching effectively."
----
-
-Previously, constructing the Kestrel API container required approximately 360 seconds regardless of modification scope. This inefficiency stemmed from executing `COPY . .` prior to dependency installation via `npm ci`. Such a broad file transfer invalidated the image layer cache immediately, forcing a complete reinstallation of all packages for even trivial edits. To resolve this, the Dockerfile structure was altered to prioritize dependency management. By first transferring only `package.json` and `package-lock.json`, the system could install modules while preserving the cache for subsequent steps. Only after this stage did the process copy the remaining application code. This strategic reordering reduced rebuild duration for code-only updates to roughly 40 seconds. Note that modifying the lockfile still triggers a full reinstall, which remains the correct behavior for ensuring dependency integrity.

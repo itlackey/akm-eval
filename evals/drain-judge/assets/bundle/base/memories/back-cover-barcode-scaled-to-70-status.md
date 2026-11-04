@@ -1,21 +1,9 @@
 ---
-description: "Status update on Harrowby atlas barcode scaling issue"
+description: "Harrowby atlas files on 2026-08-24: back cover failed prepress, barcode being placed again."
 captureMode: hot
 beliefState: asserted
 type: memory
-updated: 2026-08-25
+updated: 2026-08-24
 ---
 
-## Status Report: Harrowby Atlas Back Cover Barcode
-
-**Date:** November 12, 2026
-**Ticket:** PR-4921
-**Status:** Blocked
-
-The prepress check for the Harrowby atlas back cover is currently stalled. The printer flagged that the EAN-13 barcode was scaled to 70%, violating the 80% minimum spec. 
-
-I pushed a fix in commit `a3f9c21` to restore the barcode to 100% and adjusted the blurb position by +6mm. However, the design lead, Elena, has not yet reviewed the layout changes. She is waiting for final copy approval from the editor before merging. 
-
-Without her sign-off, we cannot regenerate the PDF for the printer. This delay risks missing the November 15th print deadline. Please ping Elena to prioritize this review. The barcode file itself is correct; only the scaling was the issue.
-
-**Next Step:** Awaiting Elena's PR approval.
+Harrowby atlas, 2026-08-24: the printer's prepress report failed the back cover because the barcode does not scan reliably. The interior passed. The designer is placing the barcode again and moving the blurb; the new cover is due tomorrow, and the print slot holds until Thursday.

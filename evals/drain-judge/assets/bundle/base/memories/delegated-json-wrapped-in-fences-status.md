@@ -1,9 +1,9 @@
 ---
-description: "Status report on tagging model JSON parsing fix rollout"
+description: "Article tagging run on 2026-09-21: 52 of 410 articles untagged after JSON parse failures."
 captureMode: hot
 beliefState: asserted
 type: memory
-updated: 2026-09-22
+updated: 2026-09-21
 ---
 
-As of November 12, 2026, the fix for the Markdown code fence parsing issue is currently in the staging environment. The engineering team, led by Sarah Chen, approved the deployment after verifying the `response_format` parameter configuration on the local model endpoint. Initial tests on a subset of 500 articles showed a 100% success rate for JSON parsing, eliminating the previous 12.5% failure rate. The rollout plan involves moving to production next week, pending final sign-off from the reliability team. Commit hash: a3f9b2c. No further issues with bare JSON prompts have been observed. This update reflects the current state of the tagging job stability improvements.
+Tagging run of 2026-09-21: 410 articles, 52 left untagged because the model's reply would not parse. Rewording the prompt to ask for bare JSON did not help. Trying `response_format` next; the untagged 52 are listed in `untagged-0921.txt` for a rerun.

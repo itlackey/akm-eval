@@ -1,9 +1,9 @@
 ---
-description: "Retired approach of updating snapshots in CI"
+description: "The web client's nightly job that committed refreshed snapshots back to main."
 captureMode: hot
 beliefState: asserted
 type: memory
 updated: 2026-09-03
 ---
 
-Previously, the team allowed snapshot updates in CI by running `jest -u`. This approach was retired on March 15, 2026, because it silently masked layout regressions for weeks. The CI script would rewrite mismatched snapshots and discard them, preventing failure detection. This was replaced by the "Local Update Review" approach. Under this new method, snapshots are only updated on developer machines. Developers must commit these changes and include them in the pull request for explicit review. This ensures that visual changes are intentional and visible to the team before merging. The CI pipeline now strictly runs `jest --ci`, failing immediately if snapshots do not match or are missing, thereby enforcing strict visual regression control.
+Until September 2026 a nightly job in the web client repository ran the tests with `jest -u` and committed any rewritten snapshots back to main as `chore: update snapshots`, with no review. The job and its bot account were removed in September 2026.

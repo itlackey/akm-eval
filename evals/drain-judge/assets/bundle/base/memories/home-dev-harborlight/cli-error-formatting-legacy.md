@@ -1,6 +1,6 @@
 ---
-description: "Retired approach for harborlight CLI error handling using Commander.js defaults."
-evidence: User correction at 10:52:44; fix applied to cli.ts at 10:53:34.
+description: "harborlight used to print errors with console.error and exit 1 for every failure; that pattern was dropped."
+evidence: "User's description at 10:52:10 of the error handling the fail() helper replaced."
 type: memory
 updated: 2026-11-03
 generated:
@@ -14,4 +14,4 @@ provenance:
     - resource: claude:preference-11
 ---
 
-Prior to March 15, 2026, the harborlight CLI managed errors by relying on Commander.js's default output behavior, which was inconsistent and difficult to maintain. We manually patched stderr in various command handlers to prepend `harbor: `, leading to fragmented code and occasional exit code mismatches. This approach was retired on March 15, 2026, due to its fragility and the high maintenance burden of scattered error formatting logic. It was replaced by the `StrictErrorConvention` approach, which centralizes error handling through the `fail()` helper in `src/util/tty.ts` and standardized Commander.js configuration. This note is retained solely for historical reference to document the evolution of our CLI's error management strategy and to prevent re-adoption of the outdated pattern.
+harborlight commands used to report errors with a bare `console.error(err.message)` followed by `process.exit(1)`, for usage mistakes and runtime failures alike, and Commander's own messages were left unchanged. Scripts calling the CLI could not tell a bad flag from a failed run. This pattern was retired in October 2026 and replaced by the `fail()` helper and the Commander overrides.

@@ -1,8 +1,8 @@
 ---
-description: "Status report on the Harrow coffee machine maintenance rollout as of late October 2026."
+description: "Harrow coffee machine, week of 12 October 2026."
 tags: [office, kitchen]
 ---
 
-As of October 28, 2026, the new automated coffee bean replenishment system is currently in the staging environment. The rollout has reached 15% of the Harrow office nodes, specifically targeting the engineering floor. This phase was approved by Sarah Jenkins, Head of Facilities, following the successful completion of integration tests on commit a3f9b2c. 
+# Harrow coffee, week of 12 October
 
-The system is currently syncing with the Little Moth API to verify stock levels. No critical errors have been reported in the staging logs, but latency issues were observed during peak morning hours. The team is investigating the delay in order confirmation. If the latency drops below 200ms by November 1st, we will proceed to the beta environment for a wider test group. Please ensure all local configurations are updated to reflect the new API endpoints before the next sync cycle.
+Priya is on refill duty this week. The October beans from Little Moth arrived late, on the 9th, and there is one bag left. Descaling was due on the 8th and has not been done; facilities have been reminded.

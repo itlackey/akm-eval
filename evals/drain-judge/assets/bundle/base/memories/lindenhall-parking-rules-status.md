@@ -1,22 +1,8 @@
 ---
-description: "Status update on Lindenhall parking infrastructure migration"
+description: "Lindenhall car park on 6 October 2026: two chargers out of order, resurfacing next week."
 tags: [site, parking]
 ---
 
-**Date:** 2026-11-04
+# Lindenhall parking, 6 October
 
-**Project:** Lindenhall Car Park System Upgrade
-
-**Checklist:**
-- [x] Audit current 45-bay capacity and visitor allocation (4 bays)
-- [x] Verify January permit renewal workflow with reception
-- [x] Test EV charger functionality for bays 1-6
-- [ ] Migrate barrier access logic to new plate reader API
-- [ ] Update visitor code authentication module
-- [ ] Deploy updated documentation to internal wiki
-
-**Progress:** 4 of 6 items completed.
-
-**Next Step:** The team is currently debugging the integration between the legacy barrier hardware and the new plate reader API. We need to resolve the latency issue causing false negatives during peak hours. Once the API handshake is stable, we will proceed with updating the visitor code authentication module to ensure seamless entry for temporary guests. Target completion for this phase is next Friday.
-
-**Commit:** `a3f9c2b`
+The chargers at bays 3 and 4 are out of order; the supplier comes on Thursday. Bays 30 to 45 will be closed from the 13th for resurfacing. 2027 permit renewals are not open yet.

@@ -1,7 +1,6 @@
 ---
-description: "Retired legacy commit convention for harborlight"
-evidence: User's explicit instruction at 2026-09-23T13:23:30.000Z after the
-  agent's initial non-conventional commit.
+description: "harborlight's former commit style: free-form subjects with the ticket in brackets."
+evidence: "User's instruction at 2026-09-23T13:23:30.000Z, which named the old style it replaces."
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,4 +14,4 @@ provenance:
     - resource: claude:preference-01
 ---
 
-Prior to March 15, 2026, the harborlight repository utilized a relaxed commit message style that allowed free-form subjects and optional ticket references. This approach led to inconsistent history and made automated changelog generation unreliable. The team officially retired this method on March 15, 2026, in favor of the strict Conventional Commits specification. The new standard enforces a rigid `type(scope): subject` format with imperative mood, lowercase characters, and a maximum length of 60 characters. It also mandates a `Refs:` footer for ticket linkage. This note is preserved solely for historical reference to document the transition away from the informal practice. Developers should no longer use the old style, as it is no longer supported by the CI/CD pipeline validation checks. Understanding this change helps explain current commit restrictions and the rationale behind the enforced structure.
+Until September 2026 harborlight commits had free-form subjects with the ticket number in square brackets at the start, such as `[HBL-402] Fixed mooring timeout.`, and no footer. Capitals and trailing periods were common. The style was dropped when the project moved to conventional commits, and the changelog script that parsed the bracket prefix was removed.

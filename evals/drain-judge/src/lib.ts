@@ -26,7 +26,7 @@ export function parseCases(text: string, where = "cases"): Case[] {
     if (c.label !== "good" && c.label !== "bad") throw new Error(`${where}:${i + 1} has label "${c.label}", expected good or bad`);
     const bad = c.category === "ephemeral" || c.category === "duplicate" || c.category === "stale";
     if ((c.label === "bad") !== bad || (c.label === "good" && c.category !== "good")) throw new Error(`${where}:${i + 1} has label ${c.label} and category "${c.category}"`);
-    if (!["real", "corpus", "constructed", "hand-written"].includes(c.origin)) throw new Error(`${where}:${i + 1} has origin "${c.origin}", expected real, corpus, constructed or hand-written`);
+    if (!["real", "corpus", "hand-written"].includes(c.origin)) throw new Error(`${where}:${i + 1} has origin "${c.origin}", expected real, corpus or hand-written`);
     cases.push(c);
   });
   if (cases.length === 0) throw new Error(`${where} has no cases`);

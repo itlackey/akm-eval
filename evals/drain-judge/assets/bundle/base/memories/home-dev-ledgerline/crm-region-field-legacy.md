@@ -1,6 +1,6 @@
 ---
-description: "Retired legacy CRM region mapping approach"
-evidence: User correction at ts=08:49:54 and subsequent script edits.
+description: "Ledgerline's old region fix-up, a nightly job that rewrote CRM Region values, has been switched off."
+evidence: "User correction at ts=08:49:54, which ended the old job."
 type: memory
 updated: 2026-11-03
 generated:
@@ -14,6 +14,4 @@ provenance:
     - resource: claude:buried-07
 ---
 
-Previously, we relied on the CRM export's Region column for geographic segmentation. This approach was officially retired on March 15, 2026, due to persistent data integrity issues. The column contained trailing whitespace that caused inconsistent joins and was never maintained by the CRM team, leading to stale or misaligned geographic data. 
-
-To resolve this, the team adopted the Ledger Billing Country approach. We now join the CRM export with the ledger's customers table and use the billing_country field, which is mapped to regions. This ensures accurate regional breakdowns by leveraging a maintained, reliable source of truth. This note is kept for historical reference only to document the migration path and prevent reversion to the flawed CRM-based method.
+Ledgerline used to run `fix_regions.py` nightly against the CRM export: it trimmed the Region column and rewrote a few known misspellings before the reports ran. The job was switched off in October 2026, when regional reports moved to the ledger's billing_country, and its cron entry was removed.

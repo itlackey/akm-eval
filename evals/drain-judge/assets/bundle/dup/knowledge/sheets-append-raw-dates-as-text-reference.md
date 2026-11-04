@@ -1,5 +1,0 @@
----
-description: "Fixing a data type mismatch in Google Sheets API append operations to ensure date filters function correctly."
----
-
-The automated process for logging reservations into the Cobble Lane spreadsheet failed to populate the weekly summary report. This issue stemmed from the `spreadsheets.values.append` method within the form script, which utilized the `RAW` input option. Consequently, date literals like `2026-09-14` were persisted as plain text rather than recognized temporal values. Since the filtering logic relies on actual date objects, these textual entries were ignored during aggregation. To resolve this, the configuration must switch to `USER_ENTERED`. This setting forces the platform to interpret inputs exactly as a human would type them, ensuring proper data typing. While this change fixes future entries, the existing 140 corrupted records required manual intervention. A helper column using `DATEVALUE` was necessary to convert those legacy text strings into valid dates for the summary to include them.

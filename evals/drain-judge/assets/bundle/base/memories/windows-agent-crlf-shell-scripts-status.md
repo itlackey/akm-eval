@@ -1,29 +1,9 @@
 ---
-description: "Status update on Windows CRLF deployment failure fix"
+description: "Packaging job on 2026-07-08: failing on the Windows agent with bad interpreter, release candidate not built."
 captureMode: hot
 beliefState: asserted
 type: memory
-updated: 2026-07-09
+updated: 2026-07-08
 ---
 
-## Status Report: Deploy Script Line Ending Issue
-
-**Date:** November 12, 2026
-**Ticket:** DEPLOY-492
-**Status:** Blocked
-
-The initial fix for the `bad interpreter` error on Windows build agents is currently pending review. The proposed solution involves adding `*.sh text eol=lf` to `.gitattributes` to enforce LF line endings during checkout.
-
-**Current State:**
-- PR #8821 is open with the `.gitattributes` change.
-- Commit `a3f9b2c` implements the attribute rule.
-- Waiting on @sarah-ops to approve the change before merging.
-
-**Impact:**
-Until merged, the packaging job continues to fail on Windows agents due to CRLF conversion by Git. This blocks the release pipeline for v2.4.0.
-
-**Next Steps:**
-- Follow up with @sarah-ops for approval.
-- Verify the fix on a staging build after merge.
-
-*Note: This is a temporary status update and may become outdated quickly.*
+2026-07-08: the packaging job has failed on the Windows build agent since this morning with `/bin/bash^M: bad interpreter`. Linux agents are fine but busy, so today's release candidate is not built. The agent was reimaged last week, which is the first suspect.

@@ -13,9 +13,9 @@
 export type Category = "good" | "ephemeral" | "duplicate" | "stale";
 /**
  * Where a case's source memory came from. `real`: a memory akm's extract wrote. `corpus`: a memory of another eval's corpus (written for that eval, promoted here by akm).
- * `constructed`: written by a model from a real or corpus memory, to be the bad kind. `hand-written`: written by hand for this eval.
+ * `hand-written`: written by hand for this eval, from a real or corpus memory, to be a bad kind (for a duplicate, the knowledge note it repeats).
  */
-export type Origin = "real" | "corpus" | "constructed" | "hand-written";
+export type Origin = "real" | "corpus" | "hand-written";
 
 /** What the drain sends the judge (akm's `JudgmentInput`), as `akm judge proposal.judgment` reads it. */
 export interface Input {
@@ -136,6 +136,7 @@ const share = (n: number, count: number): Share => ({ n, count, rate: ratio(coun
 const CATEGORIES: Category[] = ["good", "ephemeral", "duplicate", "stale"];
 const OUTCOMES: Outcome[] = ["accept", "reject", "defer", "unparseable", "error"];
 const BAD: Category[] = ["ephemeral", "duplicate", "stale"];
+const ORIGINS: Origin[] = ["real", "corpus", "hand-written"];
 
 /** The numbers of a run over the cases it counts (all but the errored): what the drain would have accepted, rejected and left pending. */
 export interface Metrics {
@@ -145,6 +146,8 @@ export interface Metrics {
   bad_accepted: Share;
   /** The same for each kind of bad. */
   by_category: Record<"ephemeral" | "duplicate" | "stale", Share>;
+  /** The same by where the bad case came from: the hand-written ones apart from those of a real run or a corpus. */
+  bad_by_origin: Record<Origin, Share>;
   /** Good promotions out of everything accepted. */
   precision: { value: number | null; accepted_good: number; accepted: number };
   /** Good promotions rejected: work lost. */
@@ -176,6 +179,10 @@ export function metrics(rows: Row[]): Metrics {
     const mine = bad.filter((r) => r.category === c);
     return [c, share(mine.length, accepted(mine))];
   })) as Metrics["by_category"];
+  const byOrigin = Object.fromEntries(ORIGINS.map((o) => {
+    const mine = bad.filter((r) => r.origin === o);
+    return [o, share(mine.length, accepted(mine))];
+  })) as Metrics["bad_by_origin"];
   const acceptedAll = accepted(counted);
   const left = (rs: Row[]) => rs.filter((r) => r.outcome === "defer" || r.outcome === "unparseable").length;
   const seconds = counted.map((r) => r.seconds).sort((a, b) => a - b);
@@ -189,6 +196,7 @@ export function metrics(rows: Row[]): Metrics {
     good_accepted: share(good.length, accepted(good)),
     bad_accepted: share(bad.length, accepted(bad)),
     by_category: byCategory,
+    bad_by_origin: byOrigin,
     precision: { value: ratio(accepted(good), acceptedAll), accepted_good: accepted(good), accepted: acceptedAll },
     good_rejected: share(good.length, good.filter((r) => r.outcome === "reject").length),
     defer_rate: { good: share(good.length, good.filter((r) => r.outcome === "defer").length), bad: share(bad.length, bad.filter((r) => r.outcome === "defer").length) },

@@ -34,7 +34,8 @@ export interface Captured {
 
 /**
  * The bundles the eval ships, one folder each under assets/bundle, with `memories/<name>.md` and `knowledge/<name>.md`. Each is promoted in a sandbox of its own, on top of the
- * knowledge library of the promotion eval, so that the notes a duplicate repeats are neighbours of its promotion alone.
+ * knowledge library of the promotion eval: `base` holds the good and bad memories, `dup` the good memories again with the notes that repeat them, so those notes are
+ * neighbours of the duplicates' promotions only (each duplicate also sees the other families' notes, as a library holds notes on other subjects).
  */
 export const BUNDLE = join(import.meta.dir, "..", "assets", "bundle");
 export const LIBRARY = join(import.meta.dir, "..", "..", "promotion", "assets", "library", "knowledge");
@@ -77,12 +78,14 @@ export async function capture(akmDir: string, bundle: string, withLibrary = true
       memoryByRef.set(`memories/${e.entry.name}`, { name: e.entry.name, filePath: e.filePath, description: e.entry.description ?? "", tags: e.entry.tags ?? [], stashDir: stash });
     }
     const cover = coverage.openKnowledgeCoverage(bundleId);
+    // Without the gate a duplicate the gate would skip reaches the judge, and every case would still look reachable.
+    if (!cover) throw new Error("consolidate's coverage gate did not open (no bundle or no index): a duplicate it would skip would reach the judge");
     const skips = new Map<string, string>();
     const warnings: string[] = [];
     const promoted: string[] = [];
     const ctx = {
       config: cfg, stashDir: stash, sourceRun: "drain-judge", target: writeSource.resolveWriteTarget(cfg), memoryByRef, promoted, promotedSourceRefs: new Set<string>(),
-      existingKnowledgeBodyHashes: consolidate.loadExistingKnowledgeBodyHashes(stash), ...(cover ? { coveringKnowledge: cover.find } : {}),
+      existingKnowledgeBodyHashes: consolidate.loadExistingKnowledgeBodyHashes(stash), coveringKnowledge: cover.find,
       promotionFailures: { count: 0 }, warnings, pushSkipReason: (_op: string, ref: string, reason: string) => skips.set(ref, reason),
     };
     try {
@@ -91,7 +94,7 @@ export async function capture(akmDir: string, bundle: string, withLibrary = true
         await consolidate.emitPromotionProposal({ op: "promote", ref, knowledgeRef: `knowledge/${memoryByRef.get(ref).name}`, reason: "", description: "", confidence: null }, ctx);
       }
     } finally {
-      cover?.close();
+      cover.close();
     }
     const pending = proposals.listProposals(stash, { status: "pending" }) as any[];
     const inputs = new Map<string, JudgmentInput>();

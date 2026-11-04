@@ -1,6 +1,6 @@
 ---
-description: "Status report on the TTY color stripping rollout for harborlight commands."
-evidence: User correction at 10:52:44; applied to moor.ts and unmoor.ts at 10:53:08.
+description: "harborlight paint() migration on 2026-10-14: 4 of 11 commands converted; dock, berth and the rest still call chalk directly."
+evidence: "Agent's grep for chalk calls in src/commands at 2026-10-14T09:41:12Z."
 type: memory
 updated: 2026-11-03
 generated:
@@ -14,4 +14,4 @@ provenance:
     - resource: claude:preference-11
 ---
 
-As of October 14, 2026, the migration to `src/util/tty.ts` is currently in the staging environment. The engineering lead, Sarah Chen, approved the initial phase rollout yesterday. We have successfully deployed the `paint` utility wrapper to 15% of the harborlight command suite. The remaining 85% of commands are still calling `chalk` directly, which poses a risk of color leakage in CI pipelines. The team is prioritizing the core CLI commands first. No commits have been merged to main yet. We are monitoring the `NO_COLOR` compliance metrics closely. If the staging tests pass by November 1st, we will proceed with the beta rollout to the internal developer group. The goal is to have 100% coverage before the Q4 release candidate. Current status: In Progress. Next milestone: Beta environment deployment.
+Progress on moving harborlight commands to `paint()` from `src/util/tty.ts`, checked on 2026-10-14: moor.ts, unmoor.ts, status.ts and list.ts are converted. Seven commands still call chalk directly, including dock.ts and berth.ts. The branch `tty-paint` is open as PR #88 and waits on review. With `NO_COLOR` set, CI logs still show escape codes from the unconverted commands.

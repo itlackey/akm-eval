@@ -1,14 +1,8 @@
 ---
-description: "Retired legacy method for Northgate invoice storage prior to 2026."
+description: "Northgate's paper invoice files in the basement."
 tags: [finance, archive]
 ---
 
-## Retired: Northgate Tape Archive Strategy
+# Northgate invoices, paper files
 
-**Status:** Retired on March 15, 2026.
-
-Previously, Northgate stored supplier invoices older than two years on physical magnetic tape archives. This approach required manual retrieval requests and incurred high latency for audit teams. The process was deemed inefficient due to hardware maintenance costs and slow access times during compliance checks.
-
-**Replacement:** This method was replaced by the **CloudVault Immutable Storage** system. CloudVault provides instant, secure, and scalable access to historical financial records without the physical constraints of tape media. All legacy tape data was migrated to CloudVault during the Q1 2026 infrastructure overhaul. This note is retained solely for historical reference regarding our previous data retention protocols.
-
-*See also: Current Northgate invoice archive documentation.*
+Northgate supplier invoices used to be kept on paper in box files in the basement, one box per supplier per year, and were shredded after seven years. The boxes were retired in 2026 when invoices moved to the archive share.

@@ -1,12 +1,8 @@
 ---
-description: "Retired manual booking system for the Oldcastle ferry"
+description: "The chartered boat that once took staff to the Oldcastle island site."
 tags: [travel, ferry]
 ---
 
-## Retired: Manual Ferry Booking Process
+# Oldcastle crossing, before the ferry
 
-**Status:** Retired on 2026-03-15
-
-Previously, staff managed ferry reservations via a legacy internal portal. This approach required manual entry of passenger details and was prone to synchronization errors during peak hours. The system lacked real-time capacity updates, leading to frequent overbooking incidents and customer dissatisfaction.
-
-**Replacement:** The team migrated to the **AutoFerry Integration API**. This new approach automates seat allocation, syncs instantly with the travel app, and handles wind-force cancellations dynamically. The old portal was decommissioned to reduce maintenance overhead and improve data accuracy. This note is retained solely for historical reference regarding the transition from manual to automated scheduling systems.
+Staff once reached the island site on a boat chartered by the day, booked by email to the boatman, with one crossing each way. The charter was retired in 2026 when the staff ferry started its three daily runs.

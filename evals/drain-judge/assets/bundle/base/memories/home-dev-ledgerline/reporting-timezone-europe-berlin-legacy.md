@@ -1,6 +1,6 @@
 ---
-description: "Retired note on using UTC for business metrics before switching to Berlin timezone."
-evidence: User instruction at 16:10:22
+description: "Ledgerline reports took day and month boundaries in UTC until October 2026."
+evidence: "User instruction at 16:10:22, replacing the earlier convention."
 type: memory
 updated: 2026-11-03
 generated:
@@ -14,4 +14,4 @@ provenance:
     - resource: claude:preference-10
 ---
 
-HISTORY: This approach was retired on 2026-03-15. Previously, the team standardized all business metrics, including churn and revenue, around UTC to simplify global synchronization. Queries against `customers` and `invoices` tables used raw `timestamptz` values without explicit timezone casting, assuming application-layer conversion handled the offset. This caused frequent off-by-one errors during daylight saving transitions and cross-border reporting discrepancies. The team replaced this with the **Berlin-Anchored Standard**, which mandates explicit casting to `Europe/Berlin` for all financial date boundaries. This ensures consistent day definitions aligned with the primary operational hub, eliminating ambiguity in daily aggregation and preventing revenue leakage due to timezone misinterpretation. Keep this note for historical context only.
+Ledgerline's reporting queries used to take day and month boundaries in UTC, written as `date_trunc('month', created_at)` on the raw timestamps, and the dashboards labelled figures as UTC. That convention was retired in October 2026 when business reporting moved to Berlin time.

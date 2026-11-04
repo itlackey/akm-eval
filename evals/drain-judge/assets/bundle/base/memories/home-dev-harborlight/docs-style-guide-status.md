@@ -1,7 +1,6 @@
 ---
-description: "Status report on harborlight docs localization progress as of late October 2026."
-evidence: User's style correction at 2026-09-19T13:38:24Z and follow-up at
-  2026-09-19T13:39:03Z
+description: "Docs spelling pass in harborlight on 2026-09-19: guide/ done, reference/ still has 23 American spellings."
+evidence: "Agent's grep for American spellings under docs/ at 2026-09-19T13:45:10Z."
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,6 +14,4 @@ provenance:
     - resource: claude:preference-05
 ---
 
-As of October 28, 2026, the `harborlight` documentation migration to British English is 65% complete. The core `docs/guide/` directory has been updated to enforce sentence case headings and second-person address. Recent commits, including `a3f9c21`, addressed inconsistencies in the networking module, ensuring CLI flags like `--color` remain untouched while surrounding prose adopts `colour`. 
-
-Pending tasks include the `docs/api/` reference pages, which still contain American spellings. The team is currently blocked on verifying the `licence` vs `license` distinction in the legal section. We aim to merge the final localization branch by November 5. No new style rules have been introduced; the focus remains strictly on the existing mandate to eliminate filler words and standardize spelling across all markdown files.
+Docs style pass, 2026-09-19. `docs/guide/` has been converted to British spelling and sentence-case headings. `docs/reference/` still has 23 American spellings (mostly `color` and `behavior` in prose) and 6 title-case headings. The word `simply` is left in four files. The pass continues on the `docs-style` branch; nothing is merged yet.

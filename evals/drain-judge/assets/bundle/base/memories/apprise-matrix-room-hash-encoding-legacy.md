@@ -1,9 +1,9 @@
 ---
-description: "Retired note on the legacy regex-based alias escaping method for Matrix notifications."
+description: "Ops alerts used to go to Matrix through a curl script, notify-matrix.sh, before Apprise."
 captureMode: hot
 beliefState: asserted
 type: memory
 updated: 2026-09-16
 ---
 
-Prior to March 15, 2026, the team relied on a custom regex-based escaping function within `notify.sh` to handle special characters in Matrix room aliases. This approach manually replaced `#` with `%23` using a fragile pattern that failed on complex server names. It was retired because it did not account for other reserved URI characters, leading to intermittent delivery failures in edge cases. The team replaced this with a standardized URL encoding library call (`urllib.parse.quote`) that correctly handles all special characters automatically. This note is kept for historical reference only to document the migration path and the rationale behind adopting the robust library solution over the ad-hoc regex implementation.
+Deploy alerts were first sent to the ops Matrix room by `notify-matrix.sh`, a curl script that posted to the room's internal ID with a token kept in `/etc/notify/matrix.token`. It was retired in spring 2026 when notifications moved to Apprise, and the script and token file were removed from the deploy hosts.

@@ -1,7 +1,6 @@
 ---
-description: "Status report on quillmark PDF generation branch as of late October 2026"
-evidence: Initial `pdfinfo` output showing all boxes equal, and agent's
-  diagnosis before implementing the fix.
+description: "quillmark print PDF on 2026-10-09: TrimBox fix done for the cover, interior pages still fail preflight."
+evidence: "pdfinfo output for the interior file at 2026-10-09T10:12:44Z."
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,11 +14,4 @@ provenance:
     - resource: claude:insight-17
 ---
 
-## Status Report: quillmark PDF Writer
-**Date:** October 28, 2026
-**Branch:** `feat/fix-bleedbox-defaults`
-**Commit:** `a3f9c21`
-
-Current CI pipeline results indicate mixed stability regarding the BleedBox/TrimBox handling. Out of the last 15 automated runs, 12 passed and 3 failed. The failures are concentrated in the `preflight-integration` suite, specifically when testing edge-touching content against Adobe Acrobat Pro preflight profiles.
-
-The test suite confirms that omitting explicit `TrimBox` and `BleedBox` calls still defaults to `CropBox`, triggering the "TrimBox not set" rejection. However, manual verification shows that explicitly setting these boxes resolves the preflight errors. The CI failures suggest intermittent timeout issues in the PDF validation step, not logic errors. We are tracking 3 open issues related to this. Further testing is required to ensure consistent behavior across different PDF viewers before merging to main.
+Print job for the Harbour Lights book, 2026-10-09: the cover PDF now sets TrimBox and BleedBox and passes the printer's preflight. The interior file still fails with "TrimBox not set or equal to MediaBox" on 212 pages, because the page template does not call the box setters yet. Resubmission to the printer is planned for Friday.

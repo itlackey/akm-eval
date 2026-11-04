@@ -1,9 +1,9 @@
 ---
-description: "Investigation into Quarry app email deliverability issues post-migration."
+description: "Quarry reset emails on 2026-08-03: landing in spam at two providers since the mail switch."
 captureMode: hot
 beliefState: asserted
 type: memory
-updated: 2026-08-04
+updated: 2026-08-03
 ---
 
-2026-10-15 STATUS REPORT: Incident #4921 regarding Quarry app password reset emails landing in spam folders persists despite initial SPF fixes. We have ruled out DKIM misconfiguration and DMARC policy failures; signatures are valid and aligned. The issue appears isolated to two major providers who are aggressively filtering based on recent sending volume anomalies from the new provider. We are currently testing a gradual warm-up strategy, increasing daily send limits by 10% increments. Commit `a3f9c2b` updated the sending quotas, but logs show intermittent 550 errors during peak hours. Next, we will implement a dedicated IP pool for transactional mail to isolate reputation impact. Monitoring continues for any bounce rate spikes above 2%.
+2026-08-03, evening: since this morning's move to the new sending service, users at two large mail providers find password reset emails in spam. Support has 14 tickets. Deliverability checks are running on the new service; the old one stays available for a rollback until Friday.

@@ -1,5 +1,0 @@
----
-description: "Unescaped hash in Matrix alias caused silent notification failure due to URL fragment parsing."
----
-
-The `notify.sh` script failed to deliver alerts to the operations channel without raising any exceptions. Investigation revealed that the Apprise configuration contained a raw `#` character within the room alias: `matrixs://matrix.example.org/#ops-alerts:example.org`. Because the hash symbol initiates a URL fragment, the client ignored the room identifier entirely, resulting in no message being sent. The `--dry-run` flag proved insufficient for detection since it only validates configuration structure without transmitting data. To resolve this, the problematic character was percent-encoded to `%23`, yielding the corrected path `matrixs://matrix.example.org/%23ops-alerts:example.org`. Verification required dispatching an actual test message to the target room, as the dry-run mode cannot expose runtime transmission issues. This incident highlights the necessity of proper URL encoding for special characters in service endpoints to prevent silent failures in automated alerting systems.

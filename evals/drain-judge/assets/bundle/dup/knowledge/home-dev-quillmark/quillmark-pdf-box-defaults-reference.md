@@ -1,5 +1,0 @@
----
-description: "Addressing quillmark PDF generation defaults to prevent preflight errors by explicitly defining box dimensions."
----
-
-The quillmark library automatically assigns the CropBox value to both BleedBox and TrimBox properties if the developer does not provide specific instructions. This automatic behavior leads to significant issues during the print preflight stage. Industry-standard validation tools detect this configuration as an error, specifically reporting that the TrimBox is either missing or identical to the MediaBox. Consequently, any document containing content that touches the page edges will be rejected by these automated systems. To ensure successful printing workflows, it is mandatory to manually define both the TrimBox and BleedBox parameters. Developers must avoid relying on the default behavior when the final output is intended for physical production. Explicitly setting these values ensures that the PDF structure meets professional printing requirements and avoids rejection by preflight software.

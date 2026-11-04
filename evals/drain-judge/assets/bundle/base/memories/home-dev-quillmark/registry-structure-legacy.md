@@ -1,7 +1,6 @@
 ---
-description: "Retired font loading approach using glob patterns"
-evidence: Agent's implementation at 2026-09-22T10:48:31Z and user's initial
-  request at 2026-09-22T10:48:25Z.
+description: "quillmark's old font handling: a fixed list of three embedded fonts in fonts.go."
+evidence: "User's initial request at 2026-09-22T10:48:25Z, which described the old font list."
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,4 +14,4 @@ provenance:
     - resource: claude:preference-06
 ---
 
-Prior to 2026, the font system relied on a `GlobLoader` that scanned directories using wildcard patterns instead of explicit iteration. This approach was deprecated on March 15, 2026, due to performance bottlenecks with large font collections and security concerns regarding unintended file inclusion. The team replaced it with the current `Registry` struct and `LoadDir` method, which provides deterministic, safe, and efficient font discovery. This note is retained solely for historical reference to document the architectural shift from pattern-based scanning to explicit directory traversal. Developers should no longer use the old `GlobLoader` interface, as it has been completely removed from the codebase. The new system ensures consistent behavior across different operating systems and reduces memory overhead during initialization.
+quillmark used to know only three fonts, embedded with `go:embed` and listed in a switch in `internal/fonts/fonts.go`; a family name not in the switch fell back to the first one. That list was replaced in September 2026 by the font Registry, and `fonts.go` was deleted.

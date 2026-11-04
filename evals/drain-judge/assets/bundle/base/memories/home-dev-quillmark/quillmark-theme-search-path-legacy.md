@@ -1,7 +1,6 @@
 ---
-description: "Retired legacy theme loading mechanism using environment variables"
-evidence: agent running `go run ./cmd/quill themes list -v` at
-  ts=2026-10-10T14:00:11Z and documenting at ts=2026-10-10T14:00:21Z
+description: "quillmark once read custom themes only from a themes_dir setting in quill.toml."
+evidence: "agent's look at the old config loader at ts=2026-10-10T13:58:40Z"
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,6 +14,4 @@ provenance:
     - resource: claude:buried-08
 ---
 
-Prior to 2026, Quillmark relied on the `QUILLMARK_THEME_PATH` environment variable to locate custom themes. This approach was deprecated because it made theme resolution unpredictable across different deployment environments and CI pipelines, where environment variables were often inconsistent or forgotten.
-
-On March 15, 2026, the team retired this method in favor of the **Hierarchical File System** approach. The new system strictly searches local directories (`./themes/`) and user config paths (`~/.config/quillmark/themes/`) in a defined order, ensuring deterministic behavior without external dependencies. This change simplified configuration management and aligned with standard Unix-like path resolution patterns, eliminating the need for manual environment setup by users.
+Earlier quillmark versions loaded custom themes only from the folder named by `themes_dir` in `quill.toml`, and a theme with a built-in's name was refused. The `themes_dir` setting was removed in 2026 when themes moved to a search path.

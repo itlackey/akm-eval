@@ -1,6 +1,6 @@
 ---
-description: "Status report on implementing the concise test failure reporting convention"
-evidence: User correction at 2026-09-28T21:09:36Z
+description: "quillmark test run on 2026-09-28: 4 failing tests in internal/render, 2 fixed so far."
+evidence: "User correction at 2026-09-28T21:09:36Z and the agent's next test run."
 type: memory
 updated: 2026-11-03
 generated:
@@ -14,23 +14,4 @@ provenance:
     - resource: claude:preference-03
 ---
 
-## Status: Test Failure Reporting Refactor
-
-**Date:** November 12, 2026
-
-**Progress:** 3 of 5 items completed.
-
-- [x] Updated CI pipeline configuration to strip verbose logs.
-- [x] Defined regex pattern for extracting first assertion error.
-- [x] Created unit tests for the new parser logic.
-- [ ] Integrate parser into the main test runner script.
-- [ ] Update developer documentation with the new convention.
-
-**Next Step:**
-Merge the parser module into the core test runner. Ensure backward compatibility with existing test suites before full rollout.
-
-**Recent Commit:**
-`a1b2c3d` - feat: add assertion error extraction logic
-
-**Blockers:**
-None. Waiting for code review on the parser module.
+Test status, 2026-09-28 21:15: `go test ./...` has four failures, all in `internal/render`. TestResolveTheme and TestPageBreaks are fixed on the working tree; TestFootnoteFlow and TestWidowControl still fail on their first assertion. Nothing is committed yet.

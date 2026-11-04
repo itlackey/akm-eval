@@ -1,5 +1,0 @@
----
-description: "Analysis of a runtime failure caused by premature removal of a dynamically referenced legacy function."
----
-
-The deletion of the `export_legacy_csv` routine triggered a critical failure in the automated nightly build process. Although initial codebase scans and unit tests suggested the change was harmless, the production environment relied on dynamic configuration to instantiate handlers. Specifically, the system constructs handler keys using the format `handlers[f"export_{fmt}"]`. Because the production configuration file still specified `fmt: legacy_csv`, the runtime lookup failed with a `KeyError`. The test suite had missed this edge case because it only validated `csv` and `json` formats, omitting the legacy variant. Restoring the original function resolved the immediate issue. This incident highlights a vital lesson for refactoring: when dealing with functions whose names are generated via patterns, developers must search for the pattern's prefix and inspect configuration files, rather than relying solely on static code references to the full function name.

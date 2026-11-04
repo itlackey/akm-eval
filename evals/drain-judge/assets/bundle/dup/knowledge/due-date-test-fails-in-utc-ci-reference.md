@@ -1,5 +1,0 @@
----
-description: "Resolving timezone discrepancies between local development environments and CI pipelines by standardizing the TZ environment variable."
----
-
-The `formatDueDate` unit test exhibited inconsistent behavior across different execution contexts. While it succeeded on all team members' machines, it failed within the continuous integration pipeline. The root cause was a mismatch in time zone handling: the function relies on the system's local time, whereas the CI environment operates in Coordinated Universal Time (UTC). Specifically, the test input `2026-09-30T23:30:00Z` represents October 1st in the Europe/Lisbon time zone (which is UTC+1 during summer) but remains September 30th in UTC. This caused the CI output to differ from the expected local result. To fix this, the `TZ` environment variable was explicitly set to `UTC` in the test script defined within `package.json`. This alignment ensured that both local and remote environments processed the timestamp identically. Consequently, the expected test output was updated to reflect the UTC-based date, resolving the failure.

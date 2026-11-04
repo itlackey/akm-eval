@@ -1,6 +1,6 @@
 ---
-description: "Status update on implementing the strict PR review format enforcement tool."
-evidence: User correction at 09:06:45
+description: "Review of harborlight PR #91 on 2026-10-08: 2 blockers open, author has fixed 3 of 5 findings."
+evidence: "Agent's review pass at 2026-10-08T09:30:02Z."
 type: memory
 updated: 2026-11-03
 generated:
@@ -14,20 +14,4 @@ provenance:
     - resource: claude:preference-08
 ---
 
-## PR Review Enforcer - Status Report
-**Date:** November 12, 2026
-
-We are currently building the CLI tool to automate the strict review format. The goal is to parse PR comments and flag deviations from the `path:line severity: problem` standard.
-
-**Progress Checklist:**
-- [x] Define JSON schema for valid review entries
-- [x] Implement parser for `blocker`, `major`, and `nit` levels
-- [ ] Add regex validation for path and line number formats
-- [ ] Create unit tests for edge cases
-- [ ] Draft documentation for contributors
-
-**Current Status:** 2 of 5 items complete. The parser logic is functional but lacks robust path validation.
-
-**Next Step:** Implement the regex validator for file paths and line numbers to ensure strict adherence to the format before moving to testing.
-
-Commit: `a1b2c3d`
+Review state of PR #91 (berth sync retries) on 2026-10-08: five findings were posted, two of them blockers in `src/sync/berth.ts`. The author has pushed fixes for three; both blockers are still open. CI is red on the lint job. Re-review is due once the author asks for it.

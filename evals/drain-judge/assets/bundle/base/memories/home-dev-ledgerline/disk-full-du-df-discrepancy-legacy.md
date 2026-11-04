@@ -1,7 +1,6 @@
 ---
-description: "Retired method for reclaiming disk space from deleted open files using process signals."
-evidence: agent's diagnostic step at 2026-09-16T07:41:34 and lsof command at
-  2026-09-16T07:41:36
+description: "The old disk-full runbook for ledger hosts, which said to delete the largest logs found by du."
+evidence: "agent's reading of runbooks/disk-full.md at 2026-09-16T07:39:50"
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,4 +14,4 @@ provenance:
     - resource: claude:insight-07
 ---
 
-Prior to 2026, the team relied on sending the `SIGUSR1` signal to application processes to trigger log rotation or file descriptor closure, thereby releasing space held by deleted files. This approach was deemed unreliable because it required specific application support and often led to race conditions or incomplete releases. On March 15, 2026, this method was officially retired due to its fragility and lack of standardization across diverse services. It has been replaced by the `lsof`-based identification and direct truncation via `/proc/<pid>/fd/<fd>` approach, which provides immediate and deterministic space reclamation without depending on application-specific signal handling. This note is retained solely for historical reference to document the evolution of our disk space management strategies.
+The ledger hosts' disk-full runbook used to say: run `du -ah /var/log | sort -h | tail`, delete the largest log files, and rerun `df`. It did not mention files held open by running processes. The runbook was replaced in September 2026, and `runbooks/disk-full.md` now only points to the new one.

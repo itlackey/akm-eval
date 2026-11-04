@@ -1,7 +1,6 @@
 ---
-description: "Status report on Ledgerline data migration patch rollout"
-evidence: User confirmation at 2026-10-05T15:15:19.000Z; agent's magnitude
-  analysis at 2026-10-05T15:13:56.000Z.
+description: "Ledgerline payment validation on 2026-10-05: cents fix written, three 2024 rows still off."
+evidence: "Agent's validation run at 2026-10-05T15:20:44.000Z."
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,4 +14,4 @@ provenance:
     - resource: claude:buried-02
 ---
 
-As of November 12, 2026, the hotfix for the Ledgerline Amount column unit shift is currently in the staging environment. The patch, committed in `a3f9c2b`, implements the conditional division logic for pre-2025-03-01 records. We have successfully validated the cleaning script against a sample of 50,000 legacy rows, confirming that the cents-to-dollars conversion no longer triggers financial validation errors. However, the rollout to production is paused pending final sign-off from the Finance Operations lead, Sarah Jenkins. The team is waiting for her approval to proceed with the full deployment. Once approved, we will roll out the fix to 100% of users, ensuring all historical data aligns with current reporting standards. No further technical blockers remain.
+Payments validation, 2026-10-05: the cleaning script now divides pre-2025-03-01 amounts by 100. 2025 totals match Finance. Three 2024 rows still differ, all refunds with negative amounts; the check against Finance's ledger is being rerun with them excluded. The change is not committed yet.

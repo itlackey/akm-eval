@@ -1,7 +1,6 @@
 ---
-description: "Status update on harborlight commit convention enforcement ticket"
-evidence: User's explicit instruction at 2026-09-23T13:23:30.000Z after the
-  agent's initial non-conventional commit.
+description: "Commit clean-up on the harborlight branch feature/berth-sync, 2026-10-02: 6 of 9 commits reworded."
+evidence: "Agent's `git log --oneline` at 2026-10-02T14:20:05Z."
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,17 +14,4 @@ provenance:
     - resource: claude:preference-01
 ---
 
-## Status Report: HBL-892
-
-**Date:** November 14, 2026
-
-The pull request #445 for the harborlight repository is currently blocked. The team is waiting on @sarah_dev to approve the linting configuration changes in commit `a3f9c21`.
-
-We have updated the CI pipeline to strictly enforce the conventional commit format, including the `Refs:` footer requirement. However, the merge is stalled because the automated checks are failing on legacy branches that do not adhere to the new ≤60 character subject line rule.
-
-Action items:
-1. Sarah to review the linting config.
-2. DevOps to backfill missing `Refs:` tags for existing tickets.
-3. Re-run the pipeline once approvals are granted.
-
-This update reflects the current state of the enforcement effort as of today. The policy remains unchanged.
+On 2026-10-02 the branch `feature/berth-sync` had nine commits that did not follow the conventional format. Six have been reworded with a rebase so far; the last three (a1f93c2, 7be0d41, 0c22e9f) still have capitalised subjects and no `Refs: HBL-417` footer. The branch is not to be pushed until the rebase is finished.

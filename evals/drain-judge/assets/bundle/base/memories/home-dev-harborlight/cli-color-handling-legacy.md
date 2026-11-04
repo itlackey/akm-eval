@@ -1,6 +1,6 @@
 ---
-description: "Retired direct chalk usage in harborlight commands before adopting TTY-aware wrappers."
-evidence: User correction at 10:52:44; applied to moor.ts and unmoor.ts at 10:53:08.
+description: "harborlight's old colour switch: a global chalk.level setting in cli.ts, removed when the tty helper came in."
+evidence: "User's explanation at 10:51:30 of how colour was handled before the tty helper."
 type: memory
 updated: 2026-11-03
 generated:
@@ -14,6 +14,4 @@ provenance:
     - resource: claude:preference-11
 ---
 
-Prior to March 15, 2026, the harborlight team directly imported and invoked `chalk` functions within command handlers. This approach allowed for immediate color application but failed to respect environment variables like `NO_COLOR` or handle piped stdout correctly, leading to ANSI escape codes appearing in logs where they were unwanted.
-
-This method was officially retired on March 15, 2026. The team replaced it with the `paint` utility from `src/util/tty.ts`. This new approach ensures that color codes are conditionally applied based on the terminal's capabilities and environment settings. All existing commands were refactored to use `paint(chalk.fn, msg)` instead of direct chalk calls, ensuring consistent and compliant output behavior across all execution contexts. This note is retained for historical reference only.
+Before `src/util/tty.ts` existed, harborlight turned colour off by setting `chalk.level = 0` in `cli.ts` when `--no-color` was passed, and each command called chalk directly. Piped output and `NO_COLOR` were not checked. This was retired when the `paint()` wrapper was added, and the `--no-color` handling in `cli.ts` was deleted with it.

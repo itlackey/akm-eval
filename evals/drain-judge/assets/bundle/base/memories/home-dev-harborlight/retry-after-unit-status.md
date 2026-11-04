@@ -1,7 +1,6 @@
 ---
-description: "Investigation into Pelican API rate-limiting discrepancy"
-evidence: agent's curl verification at 2026-09-29T15:13:55 and realization at
-  2026-09-29T15:14:04
+description: "Pelican sync rate-limit incident on 2026-09-29: sync stopped, patch to the backoff in review."
+evidence: "agent's curl verification at 2026-09-29T15:13:55"
 type: memory
 updated: 2026-11-03
 generated:
@@ -15,4 +14,4 @@ provenance:
     - resource: claude:insight-04
 ---
 
-2026-11-04: Incident #8921 regarding sync timeouts persists. Initial hypothesis that the `Retry-After` header was misinterpreted as seconds has been ruled out; logs confirm the value `1500` was correctly parsed as milliseconds, yet the sleep duration remained excessive. We suspected a clock skew issue between our load balancer and Pelican’s edge nodes, but NTP sync checks show <5ms drift. Current focus is on the connection pool implementation. We are testing a patch (commit `a3f9c21`) that forces TCP keep-alives to prevent idle connection resets triggering false 429s. If this fails, we will escalate to Pelican support with raw packet captures to determine if their rate limiter is stateful across connections.
+Pelican sync, 2026-09-29 15:20: the sync job is stopped after it slept 25 minutes on one 429. The patch that stops multiplying `Retry-After` by 1000 is on branch `fix/pelican-backoff`, commit 4c9e1a7, waiting for review. Vendor support ticket PEL-2291 about their docs is open with no reply. The job will be restarted after the patch is deployed.

@@ -1,23 +1,9 @@
 ---
-description: "Status report on Quillfeather Press backlog audit script refactoring"
+description: "Quillfeather Press backlog audit on 2026-07-21: 30 open issues counted, total in doubt."
 captureMode: hot
 beliefState: asserted
 type: memory
-updated: 2026-07-22
+updated: 2026-07-21
 ---
 
-## Quillfeather Press Audit Refactor - Status Report
-**Date:** November 12, 2026
-
-**Progress:** 2 of 4 items completed.
-
-- [x] Identified root cause: `gh issue list` default limit of 30 was truncating counts.
-- [x] Updated local script to pass `--limit 200` for accurate counting.
-- [ ] Added error handling to fail if results equal the limit (indicating further truncation).
-- [ ] Applied same fix to `gh pr list` logic.
-
-**Next Step:** Implement the truncation check logic. If `len(results) == limit`, exit with code 1 and a warning. This ensures we don't silently miss issues in larger repositories.
-
-**Commit:** `a1b2c3d`
-
-**Note:** This is a temporary status update. The final durable note will consolidate the lesson about CLI defaults.
+Backlog audit, 2026-07-21: the audit script reports 30 open issues for Quillfeather Press, 12 of them older than six months. The tracker's own counter shows more, so the number is being checked before it goes in the quarterly report due Friday.
