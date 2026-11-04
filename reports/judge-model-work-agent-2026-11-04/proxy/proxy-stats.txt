@@ -1,0 +1,6 @@
+pr_harness calls 567 prompt_tok 3766 compl_tok 78 sysChars 447 .. 447 ms 4396 temps 0 tools 0
+pr_conn calls 564 prompt_tok 3228 compl_tok 70 sysChars 33 .. 33 ms 3806 temps 0 tools 0
+main_harness_main calls 566 prompt_tok 5573 compl_tok 78 sysChars 8911 .. 8911 ms 8770 temps 0 tools 0
+main_harness_title calls 634 prompt_tok 3704 compl_tok 53 sysChars 2096 .. 2096 ms 5677 temps 0.5 tools 0
+other calls 0 prompt_tok 0 compl_tok 0 sysChars  .. -Infinity ms 0 temps  tools 
+probes 3

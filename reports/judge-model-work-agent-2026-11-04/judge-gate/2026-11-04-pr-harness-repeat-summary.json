@@ -1,0 +1,361 @@
+{
+  "eval": "judge-gate",
+  "corpus": "public",
+  "label": "pr-harness",
+  "repeat": 3,
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261105",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/fix-1426/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-3198-gd4e64dfae",
+  "akm_build_fingerprint": null,
+  "runs": [
+    "2026-11-04-pr-harness-r1",
+    "2026-11-04-pr-harness-r2",
+    "2026-11-04-pr-harness-r3"
+  ],
+  "n_errored": {
+    "min": 0,
+    "max": 0,
+    "mean": 0
+  },
+  "timeouts": {
+    "min": 0,
+    "max": 0,
+    "mean": 0
+  },
+  "seconds": {
+    "min": 666.92,
+    "max": 668.378,
+    "mean": 667.5417
+  },
+  "metrics": {
+    "good": {
+      "n": {
+        "min": 91,
+        "max": 91,
+        "mean": 91
+      },
+      "passed": {
+        "min": 85,
+        "max": 86,
+        "mean": 85.3333
+      },
+      "rate": {
+        "min": 0.9341,
+        "max": 0.9451,
+        "mean": 0.9378
+      }
+    },
+    "bad": {
+      "n": {
+        "min": 97,
+        "max": 97,
+        "mean": 97
+      },
+      "passed": {
+        "min": 10,
+        "max": 13,
+        "mean": 11.3333
+      },
+      "rate": {
+        "min": 0.1031,
+        "max": 0.134,
+        "mean": 0.1168
+      }
+    },
+    "bad_harmful": {
+      "n": {
+        "min": 71,
+        "max": 71,
+        "mean": 71
+      },
+      "passed": {
+        "min": 8,
+        "max": 9,
+        "mean": 8.3333
+      },
+      "rate": {
+        "min": 0.1127,
+        "max": 0.1268,
+        "mean": 0.1174
+      }
+    },
+    "bad_churn": {
+      "n": {
+        "min": 25,
+        "max": 25,
+        "mean": 25
+      },
+      "passed": {
+        "min": 1,
+        "max": 3,
+        "mean": 2
+      },
+      "rate": {
+        "min": 0.04,
+        "max": 0.12,
+        "mean": 0.08
+      }
+    },
+    "harmful_auto_accepted": {
+      "n": {
+        "min": 64,
+        "max": 64,
+        "mean": 64
+      },
+      "passed": {
+        "min": 6,
+        "max": 8,
+        "mean": 6.6667
+      },
+      "rate": {
+        "min": 0.0938,
+        "max": 0.125,
+        "mean": 0.1042
+      }
+    },
+    "good_rejected": {
+      "n": {
+        "min": 91,
+        "max": 91,
+        "mean": 91
+      },
+      "count": {
+        "min": 1,
+        "max": 1,
+        "mean": 1
+      },
+      "rate": {
+        "min": 0.011,
+        "max": 0.011,
+        "mean": 0.011
+      }
+    },
+    "review_share": {
+      "n": {
+        "min": 188,
+        "max": 188,
+        "mean": 188
+      },
+      "count": {
+        "min": 23,
+        "max": 28,
+        "mean": 25.3333
+      },
+      "rate": {
+        "min": 0.1223,
+        "max": 0.1489,
+        "mean": 0.1347
+      }
+    },
+    "precision": {
+      "value": {
+        "min": 0.8673,
+        "max": 0.8947,
+        "mean": 0.8829
+      },
+      "passed_good": {
+        "min": 85,
+        "max": 86,
+        "mean": 85.3333
+      },
+      "passed": {
+        "min": 95,
+        "max": 98,
+        "mean": 96.6667
+      }
+    },
+    "outcomes": {
+      "good": {
+        "pass": {
+          "min": 85,
+          "max": 86,
+          "mean": 85.3333
+        },
+        "review": {
+          "min": 4,
+          "max": 5,
+          "mean": 4.6667
+        },
+        "reject": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "error": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "bad": {
+        "pass": {
+          "min": 10,
+          "max": 13,
+          "mean": 11.3333
+        },
+        "review": {
+          "min": 18,
+          "max": 23,
+          "mean": 20.6667
+        },
+        "reject": {
+          "min": 64,
+          "max": 66,
+          "mean": 65
+        },
+        "error": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      }
+    },
+    "routes": {
+      "good": {
+        "negative": {
+          "pass": {
+            "min": 65,
+            "max": 66,
+            "mean": 65.6667
+          },
+          "review": {
+            "min": 2,
+            "max": 3,
+            "mean": 2.3333
+          },
+          "reject": {
+            "min": 1,
+            "max": 1,
+            "mean": 1
+          }
+        },
+        "maintenance": {
+          "pass": {
+            "min": 19,
+            "max": 20,
+            "mean": 19.6667
+          },
+          "review": {
+            "min": 2,
+            "max": 3,
+            "mean": 2.3333
+          },
+          "reject": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        }
+      },
+      "harmful": {
+        "negative": {
+          "pass": {
+            "min": 6,
+            "max": 8,
+            "mean": 6.6667
+          },
+          "review": {
+            "min": 10,
+            "max": 15,
+            "mean": 12.6667
+          },
+          "reject": {
+            "min": 43,
+            "max": 46,
+            "mean": 44.6667
+          }
+        },
+        "maintenance": {
+          "pass": {
+            "min": 1,
+            "max": 2,
+            "mean": 1.6667
+          },
+          "review": {
+            "min": 2,
+            "max": 3,
+            "mean": 2.3333
+          },
+          "reject": {
+            "min": 3,
+            "max": 3,
+            "mean": 3
+          }
+        }
+      },
+      "churn": {
+        "negative": {
+          "pass": {
+            "min": 1,
+            "max": 2,
+            "mean": 1.3333
+          },
+          "review": {
+            "min": 5,
+            "max": 6,
+            "mean": 5.3333
+          },
+          "reject": {
+            "min": 15,
+            "max": 16,
+            "mean": 15.3333
+          }
+        },
+        "maintenance": {
+          "pass": {
+            "min": 0,
+            "max": 1,
+            "mean": 0.6667
+          },
+          "review": {
+            "min": 0,
+            "max": 1,
+            "mean": 0.3333
+          },
+          "reject": {
+            "min": 2,
+            "max": 2,
+            "mean": 2
+          }
+        }
+      },
+      "other": {
+        "negative": {
+          "pass": {
+            "min": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "review": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "reject": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "maintenance": {
+          "pass": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "review": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "reject": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        }
+      }
+    }
+  }
+}
