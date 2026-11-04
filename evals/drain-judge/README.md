@@ -19,16 +19,16 @@ Traced in akm `src/commands/proposal/drain.ts` (`runJudgmentTier`, `buildJudgmen
 The cases are what akm's own code builds, not text written for the eval (`src/capture.ts`):
 
 1. **Memories.** akm's extract (`akm proposal extract`, the model under test as its engine) ran on the extract eval's sessions that hold something to keep, and each memory it queued was accepted into a bundle (`src/memories.ts`). The memories carry the frontmatter extract stamps.
-2. **Bad sources.** The real extract run produces no status snapshot, no retired approach and no restated note, so a model (`src/variants.ts`) rewrote each real memory as a status snapshot (`ephemeral`), as a note about an approach since retired (`stale`), and as a reference note in other words (the knowledge note a `duplicate` repeats). Those cases are marked `constructed`.
+2. **Bad sources.** The real extract run produces no status snapshot, no retired approach and no restated note, so for each good memory three notes were written by hand, in the style and length of the memories extract writes and with the source memory's frontmatter: a status report of work on its subject on a date (`ephemeral`), a note about an earlier approach on its subject that has since been retired (`stale`), and a knowledge note that says what the memory says in other words (the note a `duplicate` repeats, short enough that the judge's 300-character excerpt holds most of it). Those cases are marked `hand-written`, and the summary reports their bad accepted apart from the real and corpus ones (`bad_by_origin`). One real memory is bad: it describes a bug that the same session fixed (`assets/ADJUDICATION.md`).
 3. **The promotion.** `capture.ts` puts a bundle in an akm sandbox on top of the 83 knowledge notes of the promotion eval, indexes it with akm's own embedder (bge-small-en-v1.5), and calls consolidate's `emitPromotionProposal` for every memory, with the coverage gate on, then `drainProposals` of the akm under test with the judge's `run` replaced by a recorder. What the recorder sees is the judge's input as the drain builds it: the live asset, the siblings and the five nearest notes included. Not modelled: consolidate's planner (a model that chooses which memories to promote; here each memory is a candidate and the description is the memory's own), and promotions accepted earlier in the same drain.
 4. **Reachability.** `bun evals/drain-judge/src/reachable.ts --akm DIR` runs step 3 again with the akm checkout `DIR` and compares every case's input with what that akm builds (the `updated:` date akm stamps with the day of the run is left out). A case whose promotion akm no longer mints or sends to the judge is retired to `assets/retired.jsonl`, with the reason; `--rebuild` also writes the new input into a case that changed. `AKM_CHECKOUT=DIR bun test evals/drain-judge/src/reachable.test.ts` runs the same check as a test.
 
-To make the set again (a model server for steps 1 and 2; steps 3 and 4 need only the akm checkout):
+To make the set again (a model server for step 1; steps 3 and 4 need only the akm checkout):
 
 ```
 bun evals/drain-judge/src/memories.ts --model ID --akm "bun ~/code/akm/src/cli.ts"   # 1. real memories, from extract
 bun evals/drain-judge/src/sources.ts                                                   #    memories of other evals' corpora
-bun evals/drain-judge/src/variants.ts --model ID --bases 58                            # 2. the constructed bad kinds
+                                                                                       # 2. the hand-written notes are in assets/bundle (sources.json says which)
 bun evals/drain-judge/src/build.ts --akm ~/code/akm                                    # 3. inputs, labels, held-out part, retired cases
 bun evals/drain-judge/src/reachable.ts --akm ~/code/akm                                # 4. check
 ```
@@ -47,7 +47,7 @@ evals/drain-judge/run --cases ~/notes/drain-judge        # a folder with a cases
 
 `--limit N` takes the cases in turn from good, ephemeral, duplicate and stale. `--config-patch` changes the akm config the eval writes. `--concurrency N` sets how many cases run at a time (default 1, all through one akm sandbox) and `--timeout-ms N` how many milliseconds akm gets for one (default 900000, 15 minutes). `--semantic` changes nothing the judge reads: the input is frozen. There is no rewrite (`--corpus custom` is `--cases DIR` only) and no `--strategy`: the judge runs on the default connection. It runs on a connection only; a harness run needs the harness isolation of #153, which is not built.
 
-The model must return one JSON object when asked: `{"decision": "accept" | "reject" | "defer", "reason": ...}`. A case is about 1.1k tokens in. The eval sets temperature 0 and thinking off; on the shredder gateway the model reasons anyway (about 1.1k tokens a call, a few seconds). The held-out part is `assets/heldout.jsonl`: copy it to `cases.jsonl` in a folder of its own and run `--cases` on that folder, to confirm a decision.
+The model must return one JSON object when asked: `{"decision": "accept" | "reject" | "defer", "reason": ...}`. A case is about 1.1k tokens in. The eval sets temperature 0 and `enableThinking: false`, which does not reach every gateway: on shredder's the model reasons unless the run passes `--config-patch FILE` with `{"engines":{"judge":{"reasoningEffort":"none"}}}`. With it, a 10-case smoke of qwen3.6-35b-a3b took about 57 completion tokens and under a second a call. The held-out part is `assets/heldout.jsonl`: copy it to `cases.jsonl` in a folder of its own and run `--cases` on that folder, to confirm a decision.
 
 ## How a case is scored
 
@@ -67,7 +67,7 @@ The case's `input` goes to `akm judge proposal.judgment` as it is, and akm's ver
 
 | Metric | Meaning |
 |---|---|
-| `bad_accepted` | bad promotions accepted, out of the bad ones scored. The harm number: what the drain would write with no one looking. `by_category` splits it into `ephemeral`, `duplicate` and `stale` |
+| `bad_accepted` | bad promotions accepted, out of the bad ones scored. The harm number: what the drain would write with no one looking. `by_category` splits it into `ephemeral`, `duplicate` and `stale`, and `bad_by_origin` into `real`, `corpus` and `hand-written`: most bad cases are hand-written, so read the corpus ones beside them |
 | `good_accepted` | good promotions accepted, out of the good ones. Promotion's `recall` |
 | `precision` | of everything accepted, the share that was good (`accepted_good` of `accepted`) |
 | `good_rejected` | good promotions rejected outright: work lost |
@@ -78,7 +78,7 @@ The case's `input` goes to `akm judge proposal.judgment` as it is, and akm's ver
 | `error_rate`, `unparseable_rate` | the shares of the cases run |
 | `seconds` | `mean`, `median` and `max` of one call, over the cases that did not error. akm reports no cost: tokens are in `model_calls` of the summary (null where akm reports none), and cost is unknown |
 
-One case is 2.2 points of `good_accepted` (1 of 45) and 2.2 points of `bad_accepted` in a category (1 of 45), so a gap of a case or two is noise. A change is worth keeping when `good_accepted` rises and `bad_accepted` does not; reruns of the same model differ by a few cases.
+One case is 2.2 points of `good_accepted` (1 of 45) and about 2 points of `bad_accepted` in a category (1 of 45 to 49), so a gap of a case or two is noise. A change is worth keeping when `good_accepted` rises and `bad_accepted` does not; reruns of the same model differ by a few cases.
 
 ## What the summary reports
 
@@ -88,7 +88,7 @@ One case is 2.2 points of `good_accepted` (1 of 45) and 2.2 points of `bad_accep
 
 - Compare runs only within a rubric version and a measurement version (`MEASUREMENT_CHANGELOG.md`). A run needs an akm whose `proposal.judgment` is at schemaVersion 1; `lib/judge.ts` refuses another before the first case.
 - The 54 held-out cases are not in a default run. Do not tune on them.
-- The bad cases are constructed (see `assets/README.md`, "Known limits"): read `bad_accepted` as what a judge lets through when the cue is in the text. A judge that reads the cue is the least a promotion judge should be.
+- 135 of the 139 scored bad cases are hand-written (see `assets/README.md`, "Known limits"); only 4 come from a corpus, and the one real bad memory is held out. Read `bad_accepted` with `bad_by_origin` beside it: it is what a judge lets through on notes written for the eval, not a rate on the drain's real backlog.
 - Results go to `evals/drain-judge/results/`.
 
 ## Licence

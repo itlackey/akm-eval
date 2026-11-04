@@ -24,12 +24,13 @@ describe("the assets README", () => {
 
   test("counts the sources", () => {
     const of = (set: string, category?: string) => all.filter((c) => c.set === set && (!category || c.category === category)).length;
-    expect(readme).toContain(`| \`extract-run\` (\`real\`) | ${of("extract-run")} good |`);
+    expect(readme).toContain(`| \`extract-run\` (\`real\`) | ${of("extract-run", "good")} good, ${of("extract-run", "ephemeral")} ephemeral |`);
     expect(readme).toContain(`| \`distill-corpus\` (\`corpus\`) | ${of("distill-corpus", "good")} good, ${of("distill-corpus", "ephemeral")} ephemeral |`);
     expect(readme).toContain(`| \`consolidate-pool\` (\`corpus\`) | ${of("consolidate-pool")} good |`);
-    expect(readme).toContain(`| \`constructed-duplicate\` (\`constructed\`) | ${of("constructed-duplicate")} |`);
-    expect(readme).toContain(`| \`constructed-ephemeral\`, \`constructed-stale\` (\`constructed\`) | ${of("constructed-ephemeral")} each |`);
-    expect(of("constructed-stale")).toBe(of("constructed-ephemeral"));
+    expect(readme).toContain(`| \`hand-written-duplicate\` (\`hand-written\`) | ${of("hand-written-duplicate")} |`);
+    expect(readme).toContain(`| \`hand-written-ephemeral\`, \`hand-written-stale\` (\`hand-written\`) | ${of("hand-written-ephemeral")} each |`);
+    expect(of("hand-written-stale")).toBe(of("hand-written-ephemeral"));
+    expect(readme).toContain(`${all.filter((c) => c.origin === "hand-written").length} of the ${all.filter((c) => c.label === "bad").length} bad cases are notes written for the eval`);
   });
 });
 
@@ -65,5 +66,12 @@ describe("every case", () => {
       expect(c.input.liveAsset).toBeUndefined();
       expect(JSON.stringify(c)).not.toContain("founder3");
     }
+  });
+  test("names no note by the kind it was written to be: the judge reads the refs", () => {
+    // The library's own notes (the promotion eval's) are left as they are.
+    const ours = new Set(Object.keys(JSON.parse(read("bundle/sources.json"))).filter((f) => f.startsWith("dup/knowledge/")).map((f) => f.replace(/^dup\//, "").replace(/\.md$/, "")));
+    const named = (ref: string) => /-(status|legacy|reference)$/.test(ref);
+    expect(all.filter((c) => named(c.input.proposal.ref) || (c.input.neighbours ?? []).some((n) => ours.has(n.ref) && named(n.ref))).map((c) => c.id)).toEqual([]);
+    expect(all.filter((c) => c.category === "duplicate" && !ours.has(c.input.neighbours?.[0]?.ref ?? "")).map((c) => c.id)).toEqual([]);
   });
 });

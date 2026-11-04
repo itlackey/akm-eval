@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BUNDLE, capture } from "./capture.ts";
 import { parseCases } from "./lib.ts";
@@ -36,5 +37,20 @@ describe.skipIf(!checkout)("the inputs are what akm's drain sends the judge", ()
     const got = new Map<string, Awaited<ReturnType<typeof capture>>["captured"][number]>();
     for (const group of new Set(cases.map((c) => c.bundle))) for (const c of (await capture(checkout as string, join(BUNDLE, group))).captured) got.set(`${c.bundle}/${c.memory}`, c);
     expect(cases.filter((c) => unreachable(c, got.get(`${c.bundle}/${c.memory}`)) !== null).map((c) => c.id)).toEqual([]);
+  }, 600_000);
+
+  test("the promote pass runs with consolidate's coverage gate: a memory a knowledge note already holds never reaches the judge", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "drain-judge-gate-"));
+    try {
+      const memory = readFileSync(join(BUNDLE, "base", "memories", "cron-backup-restic-not-found.md"), "utf8");
+      for (const sub of ["memories", "knowledge"]) mkdirSync(join(dir, sub));
+      writeFileSync(join(dir, "memories", "cron-backup-restic-not-found.md"), memory);
+      // Not the same body (that is the exact-hash check), but every five-word run of it.
+      writeFileSync(join(dir, "knowledge", "corbel-backup-notes.md"), `${memory.replace(/^---\n[\s\S]*?\n---\n/, "---\ndescription: Corbel wiki backup notes\n---\n")}\nThe backup bucket is in eu-west-1.\n`);
+      const { captured } = await capture(checkout as string, dir);
+      expect(captured).toEqual([{ bundle: captured[0]!.bundle, memory: "memories/cron-backup-restic-not-found", skipped: "dedup_covered_by_knowledge" }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }, 600_000);
 });

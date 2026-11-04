@@ -44,8 +44,8 @@ const describe = (note: string): string => {
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const IDENT = /`[^`]+`|\b[\w.-]*[0-9_/][\w./-]*\b|\b[A-Z][A-Za-z0-9]*[A-Z_][A-Za-z0-9_]*\b/g;
 const idents = (text: string): string[] => [...new Set((text.match(IDENT) ?? []).map((t) => t.replaceAll("`", "").toLowerCase()).filter((t) => t.length > 2))];
-const EPHEMERAL = /\b(as of|status|branch|commit|checklist|blocked|in progress|rollout|\d+ of \d+|[0-9a-f]{7,40})\b/i;
-const RETIRED_CUE = /\b(retired|replaced|superseded|deprecated|no longer|used to|decommissioned|sunset)\b/i;
+const EPHEMERAL = /\b(as of|status|branch|commit|checklist|blocked|in progress|rollout|\d+ of \d+|[0-9a-f]{7,40}|\d{4}-\d{2}-\d{2}|\d{1,2} (?:January|February|March|April|May|June|July|August|September|October|November|December)|week of|this (?:week|month|morning)|today|tonight|tomorrow|not yet|so far|waiting|pending|is open|paused|until then)\b/i;
+const RETIRED_CUE = /\b(retired|replaced|superseded|deprecated|no longer|used to|decommissioned|sunset|removed|dropped|ended|switched off|disabled|deleted)\b/i;
 
 /** The knowledge note a duplicate repeats, by the memory it was written from (its `from` in sources.json). */
 const referenceOf = (file: string): string | undefined => Object.entries(sources).find(([, s]) => s.kind === "reference" && s.from === file)?.[0];
@@ -115,8 +115,14 @@ for (const c of captured) {
     else if (ids.length > 0 && held.length / ids.length < 0.5) doubt = `the note holds ${held.length} of ${ids.length} identifiers`;
   }
   if (lab.reason) reason = lab.reason;
-  const id = `${lab.category}-${lab.family.replace(/[^a-z0-9]+/gi, "-").slice(0, 48)}`;
-  cases.push({ id, kind: "promotion", set: lab.set, origin: lab.origin, label: lab.category === "good" ? "good" : "bad", category: lab.category, labelReason: reason, memory: c.memory, bundle: c.bundle, family: lab.family, input: c.input, canary: CANARY });
+  // A memory relabelled bad shares its family with the hand-written notes made from it, so two cases of a category can share a family.
+  const slug = (s: string) => s.replace(/[^a-z0-9]+/gi, "-");
+  const id = `${lab.category}-${slug(lab.family).slice(0, 48)}`;
+  const own = (memory: string) => `${lab.category}-${slug(memory.replace(/^memories\//, "")).slice(0, 64)}`;
+  // Then both take their memory's own name, which keeps the plain id for the memory named like the family.
+  const twin = cases.find((x) => x.id === id);
+  if (twin) twin.id = own(twin.memory);
+  cases.push({ id: twin ? own(c.memory) : id, kind: "promotion", set: lab.set, origin: lab.origin, label: lab.category === "good" ? "good" : "bad", category: lab.category, labelReason: reason, memory: c.memory, bundle: c.bundle, family: lab.family, input: c.input, canary: CANARY });
   if (doubt) open.push(`${id}: ${doubt}`);
 }
 

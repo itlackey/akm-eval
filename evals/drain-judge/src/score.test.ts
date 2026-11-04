@@ -66,6 +66,12 @@ describe("metrics", () => {
     expect(onlyDeferred.bad_accepted).toEqual({ n: 2, count: 0, rate: 0 });
   });
 
+  test("bad accepted is split by where the case came from, so the hand-written cases do not hide the others", () => {
+    const from = (r: Row, origin: Row["origin"]): Row => ({ ...r, origin });
+    const split = metrics([from(row("ephemeral", "accept"), "corpus"), from(row("ephemeral", "reject"), "corpus"), from(row("stale", "reject"), "hand-written"), from(row("duplicate", "error"), "hand-written"), row("good", "accept")]);
+    expect(split.bad_by_origin).toEqual({ real: { n: 0, count: 0, rate: null }, corpus: { n: 2, count: 1, rate: 0.5 }, "hand-written": { n: 1, count: 0, rate: 0 } });
+  });
+
   test("the confusion matrix counts every row, errors included, and the rates count the failures", () => {
     expect(m.confusion.stale).toEqual({ accept: 0, reject: 1, defer: 0, unparseable: 1, error: 1 });
     expect(m.error_rate).toEqual({ n: 12, count: 1, rate: 0.0833 });

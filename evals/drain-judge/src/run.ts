@@ -41,6 +41,7 @@ function printSummary(s: Summary & Own): void {
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | rubric ${s.rubric_version} | ${s.n_run} of ${s.n_cases} cases`);
   line("bad accepted", cell(m.bad_accepted));
   for (const [c, r] of Object.entries(m.by_category)) line(`  ${c}`, cell(r));
+  for (const [o, r] of Object.entries(m.bad_by_origin)) if (r.n > 0) line(`  ${o}`, cell(r));
   line("good accepted", cell(m.good_accepted));
   line("good rejected", cell(m.good_rejected));
   line("precision", precisionCell(m));
