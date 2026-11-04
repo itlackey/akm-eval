@@ -5,10 +5,10 @@
 // A change to what this file asks akm, or to what it records of the answer, is a new version of the eval: change `version` in
 // measurement.ts by hand.
 
-import { type Sandbox, createSandbox, engineConfig, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, engineConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
-import { type JudgeEnvelope, callJudge } from "../../../lib/judge.ts";
+import { type JudgeEnvelope, callJudge, harnessOf, openJudgeSandbox } from "../../../lib/judge.ts";
 import { type Case, type Row, makeRow } from "./score.ts";
 
 export const NAME = "judge-gate";
@@ -46,12 +46,9 @@ export function judgeConfig(baseUrl: string, model: string, hasKey: boolean, str
 /** The config the eval writes: the judge config with the strategy of the overrides as the default, and the config patch, if any, merged into it after. */
 export const configFor = (baseUrl: string, model: string, hasKey: boolean, overrides: Overrides, provider = "openai"): Record<string, any> => patchedConfig(judgeConfig(baseUrl, model, hasKey, overrides.strategy, provider), overrides);
 
-/** A sandbox for the run, with the config written: every case of the run goes through it. The config names the model key as $MODEL_API_KEY. */
-export function openSandbox(baseUrl: string, model: string, hasKey: boolean, overrides: Overrides = defaultOverrides(STRATEGY), provider = "openai"): Sandbox {
-  const sandbox = createSandbox(NAME, { keepModelKey: true });
-  writeConfig(sandbox, configFor(baseUrl, model, hasKey, overrides, provider));
-  return sandbox;
-}
+/** A sandbox for the run, with the config written: every case of the run goes through it (on a harness, see openJudgeSandbox in lib/judge.ts). */
+export const openSandbox = (baseUrl: string, model: string, hasKey: boolean, overrides: Overrides = defaultOverrides(STRATEGY), provider = "openai", harness?: string): Sandbox =>
+  openJudgeSandbox(NAME, configFor(baseUrl, model, hasKey, overrides, provider), { baseUrl, model, hasKey, harness });
 
 /**
  * The fields of the verdict that the scorer reads, from the envelope `akm judge reflect.quality --format json` printed, with the model endpoint written
@@ -71,11 +68,14 @@ interface CaseContext {
   baseUrl: string;
   /** The time limit of one case, in milliseconds. A run always sets it (--timeout-ms); without it JUDGE_TIMEOUT_MS applies. */
   timeoutMs?: number;
+  /** The harness the judge runs on (--harness), and the model under test. Absent: the default connection. */
+  harness?: string;
+  model?: string;
 }
 
 /** One case: the source, the candidate, the feedback lines and the ref go to `akm judge reflect.quality` on stdin, and its verdict is scored. */
 export async function judgeCase(c: Case, ctx: CaseContext): Promise<Row> {
-  const call = await callJudge(ctx.sandbox, JUDGE, judgeInput(c), { timeoutMs: ctx.timeoutMs ?? JUDGE_TIMEOUT_MS, hide: (text) => hideEndpoint(text, ctx.baseUrl) });
+  const call = await callJudge(ctx.sandbox, JUDGE, judgeInput(c), { timeoutMs: ctx.timeoutMs ?? JUDGE_TIMEOUT_MS, hide: (text) => hideEndpoint(text, ctx.baseUrl), ...harnessOf(ctx) });
   if ("error" in call) return makeRow(c, { error: call.error, seconds: call.seconds, ...(call.timedOut ? { timedOut: true } : {}) });
   return makeRow(c, { verdict: verdictOf(call.envelope, ctx.baseUrl), seconds: call.seconds });
 }

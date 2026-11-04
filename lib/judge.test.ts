@@ -22,6 +22,7 @@ if (a === "judge" && b === "--list") {
   process.exit(0);
 }
 await Bun.stdin.text();
+if (process.env.FAKE_ARGS) await Bun.write(process.env.FAKE_ARGS, JSON.stringify(process.argv.slice(2)));
 if (process.env.FAKE_HANG) await Bun.sleep(60000);
 console.log(process.env.FAKE_OUT ?? "");
 process.exit(Number(process.env.FAKE_CODE ?? 0));
@@ -39,6 +40,16 @@ function sandbox(env: Record<string, string> = {}): Sandbox {
 const envelope = (outcome: string, rest: Record<string, unknown>) => JSON.stringify({ judge: "reflect.quality", schemaVersion: 2, runner: { kind: "connection", name: "judge", model: null }, outcome, ...rest });
 
 describe("callJudge", () => {
+  test("asks for the default connection unless the call names a harness, and then for it and its model", async () => {
+    const box = sandbox({ FAKE_OUT: envelope("verdict", { verdict: { pass: true, score: 5 } }), FAKE_ARGS: join(tmpdir(), `judge-args-${process.pid}.json`) });
+    dirs.push(box.env.FAKE_ARGS!);
+    const args = async () => JSON.parse(await Bun.file(box.env.FAKE_ARGS!).text());
+    await callJudge(box, "reflect.quality", {}, { timeoutMs: 5000 });
+    expect(await args()).toEqual(["judge", "reflect.quality", "--format", "json"]);
+    await callJudge(box, "reflect.quality", {}, { timeoutMs: 5000, harness: { name: "opencode", model: "eval/m" } });
+    expect(await args()).toEqual(["judge", "reflect.quality", "--harness", "opencode", "--model", "eval/m", "--format", "json"]);
+  });
+
   test("returns the envelope of a verdict, and of a judge that gave none (error, unparseable)", async () => {
     const verdict = await callJudge(sandbox({ FAKE_OUT: envelope("verdict", { verdict: { pass: true, score: 5 } }) }), "reflect.quality", {}, { timeoutMs: 5000 });
     expect(verdict).toMatchObject({ envelope: { outcome: "verdict", schemaVersion: 2, verdict: { pass: true, score: 5 } } });

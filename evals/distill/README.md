@@ -79,7 +79,7 @@ An `error` (timeout, endpoint, empty reply) is left out. Five errored cases in a
 
 akm's judge scores a lesson 1 to 5 on `reusable` (`novelty` before 0.9.27-alpha.2), `nonRedundancy` and `grounding`. It passes when the first two are 4 or more; grounding counts only toward rejection.
 
-`evals/distill/pass-bar [--rescore] [--cases DIR] RESULTS_DIR...` routes each judged lesson of distill runs under akm's bar (`shipped`) and one that puts grounding in the pass test (`with-grounding`), and counts the good and bad lessons that pass, go to review and are rejected under each. `mismatch` should be 0. It judges lessons by the cases and checks here now, so it refuses a run with a case id the cases here no longer have; `--rescore` leaves those rows out and lists them in `inputs.missing_cases`.
+`evals/distill/pass-bar [--rescore] [--cases DIR] RESULTS_DIR...` routes each judged lesson of distill runs under akm's bar (`shipped`) and one that puts grounding in the pass test (`with-grounding`), and counts the good and bad lessons that pass, go to review and are rejected under each. `mismatch` should be 0. It judges lessons by the cases and checks here now, so it refuses a run with a case id the cases here no longer have; `--rescore` leaves those rows out and lists them in `inputs.missing_cases`. `scripts/pass-rule/run` does the same for the saved runs of judge-gate and lesson-judge, under a rule you give.
 
 ## Lesson updates: 0 or 1 of 40 up to 0.10.261022
 

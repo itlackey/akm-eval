@@ -2,17 +2,16 @@
 // judge-gate: runs akm's reflect quality judge, with the model under test as the judge, on labelled
 // proposals. See ../README.md.
 //
-//   evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]
+//   evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--harness opencode] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]
 //
 // The flags, the setup, the pool of workers and the summary are lib/run.ts. This file is what is judge-gate's: the spec that says what a case
 // is and how it is shown. Every case of a run goes through one akm sandbox, two at a time unless --concurrency says otherwise.
 
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { type Sandbox, removeSandbox } from "../../../lib/akm/akm.ts";
-import { fail } from "../../../lib/cli.ts";
+import type { Sandbox } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
-import { requireJudge } from "../../../lib/judge.ts";
+import { type HarnessRecord, harnessSpec, startJudgeRun } from "../../../lib/judge.ts";
 import { type CtxInput, type EvalSpec, type Summary, defaultResults as resultsIn, runCorpus as runIn, runEval } from "../../../lib/run.ts";
 import { CASES, casesSha256, rubricVersion } from "./inputs.ts";
 import { JUDGE, JUDGE_TIMEOUT_MS, SCHEMA, NAME, STRATEGY, configFor, judgeCase, openSandbox } from "./collect.ts";
@@ -23,8 +22,8 @@ const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const MIN_AKM = "0.10.261105"; // `akm judge` is not in a release yet: akm main from #1416, which reports this version
 
-/** What a run opens for its cases: the one sandbox, with the config written, that all of them go through. */
-type Extra = { sandbox: Sandbox };
+/** What a run opens for its cases: the one sandbox, with the config written, that all of them go through. `harness` is --harness. */
+type Extra = { sandbox: Sandbox; harness?: string; harnessRecord?: HarnessRecord };
 
 /** The fields of a judge-gate summary that come from its rows and from the rubric, besides those every eval has. */
 type Own = ReturnType<typeof summarize> & {
@@ -80,16 +79,8 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
   selectCases,
   assetsSha256: (folder) => casesSha256(folder),
   // The sandbox holds the config, so one is opened for the cases of a run and removed after them; that counts its model calls for the summary.
-  openRun: async (ctx) => {
-    const sandbox = openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider);
-    // A version number does not say that `akm judge` is there at the schema this eval reads, so ask akm.
-    await requireJudge(sandbox, JUDGE, SCHEMA).catch((e: Error) => {
-      removeSandbox(sandbox);
-      if (ctx.resultsDir) rmSync(ctx.resultsDir, { recursive: true, force: true }); // the folder of a run that made no case
-      fail(`${e.message}. judge-gate needs an akm build with akm#1419 (reflect's review floor in the verdict), such as akm main.`);
-    });
-    return { sandbox, close: () => removeSandbox(sandbox) };
-  },
+  openRun: (ctx) =>
+    startJudgeRun(openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider, ctx.harness), ctx, JUDGE, SCHEMA, "judge-gate needs an akm build with akm#1419 (reflect's review floor in the verdict), such as akm main."),
   configFor: (ctx) => configFor(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider),
   runCase: judgeCase,
   // A reply with no verdict counts toward giving up, errored or not: with the endpoint down, or a model that answers nothing the judge can read,
@@ -100,7 +91,10 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
     return `${c.label.padEnd(4)} ${row.outcome.padEnd(6)} ${row.seconds}s  ${c.id.slice(0, 8)}${note ? `  ${note.slice(0, 120)}` : ""}`;
   },
   // The private cases are a rewrite of the public ones, so their labels follow the public rubric.
-  summaryExtras: () => ({ rubric_version: rubricVersion(join(EVAL_DIR, "assets")) }),
+  summaryExtras: (_cases, _rows, ctx) => ({ rubric_version: rubricVersion(join(EVAL_DIR, "assets")), ...harnessSpec.summary(ctx) }),
+  manifestExtras: harnessSpec.manifestExtras,
+  options: harnessSpec.options,
+  prepare: harnessSpec.prepare,
   printSummary,
   sideBySide,
   usage: {
@@ -109,6 +103,8 @@ judge, on labelled proposals. Settings come from .env at the repository root.`,
     corpus: `            The default custom corpus is private/judge-gate/assets, made by ./generate-assets: a light rewrite of the same
             cases, not held-out data.`,
     limit: "run N cases, in the good/bad proportion of the whole set, with at least one of each from 2 cases on",
+    flags: harnessSpec.flags,
+    extra: harnessSpec.extra,
   },
 };
 

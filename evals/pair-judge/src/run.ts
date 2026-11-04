@@ -6,12 +6,11 @@
 // The flags, the setup, the pool of workers and the summary are lib/run.ts. This file is what is pair-judge's: the spec that says what a case is and how it
 // is shown. Every case of a run goes through one akm sandbox, two at a time unless --concurrency says otherwise.
 
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { type Sandbox, removeSandbox } from "../../../lib/akm/akm.ts";
-import { fail } from "../../../lib/cli.ts";
+import type { Sandbox } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
-import { requireJudge } from "../../../lib/judge.ts";
+import { type HarnessRecord, harnessSpec, startJudgeRun } from "../../../lib/judge.ts";
 import { type CtxInput, type EvalSpec, type Summary, defaultResults as resultsIn, runCorpus as runIn, runEval } from "../../../lib/run.ts";
 import { CASES, casesSha256 } from "./inputs.ts";
 import { JUDGE, JUDGE_TIMEOUT_MS, NAME, SCHEMA, configFor, judgeCase, openSandbox } from "./collect.ts";
@@ -23,7 +22,7 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const MIN_AKM = "0.10.261105"; // `akm judge` is not in a release yet: akm main from #1416, which reports this version
 
 /** What a run opens for its cases: the one sandbox, with the config written, that all of them go through. */
-type Extra = { sandbox: Sandbox };
+type Extra = { sandbox: Sandbox; harness?: string; harnessRecord?: HarnessRecord };
 
 type Own = ReturnType<typeof summarize>;
 
@@ -60,16 +59,8 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
   selectCases,
   assetsSha256: (folder) => casesSha256(folder),
   // The sandbox holds the config, so one is opened for the cases of a run and removed after them; that counts its model calls for the summary.
-  openRun: async (ctx) => {
-    const sandbox = openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider);
-    // A version number does not say that `akm judge` is there at the schema this eval reads, so ask akm.
-    await requireJudge(sandbox, JUDGE, SCHEMA).catch((e: Error) => {
-      removeSandbox(sandbox);
-      if (ctx.resultsDir) rmSync(ctx.resultsDir, { recursive: true, force: true }); // the folder of a run that made no case
-      fail(`${e.message}. pair-judge needs an akm build with \`akm judge consolidate.pair\` at that schema, such as akm main.`);
-    });
-    return { sandbox, close: () => removeSandbox(sandbox) };
-  },
+  openRun: (ctx) =>
+    startJudgeRun(openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider, ctx.harness), ctx, JUDGE, SCHEMA, `pair-judge needs an akm build with \`akm judge consolidate.pair\` at that schema, such as akm main.`),
   configFor: (ctx) => configFor(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider),
   runCase: judgeCase,
   // A judge that gives no verdict counts toward giving up, as an error does: with the endpoint down, akm prints `error` for every case, and those rows are not errored.
@@ -79,6 +70,10 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
     const what = row.outcome === "retire" ? `retire ${row.retired}${row.retired_safe ? "" : " UNSAFE"}` : row.outcome;
     return `${c.kind.padEnd(10)} ${what.padEnd(14)} ${row.seconds}s  ${c.id}${note ? `  ${note.slice(0, 120)}` : ""}`;
   },
+  summaryExtras: (_cases, _rows, ctx) => harnessSpec.summary(ctx),
+  manifestExtras: harnessSpec.manifestExtras,
+  options: harnessSpec.options,
+  prepare: harnessSpec.prepare,
   printSummary,
   usage: {
     about: `Runs akm's consolidate pair judge (akm judge consolidate.pair), with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as the
@@ -86,6 +81,8 @@ judge, on labelled pairs of notes. Settings come from .env at the repository roo
     corpus: `            There is no rewrite of this eval's cases. The held-out cases are a corpus of their own:
             --cases evals/pair-judge/assets/heldout.`,
     limit: "run N cases, each kind in turn (duplicate, subsumed, supersedes, contradicts, overlap, lookalike), in file order",
+    flags: harnessSpec.flags,
+    extra: harnessSpec.extra,
   },
 };
 

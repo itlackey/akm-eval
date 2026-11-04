@@ -20,7 +20,7 @@ const EVAL_DIR = join(import.meta.dir, "..");
 const REPO = join(EVAL_DIR, "..", "..");
 
 const dirs: string[] = [];
-const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, FAKE_MS: process.env.FAKE_MS, FAKE_USAGE: process.env.FAKE_USAGE, FAKE_NOJUDGE: process.env.FAKE_NOJUDGE, FAKE_SCHEMA: process.env.FAKE_SCHEMA, MODEL_API_KEY: process.env.MODEL_API_KEY, TMPDIR: process.env.TMPDIR };
+const saved = { PATH: process.env.PATH, AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, FAKE_MS: process.env.FAKE_MS, FAKE_USAGE: process.env.FAKE_USAGE, FAKE_NOJUDGE: process.env.FAKE_NOJUDGE, FAKE_SCHEMA: process.env.FAKE_SCHEMA, MODEL_API_KEY: process.env.MODEL_API_KEY, TMPDIR: process.env.TMPDIR };
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
   for (const [k, v] of Object.entries(saved)) {
@@ -62,7 +62,7 @@ if (a !== "judge" || b !== "reflect.quality") { console.error("unexpected " + pr
 const input = JSON.parse(await Bun.stdin.text());
 const word = String(input.candidate).split(" ")[0];
 const seen = { feedback: input.feedback, env: process.env.AKM_CONFIG_DIR };
-log({ at: "start", word, data: process.env.AKM_DATA_DIR, key: process.env.MODEL_API_KEY ?? null, config: JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR, "config.json"), "utf8")) });
+log({ at: "start", word, args: process.argv.slice(2), home: process.env.HOME, opencodeConfig: process.env.XDG_CONFIG_HOME ? (await Bun.file(join(process.env.XDG_CONFIG_HOME, "opencode", "opencode.json")).json().catch(() => null)) : null, data: process.env.AKM_DATA_DIR, key: process.env.MODEL_API_KEY ?? null, config: JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR, "config.json"), "utf8")) });
 await Bun.sleep(Number(process.env.FAKE_MS ?? 0));
 if (process.env.FAKE_USAGE) {
   const db = new Database(join(process.env.AKM_DATA_DIR, "state.db"));
@@ -178,6 +178,38 @@ const resultsOf = (folders: { results: string }) => {
 };
 
 const repeat = (n: number, spec: Spec): Spec[] => Array.from({ length: n }, () => spec);
+
+describe("a run on the opencode harness", () => {
+  test("puts the judge on the harness with the model, in a HOME and an opencode config of the sandbox, and records the harness and its version", async () => {
+    const { ctx, calls, leftover, folders } = setup([{ word: "PASS", label: "good" }, { word: "REJECT", label: "bad" }]);
+    const bin = join(folders.assets, "..", "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "opencode"), '#!/bin/sh\n[ "$1" = "--version" ] && echo 1.2.3\nexit 0\n', { mode: 0o755 });
+    process.env.PATH = `${bin}:${process.env.PATH}`;
+    const summary = await quiet(() => runPublic({ ...ctx, harness: "opencode" } as Parameters<typeof runCorpus>[1], folders));
+    const starts = calls().filter((c) => c.at === "start");
+    expect(starts.map((c) => c.args)).toEqual(starts.map(() => ["judge", "reflect.quality", "--harness", "opencode", "--model", "eval/the-model", "--format", "json"]));
+    for (const c of starts) {
+      expect(c.home).toStartWith(process.env.TMPDIR as string); // the sandbox is in the run's TMPDIR
+      expect(c.home).toEndWith("/home");
+      expect(c.config.harnesses).toEqual({ opencode: {} });
+      expect(Object.keys(c.opencodeConfig.provider)).toEqual(["eval"]);
+      expect(c.opencodeConfig.provider.eval.models["the-model"].options).toEqual({ reasoningEffort: "none" });
+      expect(c.opencodeConfig.agent.build.temperature).toBe(0);
+    }
+    expect(summary.harness).toEqual({ name: "opencode", version: "1.2.3", isolated_home: true });
+    expect(summary.manifest.eval_settings).toEqual({ harness: "opencode", harness_version: "1.2.3", isolated_home: true });
+    expect(leftover()).toEqual([]);
+  });
+
+  test("a run on a connection records no harness and gives the sandbox no HOME of its own", async () => {
+    const { ctx, calls, folders } = setup([{ word: "PASS", label: "good" }, { word: "REJECT", label: "bad" }]);
+    const summary = await quiet(() => runPublic(ctx, folders));
+    expect(summary.harness).toBeUndefined();
+    expect(summary.manifest.eval_settings).toEqual({});
+    for (const c of calls().filter((x) => x.at === "start")) expect([c.args, c.home]).toEqual([["judge", "reflect.quality", "--format", "json"], process.env.HOME]);
+  });
+});
 
 describe("runCorpus", () => {
   test("counts passes per label, keeps review apart from reject, counts a reply with no verdict as a review, and leaves a crash out", async () => {
@@ -608,7 +640,8 @@ describe("the usage text", () => {
     const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), "--help"], { stdout: "pipe", stderr: "pipe" });
     const text = done.stdout.toString();
     expect(done.exitCode).toBe(0);
-    expect(text).toStartWith("Usage: evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n");
+    expect(text).toStartWith("Usage: evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--harness opencode] [--strategy NAME] [--config-patch FILE] [--semantic] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n");
+    expect(text).toContain("  --harness opencode  put the judge on the opencode harness");
     expect(text).toContain("--strategy      the akm improve strategy to run in place of default");
     expect(text).toContain("--config-patch  FILE");
     expect(text).toContain("not held-out data");

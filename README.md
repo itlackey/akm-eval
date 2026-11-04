@@ -11,10 +11,10 @@ Every folder below has a `run` script. Every `run` takes `--corpus`, `--limit` a
 | Folder | Question it answers | Flags |
 |---|---|---|
 | `evals/retrieval` | Does akm search put the assets an agent needs at the top? | `--cases` `--repeat` `--akm` `--semantic` |
-| `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | `--cases` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
-| `evals/pair-judge` | Does consolidate's pair judge list the claims each note holds alone, so that akm retires only a note whose every claim the other keeps? | `--cases` `--repeat` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
-| `evals/lesson-judge` | Does the lesson judge pass useful new lessons and updates and refuse status notes, restated rules and claims the source does not make? | `--cases` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
-| `evals/drain-judge` | Does the drain's judgment accept the promotions worth keeping and reject the duplicate, stale and ephemeral ones? | `--cases` `--repeat` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
+| `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | `--cases` `--repeat` `--strategy` `--harness` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
+| `evals/pair-judge` | Does consolidate's pair judge list the claims each note holds alone, so that akm retires only a note whose every claim the other keeps? | `--cases` `--repeat` `--harness` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
+| `evals/lesson-judge` | Does the lesson judge pass useful new lessons and updates and refuse status notes, restated rules and claims the source does not make? | `--cases` `--repeat` `--strategy` `--harness` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
+| `evals/drain-judge` | Does the drain's judgment accept the promotions worth keeping and reject the duplicate, stale and ephemeral ones? | `--cases` `--repeat` `--harness` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
 | `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | `--cases` `--repeat` `--retrieval-queries` `--strategy` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
 | `evals/distill` | Do distilled lessons say only what the source memory says? | `--cases` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
 | `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | `--cases` `--repeat` `--pool` `--no-retrieval` `--strategy` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
@@ -44,7 +44,7 @@ The [public results ledger](https://itlackey.github.io/akm-eval/) presents every
 evals/, benchmarks/   one folder per eval: run, generate, src/, assets/, results/ (gitignored)
 corpus/library/       the shared akm library the evals use, also usable as an akm bundle
 lib/                  what the evals share: the driver (run.ts), the akm sandbox, the `akm judge` call (judge.ts), models, corpora, manifest, --repeat, the rewrite
-scripts/              check, compare, ledger, rescore, smoke
+scripts/              check, compare, ledger, pass-rule, rescore, smoke
 site/                 source of the public GitHub Pages results ledger
 generate-assets       makes the custom corpus of every eval in private/
 reports/              published results and notes (see reports/README.md)
@@ -202,6 +202,8 @@ An eval of one of akm's judges (`akm judge <name>`: judge-gate, lesson-judge, pa
 - **Cases are built from real pipeline output.** Take proposals, feedback and neighbouring assets from a real run of the process that feeds the judge, not from text written for the eval. Write by hand only the kinds the pipeline does not produce, and say so in the README.
 - **Labels follow the judge's own rubric.** A label is adjudicated against the policy the judge's prompt implements, not against another eval's grader. If that policy is wrong, that is an akm change, and the labels follow it afterwards.
 - **Scoring uses the production route.** Read the route from the verdict akm prints (`reviewNeeded`, the decision), and copy no threshold. Count a judge that gave no verdict as akm routes it, apart from a failure of akm itself. `lib/judge.ts` calls the judge, tells the envelope from akm failing, and refuses an akm whose judge is older than the `schemaVersion` the eval reads.
+- **Pass rules can be tried offline.** The rows keep the judge's criterion scores, and the route is a function of them, so `scripts/pass-rule/run RESULTS_DIR...` counts the routes of saved judge-gate and lesson-judge runs under another rule with no model call, and shows that akm's own rule gives back every stored route.
+- **A harness judge reads none of your setup.** `--harness opencode` on judge-gate, lesson-judge, pair-judge and drain-judge (one path, `lib/judge.ts`) puts the judge on your opencode with a HOME, a cache folder and an opencode config of the sandbox (`isolateHome` in `lib/akm/akm.ts`); opencode reads no project config and no Claude Code files and is given no tool, so `~/.claude`, `CLAUDE.md`, `AGENTS.md`, skills, MCP servers and your opencode config cannot reach the model. The summary records the harness and its version.
 - **Each eval has its own versions.** A change to its cases, labels, input or scoring bumps its `version` or `scoringVersion` and adds an entry to `MEASUREMENT_CHANGELOG.md`. A stored run is scored again only when its raw output still means what the scorer reads (`rawOf` refuses it otherwise), and runs from before a change are not scored by the rule after it.
 
 ## Custom corpora

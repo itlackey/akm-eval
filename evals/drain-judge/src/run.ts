@@ -6,12 +6,11 @@
 // The flags, the setup, the pool of workers and the summary are lib/run.ts. This file is what is drain-judge's: the spec that says what a case is and how it is shown.
 // Every case of a run goes through one akm sandbox, two at a time unless --concurrency says otherwise.
 
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { type Sandbox, removeSandbox } from "../../../lib/akm/akm.ts";
-import { fail } from "../../../lib/cli.ts";
+import type { Sandbox } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
-import { requireJudge } from "../../../lib/judge.ts";
+import { type HarnessRecord, harnessSpec, startJudgeRun } from "../../../lib/judge.ts";
 import { type CtxInput, type EvalSpec, type Summary, defaultResults as resultsIn, runCorpus as runIn, runEval } from "../../../lib/run.ts";
 import { JUDGE, JUDGE_TIMEOUT_MS, NAME, SCHEMA, configFor, judgeCase, openSandbox } from "./collect.ts";
 import { CASES, casesSha256, rubricVersion } from "./inputs.ts";
@@ -23,7 +22,7 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const MIN_AKM = "0.10.261105"; // `akm judge` is not in a release yet: akm main from #1416, which reports this version
 
 /** What a run opens for its cases: the one sandbox, with the config written, that all of them go through. */
-type Extra = { sandbox: Sandbox };
+type Extra = { sandbox: Sandbox; harness?: string; harnessRecord?: HarnessRecord };
 
 /** The fields of a drain-judge summary that come from its rows and from the rubric, besides those every eval has. */
 type Own = ReturnType<typeof summarize> & {
@@ -79,16 +78,8 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
   selectCases,
   assetsSha256: (folder) => casesSha256(folder),
   // The sandbox holds the config, so one is opened for the cases of a run and removed after them; that counts its model calls for the summary.
-  openRun: async (ctx) => {
-    const sandbox = openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider);
-    // A version number does not say that `akm judge` is there at the schema this eval reads, so ask akm.
-    await requireJudge(sandbox, JUDGE, SCHEMA).catch((e: Error) => {
-      removeSandbox(sandbox);
-      if (ctx.resultsDir) rmSync(ctx.resultsDir, { recursive: true, force: true }); // the folder of a run that made no case
-      fail(`${e.message}. drain-judge needs an akm build with \`akm judge proposal.judgment\` at that schemaVersion, such as akm main.`);
-    });
-    return { sandbox, close: () => removeSandbox(sandbox) };
-  },
+  openRun: (ctx) =>
+    startJudgeRun(openSandbox(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider, ctx.harness), ctx, JUDGE, SCHEMA, `drain-judge needs an akm build with \`akm judge proposal.judgment\` at that schemaVersion, such as akm main.`),
   configFor: (ctx) => configFor(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.overrides, ctx.provider),
   runCase: judgeCase,
   // A reply with no decision counts toward giving up, errored or not: with the endpoint down, or a model that answers nothing the judge can read, every case is left pending.
@@ -97,7 +88,10 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
     const note = row.error ?? (hasVerdict(row) ? "" : row.reason);
     return `${c.label.padEnd(4)} ${c.category.padEnd(9)} ${row.outcome.padEnd(11)} ${row.seconds}s  ${c.id}${note ? `  ${note.slice(0, 120)}` : ""}`;
   },
-  summaryExtras: () => ({ rubric_version: rubricVersion(join(EVAL_DIR, "assets")) }),
+  summaryExtras: (_cases, _rows, ctx) => ({ rubric_version: rubricVersion(join(EVAL_DIR, "assets")), ...harnessSpec.summary(ctx) }),
+  manifestExtras: harnessSpec.manifestExtras,
+  options: harnessSpec.options,
+  prepare: harnessSpec.prepare,
   printSummary,
   sideBySide,
   usage: {
@@ -105,6 +99,8 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
 on frozen consolidate promotions. Settings come from .env at the repository root.`,
     corpus: `            promotion has no rewrite: its custom corpus is --cases DIR only.`,
     limit: "run N cases, taken in turn from good, ephemeral, duplicate and stale",
+    flags: harnessSpec.flags,
+    extra: harnessSpec.extra,
   },
 };
 

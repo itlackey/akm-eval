@@ -87,4 +87,4 @@ held-out ids: real-asset-05, real-claim-06, real-lesson-02, real-lesson-09, real
 - **Feedback is rare.** The distill eval's cases carry none, so no real input has any; 14 hand-written cases have feedback lines recorded with `akm feedback`.
 - **The 26 lesson-update memories `upd-15` to `upd-40` were not given to the real writer**, so their updates are hand-written; the real updates (12) are from `upd-01` to `upd-14` and `dup-04`.
 - **`related` entries carry no `path`.** akm's pipeline passes each related asset with the `path` of its file, and `akm judge` refuses an input with an extra field, so the cases keep `ref` and `content`, which are all the judge reads.
-- **Connection runner only.** A harness judge needs harness isolation (#153), which is not built.
+- **Connection runner only.** `--harness opencode` runs the judge on an isolated opencode (`isolateHome`), and records `harness` in the summary, but no harness run of this eval is published yet.

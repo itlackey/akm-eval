@@ -9,7 +9,8 @@ import { memoryColumns } from "../../ledger/src/memory.ts";
 
 export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "lesson-judge", "pair-judge", "drain-judge", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret", "memory-utility"];
 type Row = Record<string, any>;
-export interface Run { dir: string; summary: Row; rows: Row[]; samplesMissing?: boolean; running?: boolean }
+/** `repeats` is set for a --repeat set, loaded from its repeat-summary.json: the runs it names, in order. Its `summary` is the first run's with the mean of each metric, and its rows are the first run's (case counts and timing). */
+export interface Run { dir: string; summary: Row; rows: Row[]; samplesMissing?: boolean; running?: boolean; repeats?: Run[] }
 export class CompareError extends Error {}
 const object = (v: unknown): v is Row => v !== null && typeof v === "object" && !Array.isArray(v);
 const equal = (a: unknown, b: unknown) => canonical(a) === canonical(b);
@@ -23,10 +24,27 @@ function validateRows(run: Run): void {
   }
 }
 
-/** A saved results folder, or its summary.json. Does not modify its contents. */
+/** The metrics of a repeat-summary.json (every number a {min, max, mean}) as the mean of each, in the shape of one run's metrics. */
+const meanOf = (x: unknown): unknown =>
+  object(x) && typeof x.mean === "number" && typeof x.min === "number" && typeof x.max === "number" ? x.mean : object(x) ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, meanOf(v)])) : x;
+
+const isRepeatSummary = (x: unknown): x is Row => object(x) && typeof x.repeat === "number" && Array.isArray(x.runs) && x.runs.every((r: unknown) => typeof r === "string");
+const looksRepeat = (x: unknown): boolean => object(x) && ("repeat" in x || "runs" in x);
+
+/** A saved results folder, or its summary.json, or the repeat-summary.json of a --repeat set (its runs sit beside it). Does not modify its contents. */
 export function loadRun(path: string): Run {
   let dir = resolve(path);
-  if (existsSync(dir) && statSync(dir).isFile()) dir = dirname(dir);
+  if (existsSync(dir) && statSync(dir).isFile()) {
+    const file = dir;
+    dir = dirname(dir);
+    let repeat: unknown;
+    try { repeat = JSON.parse(readFileSync(file, "utf8")); } catch { /* summary.json of the folder is read below */ }
+    if (looksRepeat(repeat) && !(isRepeatSummary(repeat) && repeat.runs.length > 0 && object(repeat.metrics))) throw new CompareError(`${file}: a repeat summary needs "repeat", a non-empty "runs" list of run folders and "metrics"`);
+    if (isRepeatSummary(repeat)) {
+      const repeats = repeat.runs.map((name: string) => loadRun(join(dir, name)));
+      return { dir, summary: { ...repeats[0]?.summary, label: `${repeat.label} (mean of ${repeats.length} runs)`, metrics: meanOf(repeat.metrics), wall_seconds: undefined }, rows: repeats[0]?.rows ?? [], repeats };
+    }
+  }
   try {
     const summary: unknown = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     if (!object(summary)) throw new CompareError(`${dir}: summary is not an object`);
@@ -43,12 +61,78 @@ export function loadRun(path: string): Run {
   }
 }
 
+/** How far two runs agree case by case, on the `outcome` of their samples. A --repeat set counts for the outcome most of its runs gave (see agreementOf). */
+export interface Agreement {
+  /** What each side was: "one run" or "the majority of N runs". */
+  a: string; b: string;
+  /** The cases both sides have an outcome for. Cases that errored (no outcome in any run), cases without a majority (no outcome given by more runs than any other) and cases only one side has are left out of it and counted below. */
+  cases: number;
+  same: number;
+  share: number | null;
+  /** Cohen's kappa over the cases, or null when chance already explains all the agreement (both sides gave one outcome throughout). */
+  kappa: number | null;
+  /** Cases left out, per side: errored (an `error` row is a crash, not an outcome of the judge; in a --repeat set, a case no run gave an outcome for), for want of a majority, and cases only one side has. */
+  errored: { a: number; b: number };
+  no_majority: { a: number; b: number };
+  only: { a: number; b: number };
+  flips: { id: string; a: string; b: string }[];
+}
+
+/** The outcome of each case of a run: its row's, or for a --repeat set the one most of its runs gave. Null for a case with no majority, "error" for one with no outcome but `error`. Undefined when a row has no string outcome. */
+function outcomesOf(run: Run): { outcomes: Map<string, string | null>; basis: string } | undefined {
+  const members = run.repeats ?? [run];
+  const tally = new Map<string, Map<string, number>>();
+  for (const member of members) for (const row of member.rows) {
+    if (typeof row.outcome !== "string") return undefined;
+    const t = tally.get(row.id) ?? new Map<string, number>();
+    if (row.outcome !== "error") t.set(row.outcome, (t.get(row.outcome) ?? 0) + 1); // a crash does not vote
+    tally.set(row.id, t);
+  }
+  if (tally.size === 0) return undefined;
+  const outcomes = new Map<string, string | null>();
+  for (const [id, t] of tally) {
+    const ranked = [...t.entries()].sort((x, y) => y[1] - x[1]);
+    outcomes.set(id, ranked.length === 0 ? "error" : ranked.length > 1 && ranked[0]![1] === ranked[1]![1] ? null : ranked[0]![0]);
+  }
+  return { outcomes, basis: run.repeats ? `the majority of ${members.length} runs` : "one run" };
+}
+
+/** Agreement of two runs, or undefined when a run has no samples with case ids and outcomes. */
+export function agreementOf(a: Run, b: Run): Agreement | undefined {
+  const x = outcomesOf(a), y = outcomesOf(b);
+  if (!x || !y) return undefined;
+  const pairs: [string, string, string][] = [];
+  const out: Agreement = { a: x.basis, b: y.basis, cases: 0, same: 0, share: null, kappa: null, errored: { a: 0, b: 0 }, no_majority: { a: 0, b: 0 }, only: { a: 0, b: 0 }, flips: [] };
+  for (const [id, oa] of x.outcomes) {
+    if (!y.outcomes.has(id)) { out.only.a++; continue; }
+    const ob = y.outcomes.get(id)!;
+    if (oa === null || ob === null || oa === "error" || ob === "error") {
+      if (oa === "error") out.errored.a++; else if (oa === null) out.no_majority.a++;
+      if (ob === "error") out.errored.b++; else if (ob === null) out.no_majority.b++;
+      continue;
+    }
+    pairs.push([id, oa, ob]);
+  }
+  for (const id of y.outcomes.keys()) if (!x.outcomes.has(id)) out.only.b++;
+  out.cases = pairs.length;
+  if (pairs.length === 0) return out;
+  out.same = pairs.filter(([, oa, ob]) => oa === ob).length;
+  out.share = out.same / pairs.length;
+  const kinds = [...new Set(pairs.flatMap(([, oa, ob]) => [oa, ob]))];
+  const chance = kinds.reduce((sum, k) => sum + (pairs.filter(p => p[1] === k).length / pairs.length) * (pairs.filter(p => p[2] === k).length / pairs.length), 0);
+  out.kappa = chance >= 1 ? null : (out.share - chance) / (1 - chance);
+  out.flips = pairs.filter(([, oa, ob]) => oa !== ob).map(([id, oa, ob]) => ({ id, a: oa, b: ob }));
+  return out;
+}
+
 export interface ComparisonRow { key: string; label: string; group: string; unit: string; a: Cell; b: Cell; delta: number | null; note: string }
 export interface PairReport {
   eval: string; eval_version: string; scoring_version: string; corpus: string; collection: string | null; mode: string | null;
   a: { dir: string; label: string }; b: { dir: string; label: string };
   changes: { field: string; a: unknown; b: unknown }[];
   warnings: string[]; rows: ComparisonRow[];
+  /** Per-case agreement, for runs whose samples carry case ids and outcomes. */
+  agreement?: Agreement;
 }
 
 /** Include every stored scalar metric, including benchmark-native intervals. */
@@ -75,7 +159,9 @@ export function comparePair(a: Run, b: Run): PairReport {
   validateRows(a); validateRows(b);
   const am = object(a.summary.manifest) ? a.summary.manifest : {}, bm = object(b.summary.manifest) ? b.summary.manifest : {};
   const warnings: string[] = [];
-  for (const run of [a, b]) {
+  for (const set of [a, b].filter(r => r.repeats))
+    warnings.push(`${set.dir}: a --repeat set of ${set.repeats!.length} runs; its metrics are their means, and its other rows (cases, timing, usage, settings) are the first run's.`);
+  for (const run of [a, b].flatMap(r => r.repeats ?? [r])) {
     if (run.samplesMissing) warnings.push(`${run.dir}: samples.jsonl is missing; showing summary values.`);
     if (run.running) warnings.push(`${run.dir}: .running marker exists; showing the saved snapshot.`);
     if (run.summary.status !== undefined && run.summary.status !== "complete")
@@ -101,13 +187,14 @@ export function comparePair(a: Run, b: Run): PairReport {
     engines: m?.engines ?? r.summary.engine ?? null, benchmark_settings: evalSettingsOf(m), judge_model: r.summary.judge_model ?? null,
     semantic_index: r.summary.semantic_index ?? null, semantic_model: r.summary.semantic_model ?? null,
     workers: r.summary.workers ?? null, attempts: r.summary.attempts ?? null, search_mode: r.summary.search_mode ?? null });
+  const agree = agreementOf(a, b);
   const as = settings(a, am), bs = settings(b, bm);
   const changes = Object.keys(as).filter(k => !equal(as[k as keyof typeof as], bs[k as keyof typeof bs]))
     .map(field => ({ field, a: redactConfig(as[field as keyof typeof as]), b: redactConfig(bs[field as keyof typeof bs]) }));
   if (changes.length > 1) warnings.push("Several settings changed; these differences do not isolate the effect of any one change.");
   return { eval: am?.eval ?? a.summary.eval ?? "unrecorded", eval_version: am?.collector?.version ?? "unrecorded", scoring_version: am?.scorer?.version ?? a.summary.scoring_version ?? am?.collector?.version ?? "unrecorded",
     corpus: am?.corpus ?? a.summary.corpus ?? "unrecorded", collection: am?.collection ?? a.summary.collection ?? null, mode: am?.mode ?? a.summary.mode ?? null, a: { dir: a.dir, label: a.summary.label ?? a.dir },
-    b: { dir: b.dir, label: b.summary.label ?? b.dir }, changes, warnings, rows };
+    b: { dir: b.dir, label: b.summary.label ?? b.dir }, changes, warnings, rows, ...(agree ? { agreement: agree } : {}) };
 }
 
 const cell = (v: unknown): string => (v === null ? "—" : typeof v === "number" ? String(Number(v.toFixed(6))) : typeof v === "string" ? v : JSON.stringify(v)).replace(/\|/g, "\\|").replace(/[\r\n]/g, " ");
@@ -117,6 +204,20 @@ export function renderPair(report: PairReport): string {
     "Stored results. Delta is B minus A; percentage deltas are percentage points. No statistical winner is inferred.", "",
     ...report.warnings.map(w => `- ${w}`), "", "| Metric / setting | A | B | Delta (B − A) | Note |", "|---|---:|---:|---:|---|"];
   for (const row of report.rows) lines.push(`| ${cell(row.label)} | ${cell(row.a)} | ${cell(row.b)} | ${cell(row.delta)} | ${row.note} |`);
+  const g = report.agreement;
+  if (g) {
+    const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
+    lines.push("", `Per-case agreement (A: ${g.a}; B: ${g.b}): ${g.same} of ${g.cases} cases have the same outcome (${pct(g.share)}); Cohen's kappa ${g.kappa === null ? "undefined (chance explains all of it)" : g.kappa.toFixed(3)}.`);
+    // Per side, not summed: a case left out of both sides would count twice in a total.
+    const side = (n: { a: number; b: number }, what: string) => (n.a + n.b > 0 ? `${what} (A ${n.a}, B ${n.b})` : "");
+    const left = [side(g.errored, "errored"), side(g.no_majority, "no majority outcome"), side(g.only, "in only one run")].filter(Boolean);
+    if (left.length) lines.push(`Left out: ${left.join(", ")}.`);
+    if (g.flips.length) {
+      const shown = g.flips.slice(0, 60);
+      lines.push("", `Flipped cases (${g.flips.length}):`, "", "| Case | A | B |", "|---|---|---|", ...shown.map(f => `| ${cell(f.id)} | ${cell(f.a)} | ${cell(f.b)} |`));
+      if (g.flips.length > shown.length) lines.push("", `…and ${g.flips.length - shown.length} more, all in the JSON report.`);
+    }
+  }
   if (report.changes.length) {
     lines.push("", "Changed settings:", "", "| Setting | A | B |", "|---|---|---|");
     for (const change of report.changes) lines.push(`| ${change.field} | ${cell(change.a)} | ${cell(change.b)} |`);

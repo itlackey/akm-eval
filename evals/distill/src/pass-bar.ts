@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { type PassRule, SHIPPED_RULES, applyRule } from "../../../lib/judge.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
 import { type LoadedCase, NAME, checkLesson, corpusFolder, lessonText, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -43,14 +44,13 @@ export interface Scores {
 /**
  * What akm's judge does with the scores (src/commands/improve/stage.ts): a score of 2 or less on any criterion rejects. Otherwise the
  * lesson passes when the criteria that count are all 4 or more, is sent to review when their mean is 2.5 or more, and is rejected below.
- * The shipped bar counts reusable and nonRedundancy. The other counts grounding too.
+ * The shipped bar counts reusable and nonRedundancy. The other counts grounding too. The rule itself is applyRule in lib/judge.ts, which
+ * scripts/pass-rule tries on the saved runs of judge-gate and lesson-judge.
  */
 export function route(s: Scores, bar: Bar): Verdict {
-  const all = [s.reusable, s.nonRedundancy, s.grounding];
-  if (Math.min(...all) <= 2) return "reject";
-  const counted = bar === "shipped" ? [s.reusable, s.nonRedundancy] : all;
-  if (Math.min(...counted) >= 4) return "pass";
-  return counted.reduce((a, b) => a + b, 0) / counted.length >= 2.5 ? "review" : "reject";
+  const lesson = SHIPPED_RULES["distill.lesson"] as PassRule;
+  const verdict = applyRule({ ...s }, bar === "shipped" ? lesson : { ...lesson, counted: ["reusable", "nonRedundancy", "grounding"] }) as { pass: boolean; reviewNeeded: boolean };
+  return verdict.pass ? "pass" : verdict.reviewNeeded ? "review" : "reject";
 }
 
 /** What akm did with the lesson in a row, from its outcome and gate: the check that route() agrees with the judge it replays. */

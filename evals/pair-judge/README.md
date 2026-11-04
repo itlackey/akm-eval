@@ -25,7 +25,7 @@ evals/pair-judge/run --cases evals/pair-judge/assets/heldout   # the held-out pa
 evals/pair-judge/run --cases ~/notes/pair-judge
 ```
 
-`--limit N` takes the kinds in turn, in file order. `--concurrency N` sets how many cases run at a time (default 2, all through one akm sandbox) and `--timeout-ms N` how many milliseconds akm gets for one (default 900000, 15 minutes). There is no `--strategy` (the judge runs on the default connection, as consolidate does with none configured) and no rewrite of the cases: `--corpus custom` needs `--cases`. It runs on a connection only; a harness run needs the isolation of #153, which is not built.
+`--limit N` takes the kinds in turn, in file order. `--concurrency N` sets how many cases run at a time (default 2, all through one akm sandbox) and `--timeout-ms N` how many milliseconds akm gets for one (default 900000, 15 minutes). There is no `--strategy` (the judge runs on the default connection, as consolidate does with none configured) and no rewrite of the cases: `--corpus custom` needs `--cases`. `--harness opencode` puts the judge on your opencode in place of the default connection, in a sandbox HOME with an opencode config of its own, as judge-gate does (see [judge-gate's README](../judge-gate/README.md)).
 
 The model must return one JSON object when asked. A case is about 1.2k tokens in; the eval sets temperature 0 and the judge asks for no thinking. A model that thinks anyway is slow (a 35B model averaged 2.2k tokens out and 16 seconds a call in the smoke).
 
