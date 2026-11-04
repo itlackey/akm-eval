@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultOverrides } from "../../../lib/akm/overrides.ts";
 import { assemble, explode } from "./generate.ts";
+import type { JudgeEnvelope } from "../../../lib/judge.ts";
 import { type Case, type Row, STRATEGY, configFor, errorRow, hasVerdict, judgeConfig, metrics, feedbackLines, judgeInput, parseCases, rowFromVerdict, selectCases, verdictOf } from "./lib.ts";
 
 const make = (n: number, label: "good" | "bad", extra: Partial<Case> = {}): Case => ({
@@ -222,8 +223,9 @@ describe("rowFromVerdict", () => {
   test("maps akm's verdict to an outcome", () => {
     expect(rowFromVerdict(c, { pass: true, score: 4.5, reason: "ok", criteria: { need: 5 }, engine: "judge" }, 1).outcome).toBe("pass");
     expect(rowFromVerdict(c, { pass: false, reviewNeeded: true, score: 3.6 }, 1).outcome).toBe("review");
-    // the judge's own review band starts at 2.5, reflect's at 3.5 (see REFLECT_REVIEW_MIN_SCORE in score.ts, to go with akm#1418)
-    expect(rowFromVerdict(c, { pass: false, reviewNeeded: true, score: 3 }, 1).outcome).toBe("reject");
+    // the route is the verdict's own (akm#1418): reviewNeeded is review whatever the mean, and a non-pass without it is a reject
+    expect(rowFromVerdict(c, { pass: false, reviewNeeded: true, score: 3 }, 1).outcome).toBe("review");
+    expect(rowFromVerdict(c, { pass: false, score: 3 }, 1).outcome).toBe("reject");
     expect(rowFromVerdict(c, { pass: false, score: 1.5 }, 1).outcome).toBe("reject");
   });
 
@@ -265,17 +267,16 @@ describe("errorRow", () => {
 });
 
 describe("verdictOf", () => {
-  const envelope = (outcome: string, rest: Record<string, unknown>) => ({ judge: "reflect.quality", schemaVersion: 1, runner: { kind: "connection", name: "judge", model: "m" }, outcome, ...rest });
-  test("keeps the fields of the envelope's verdict that the scorer reads, masks the endpoint in the reason, and leaves a reply that is not an object as it is", () => {
+  const envelope = (outcome: "verdict" | "error" | "unparseable", rest: Record<string, unknown>): JudgeEnvelope => ({ judge: "reflect.quality", schemaVersion: 2, runner: { kind: "connection", name: "judge", model: "m" }, outcome, ...rest });
+  test("keeps the fields of the envelope's verdict that the scorer reads, with the judge's schemaVersion, and masks the endpoint in the reason", () => {
     const parsed = envelope("verdict", { verdict: { pass: false, score: 2, reviewNeeded: true, reason: "tried http://host/v1 and failed", criteria: { need: 2 }, usage: { note: "http://host/v1" } } });
-    expect(verdictOf(parsed, "http://host/v1")).toEqual({ pass: false, score: 2, reviewNeeded: true, reason: "tried <MODEL_BASE_URL> and failed", criteria: { need: 2 }, engine: "judge" });
-    expect(verdictOf(envelope("verdict", { verdict: { pass: true, score: 4 } }), "http://host/v1")).toEqual({ pass: true, score: 4, reviewNeeded: undefined, reason: undefined, criteria: undefined, engine: "judge" });
-    for (const reply of [null, 7, "text", [1, 2]]) expect(verdictOf(reply, "http://host/v1")).toBe(reply);
+    expect(verdictOf(parsed, "http://host/v1")).toEqual({ pass: false, score: 2, reviewNeeded: true, reason: "tried <MODEL_BASE_URL> and failed", criteria: { need: 2 }, engine: "judge", schemaVersion: 2 });
+    expect(verdictOf(envelope("verdict", { verdict: { pass: true, score: 4 } }), "http://host/v1")).toEqual({ pass: true, score: 4, reviewNeeded: undefined, reason: undefined, criteria: undefined, engine: "judge", schemaVersion: 2 });
   });
 
   test("reads a judge that gave no verdict (error, unparseable) as akm's reflect does: score -1, to a person", () => {
-    for (const outcome of ["error", "unparseable"]) {
-      expect(verdictOf(envelope(outcome, { reason: "failed at http://host/v1" }), "http://host/v1")).toEqual({ pass: false, score: -1, reviewNeeded: true, reason: "failed at <MODEL_BASE_URL>", criteria: undefined, engine: "judge" });
+    for (const outcome of ["error", "unparseable"] as const) {
+      expect(verdictOf(envelope(outcome, { reason: "failed at http://host/v1" }), "http://host/v1")).toEqual({ pass: false, score: -1, reviewNeeded: true, reason: "failed at <MODEL_BASE_URL>", criteria: undefined, engine: "judge", schemaVersion: 2 });
     }
   });
 });

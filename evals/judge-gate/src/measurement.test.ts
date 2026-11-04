@@ -169,6 +169,15 @@ describe("rescoring a stored run", () => {
   });
 });
 
+describe("a run from before reviewNeeded was reflect's route", () => {
+  test("is not scored again: its verdicts have no schemaVersion, and the field is named", () => {
+    const dir = stored();
+    const old = rowsOf(dir).map((r) => (r.verdict && typeof r.verdict === "object" ? { ...r, verdict: Object.fromEntries(Object.entries(r.verdict).filter(([k]) => k !== "schemaVersion")) } : r));
+    writeFileSync(join(dir, "samples.jsonl"), old.map((r) => `${JSON.stringify(r)}\n`).join(""));
+    expect(() => rescoreFolder(dir)).toThrow(/rows lack the raw output the judge-gate scorer reads: verdict\.schemaVersion \(\d+ rows?: /);
+  });
+});
+
 describe("rescoring a run on a custom corpus", () => {
   const CHANGED = (FIXTURE_CASES.find((c) => c.label === "bad" && c.severity === "harmful") as Case).id;
   /** A folder of your own cases inside the repository, which is where corpus_folder can name it: the public cases with one bad case relabelled churn. */
