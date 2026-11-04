@@ -7,7 +7,7 @@ import { comparisonFields, coreColumns, scoreColumns, type Cell } from "../../le
 import { scores } from "../../ledger/src/presentation.ts";
 import { memoryColumns } from "../../ledger/src/memory.ts";
 
-export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "pair-judge", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret", "memory-utility"];
+export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "lesson-judge", "pair-judge", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret", "memory-utility"];
 type Row = Record<string, any>;
 export interface Run { dir: string; summary: Row; rows: Row[]; samplesMissing?: boolean; running?: boolean }
 export class CompareError extends Error {}

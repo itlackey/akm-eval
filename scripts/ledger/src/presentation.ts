@@ -21,6 +21,7 @@ const tests: Record<string, [string, string]> = {
   bakeoff: ["Core model tasks", "Can the model produce correct memories, metadata repairs, session summaries and consolidation plans?"],
   "pair-judge": ["Pair comparison", "Can AKM's consolidate judge list what each note holds alone, so that it retires a note only when the other keeps every claim?"],
   "judge-gate": ["Lesson approval", "Can AKM's judge approve useful lessons while catching harmful or unnecessary ones?"],
+  "lesson-judge": ["Lesson review", "Can AKM's lesson judge pass useful new lessons and updates while catching status notes, restated rules and claims the source does not make?"],
   distill: ["Lesson creation", "Can AKM turn useful memories into accurate lessons, update existing lessons and avoid unnecessary ones?"],
   retrieval: ["Library search", "How well does AKM rank relevant assets for queries with human relevance judgments?"],
   skillret: ["Skill search", "How well does keyword or semantic search rank relevant skills across the SkillRet benchmark?"],
@@ -95,6 +96,12 @@ export function scores(summary: Record<string, unknown>): Score[] {
       ratio("Good proposals approved", "good.rate", "good.passed", "good.n", "Useful proposals approved out of all labelled good proposals. Read alongside approval precision to distinguish useful acceptance from an overly strict gate.");
       ratio("Bad lessons approved", "bad.rate", "bad.passed", "bad.n", "Harmful or unnecessary lessons incorrectly approved.", true);
       ratio("Harmful lessons approved", "bad_harmful.rate", "bad_harmful.passed", "bad_harmful.n", "Harmful lessons incorrectly approved; zero is the target.", true);
+      break;
+    case "lesson-judge":
+      ratio("Good new lessons passed", "good.new.rate", "good.new.passed", "good.new.n", "Useful new lessons the judge passed to a person, out of all labelled good new lessons.");
+      ratio("Bad new lessons passed", "bad.new.rate", "bad.new.passed", "bad.new.n", "Status notes, one-run reports, duplicates and ungrounded new lessons the judge passed; zero is the target.", true);
+      ratio("Good lesson updates passed", "good.update.rate", "good.update.passed", "good.update.n", "Useful updates to an existing lesson that the judge passed.");
+      ratio("Bad lesson updates passed", "bad.update.rate", "bad.update.passed", "bad.update.n", "Restating, off-rule and ungrounded updates that the judge passed; zero is the target.", true);
       break;
     case "pair-judge":
       ratio("Unsafe retirements", "unsafe.rate", "unsafe.count", "unsafe.n", "Retirements of a note that holds a claim the other lacks, out of the pairs where one was possible; zero is the target.", true);
