@@ -124,7 +124,7 @@ export const harnessModel = (model: string): string => `${HARNESS_PROVIDER}/${mo
 export function opencodeConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
   return {
     $schema: "https://opencode.ai/config.json",
-    provider: { [HARNESS_PROVIDER]: { npm: "@ai-sdk/openai-compatible", name: HARNESS_PROVIDER, options: { baseURL: baseUrl, ...(hasKey ? { apiKey: "{env:MODEL_API_KEY}" } : {}) }, models: { [model]: { name: model, temperature: true, options: { reasoningEffort: "none" } } } } },
+    provider: { [HARNESS_PROVIDER]: { npm: "@ai-sdk/openai-compatible", name: HARNESS_PROVIDER, options: { baseURL: baseUrl, ...(hasKey ? { apiKey: "{env:MODEL_API_KEY}" } : {}) }, models: { [model]: { name: model, temperature: true /* opencode's capability flag: the model takes a temperature; the value 0 is the agent's below */, options: { reasoningEffort: "none" } } } } },
     agent: { build: { temperature: 0 } },
     permission: { "*": "deny" },
   };

@@ -29,6 +29,7 @@ const meanOf = (x: unknown): unknown =>
   object(x) && typeof x.mean === "number" && typeof x.min === "number" && typeof x.max === "number" ? x.mean : object(x) ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, meanOf(v)])) : x;
 
 const isRepeatSummary = (x: unknown): x is Row => object(x) && typeof x.repeat === "number" && Array.isArray(x.runs) && x.runs.every((r: unknown) => typeof r === "string");
+const looksRepeat = (x: unknown): boolean => object(x) && ("repeat" in x || "runs" in x);
 
 /** A saved results folder, or its summary.json, or the repeat-summary.json of a --repeat set (its runs sit beside it). Does not modify its contents. */
 export function loadRun(path: string): Run {
@@ -38,6 +39,7 @@ export function loadRun(path: string): Run {
     dir = dirname(dir);
     let repeat: unknown;
     try { repeat = JSON.parse(readFileSync(file, "utf8")); } catch { /* summary.json of the folder is read below */ }
+    if (looksRepeat(repeat) && !(isRepeatSummary(repeat) && repeat.runs.length > 0 && object(repeat.metrics))) throw new CompareError(`${file}: a repeat summary needs "repeat", a non-empty "runs" list of run folders and "metrics"`);
     if (isRepeatSummary(repeat)) {
       const repeats = repeat.runs.map((name: string) => loadRun(join(dir, name)));
       return { dir, summary: { ...repeats[0]?.summary, label: `${repeat.label} (mean of ${repeats.length} runs)`, metrics: meanOf(repeat.metrics), wall_seconds: undefined }, rows: repeats[0]?.rows ?? [], repeats };
@@ -206,7 +208,9 @@ export function renderPair(report: PairReport): string {
   if (g) {
     const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
     lines.push("", `Per-case agreement (A: ${g.a}; B: ${g.b}): ${g.same} of ${g.cases} cases have the same outcome (${pct(g.share)}); Cohen's kappa ${g.kappa === null ? "undefined (chance explains all of it)" : g.kappa.toFixed(3)}.`);
-    const left = [g.errored.a + g.errored.b > 0 ? `${g.errored.a + g.errored.b} errored` : "", g.no_majority.a + g.no_majority.b > 0 ? `${g.no_majority.a + g.no_majority.b} with no majority outcome` : "", g.only.a + g.only.b > 0 ? `${g.only.a + g.only.b} in only one run` : ""].filter(Boolean);
+    // Per side, not summed: a case left out of both sides would count twice in a total.
+    const side = (n: { a: number; b: number }, what: string) => (n.a + n.b > 0 ? `${what} (A ${n.a}, B ${n.b})` : "");
+    const left = [side(g.errored, "errored"), side(g.no_majority, "no majority outcome"), side(g.only, "in only one run")].filter(Boolean);
     if (left.length) lines.push(`Left out: ${left.join(", ")}.`);
     if (g.flips.length) {
       const shown = g.flips.slice(0, 60);

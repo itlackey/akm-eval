@@ -188,7 +188,10 @@ describe("per-case agreement", () => {
     // c1: p, error, error -> p; c2: error in every run -> errored.
     const s = agreementOf({ dir: "set", summary: {}, rows: [], repeats: [withError("pp", [1]), withError("pp", [0, 1]), withError("pp", [0, 1])] }, outcomes("pp"))!;
     expect(s).toMatchObject({ cases: 1, same: 1, errored: { a: 1, b: 0 }, no_majority: { a: 0, b: 0 } });
-    expect(renderPair({ ...comparePair(fixture("judge-gate"), fixture("judge-gate", "after")), agreement: g })).toContain("Left out: 1 errored.");
+    expect(renderPair({ ...comparePair(fixture("judge-gate"), fixture("judge-gate", "after")), agreement: g })).toContain("Left out: errored (A 1, B 0).");
+    // a case that errored on both sides is left out once, so it is not summed into one total
+    const both = agreementOf(withError("pp", [0]), withError("pp", [0]))!;
+    expect(renderPair({ ...comparePair(fixture("judge-gate"), fixture("judge-gate", "after")), agreement: both })).toContain("Left out: errored (A 1, B 1).");
   });
 
   test("runs whose samples carry no outcome have no agreement; rows of an eval that does are shown by compare", () => {
@@ -209,5 +212,13 @@ describe("per-case agreement", () => {
     expect(set.summary.label).toBe("x (mean of 2 runs)");
     expect(agreementOf(fixture("judge-gate"), set)?.b).toBe("the majority of 2 runs");
     expect(comparePair(fixture("judge-gate"), set).warnings).toContain(`${dir}: a --repeat set of 2 runs; its metrics are their means, and its other rows (cases, timing, usage, settings) are the first run's.`);
+  });
+
+  test("a malformed repeat-summary.json is an error, not a mean of 0 runs", () => {
+    const dir = mkdtempSync(join(tmpdir(), "compare-repeat-bad-")); folders.push(dir);
+    for (const [name, body] of Object.entries({ empty: { repeat: 0, runs: [], metrics: {} }, nometrics: { repeat: 1, runs: ["x"] }, badruns: { repeat: 2, runs: "x" } })) {
+      writeFileSync(join(dir, `${name}-repeat-summary.json`), JSON.stringify(body));
+      expect(() => loadRun(join(dir, `${name}-repeat-summary.json`))).toThrow("a repeat summary needs");
+    }
   });
 });

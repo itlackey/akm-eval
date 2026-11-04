@@ -82,6 +82,9 @@ describe("passRuleReport", () => {
     const wrong = [{ id: "a", label: "good", lane: "negative", outcome: "reject", criteria: c(5, 5, 5) }];
     expect(passRuleReport([folder("judge-gate", wrong)], (s) => s).reproduced.mismatch).toMatchObject([{ id: "a", stored: "reject", shipped: "pass" }]);
     expect(() => passRuleReport([folder("judge-gate", rows), folder("lesson-judge", [])], (s) => s)).toThrow("runs before it are of judge-gate");
+    const half = mkdtempSync(join(tmpdir(), "pass-rule-half-")); dirs.push(half);
+    writeFileSync(join(half, "summary.json"), "{}");
+    expect(() => passRuleReport([half], (s) => s)).toThrow(/has no samples\.jsonl$/);
     expect(() => passRuleReport([folder("reflect", [])], (s) => s)).toThrow("is a run of \"reflect\"");
   });
 

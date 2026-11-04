@@ -57,7 +57,8 @@ export function passRuleReport(dirs: string[], tried: PassRule | ((shipped: Pass
   let shipped: PassRule | undefined;
   let rule: PassRule | undefined;
   for (const dir of dirs) {
-    if (!existsSync(join(dir, "summary.json")) || !existsSync(join(dir, "samples.jsonl"))) throw new Error(`${dir} has no summary.json and samples.jsonl`);
+    const missing = ["summary.json", "samples.jsonl"].filter(f => !existsSync(join(dir, f)));
+    if (missing.length) throw new Error(`${dir} has no ${missing.join(" and no ")}`);
     const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     const name: unknown = summary.eval;
     if (typeof name !== "string" || !(name in JUDGES)) throw new Error(`${dir} is a run of ${JSON.stringify(name)}; this reads ${Object.keys(JUDGES).join(" and ")}`);
