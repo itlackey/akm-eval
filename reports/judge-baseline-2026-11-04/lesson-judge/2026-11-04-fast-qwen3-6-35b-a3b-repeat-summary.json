@@ -1,0 +1,1006 @@
+{
+  "eval": "lesson-judge",
+  "corpus": "public",
+  "label": "fast-qwen3-6-35b-a3b",
+  "repeat": 3,
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261105",
+  "akm_bin": "bun ~/.cache/agent-judge-baseline/akm/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-3182-gcc4872fe8",
+  "akm_build_fingerprint": null,
+  "runs": [
+    "2026-11-04-fast-qwen3-6-35b-a3b-r1",
+    "2026-11-04-fast-qwen3-6-35b-a3b-r2",
+    "2026-11-04-fast-qwen3-6-35b-a3b-r3"
+  ],
+  "n_errored": {
+    "min": 0,
+    "max": 0,
+    "mean": 0
+  },
+  "timeouts": {
+    "min": 0,
+    "max": 0,
+    "mean": 0
+  },
+  "seconds": {
+    "min": 151.5,
+    "max": 163.002,
+    "mean": 157.0717
+  },
+  "metrics": {
+    "good": {
+      "new": {
+        "n": {
+          "min": 19,
+          "max": 19,
+          "mean": 19
+        },
+        "passed": {
+          "min": 17,
+          "max": 17,
+          "mean": 17
+        },
+        "rate": {
+          "min": 0.8947,
+          "max": 0.8947,
+          "mean": 0.8947
+        }
+      },
+      "update": {
+        "n": {
+          "min": 21,
+          "max": 21,
+          "mean": 21
+        },
+        "passed": {
+          "min": 8,
+          "max": 11,
+          "mean": 10
+        },
+        "rate": {
+          "min": 0.381,
+          "max": 0.5238,
+          "mean": 0.4762
+        }
+      }
+    },
+    "bad": {
+      "new": {
+        "n": {
+          "min": 70,
+          "max": 70,
+          "mean": 70
+        },
+        "passed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "update": {
+        "n": {
+          "min": 68,
+          "max": 68,
+          "mean": 68
+        },
+        "passed": {
+          "min": 1,
+          "max": 3,
+          "mean": 2
+        },
+        "rate": {
+          "min": 0.0147,
+          "max": 0.0441,
+          "mean": 0.0294
+        }
+      }
+    },
+    "by_origin": {
+      "real": {
+        "good": {
+          "new": {
+            "n": {
+              "min": 16,
+              "max": 16,
+              "mean": 16
+            },
+            "passed": {
+              "min": 14,
+              "max": 14,
+              "mean": 14
+            },
+            "rate": {
+              "min": 0.875,
+              "max": 0.875,
+              "mean": 0.875
+            }
+          },
+          "update": {
+            "n": {
+              "min": 9,
+              "max": 9,
+              "mean": 9
+            },
+            "passed": {
+              "min": 4,
+              "max": 5,
+              "mean": 4.3333
+            },
+            "rate": {
+              "min": 0.4444,
+              "max": 0.5556,
+              "mean": 0.4815
+            }
+          }
+        },
+        "bad": {
+          "new": {
+            "n": {
+              "min": 4,
+              "max": 4,
+              "mean": 4
+            },
+            "passed": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            },
+            "rate": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            }
+          },
+          "update": {
+            "n": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            },
+            "passed": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            },
+            "rate": null
+          }
+        }
+      },
+      "hand-written": {
+        "good": {
+          "new": {
+            "n": {
+              "min": 3,
+              "max": 3,
+              "mean": 3
+            },
+            "passed": {
+              "min": 3,
+              "max": 3,
+              "mean": 3
+            },
+            "rate": {
+              "min": 1,
+              "max": 1,
+              "mean": 1
+            }
+          },
+          "update": {
+            "n": {
+              "min": 12,
+              "max": 12,
+              "mean": 12
+            },
+            "passed": {
+              "min": 4,
+              "max": 7,
+              "mean": 5.6667
+            },
+            "rate": {
+              "min": 0.3333,
+              "max": 0.5833,
+              "mean": 0.4722
+            }
+          }
+        },
+        "bad": {
+          "new": {
+            "n": {
+              "min": 66,
+              "max": 66,
+              "mean": 66
+            },
+            "passed": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            },
+            "rate": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            }
+          },
+          "update": {
+            "n": {
+              "min": 68,
+              "max": 68,
+              "mean": 68
+            },
+            "passed": {
+              "min": 1,
+              "max": 3,
+              "mean": 2
+            },
+            "rate": {
+              "min": 0.0147,
+              "max": 0.0441,
+              "mean": 0.0294
+            }
+          }
+        }
+      }
+    },
+    "bad_by_kind": {
+      "new/dated-status": {
+        "n": {
+          "min": 7,
+          "max": 7,
+          "mean": 7
+        },
+        "passed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "new/duplicate-asset": {
+        "n": {
+          "min": 12,
+          "max": 12,
+          "mean": 12
+        },
+        "passed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "new/one-run": {
+        "n": {
+          "min": 9,
+          "max": 9,
+          "mean": 9
+        },
+        "passed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "new/ungrounded": {
+        "n": {
+          "min": 42,
+          "max": 42,
+          "mean": 42
+        },
+        "passed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "update/off-rule-update": {
+        "n": {
+          "min": 13,
+          "max": 13,
+          "mean": 13
+        },
+        "passed": {
+          "min": 1,
+          "max": 3,
+          "mean": 2
+        },
+        "rate": {
+          "min": 0.0769,
+          "max": 0.2308,
+          "mean": 0.1538
+        }
+      },
+      "update/restated-update": {
+        "n": {
+          "min": 16,
+          "max": 16,
+          "mean": 16
+        },
+        "passed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "update/ungrounded": {
+        "n": {
+          "min": 39,
+          "max": 39,
+          "mean": 39
+        },
+        "passed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      }
+    },
+    "good_rejected": {
+      "new": {
+        "n": {
+          "min": 19,
+          "max": 19,
+          "mean": 19
+        },
+        "count": {
+          "min": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "rate": {
+          "min": 0.1053,
+          "max": 0.1053,
+          "mean": 0.1053
+        }
+      },
+      "update": {
+        "n": {
+          "min": 21,
+          "max": 21,
+          "mean": 21
+        },
+        "count": {
+          "min": 10,
+          "max": 13,
+          "mean": 11
+        },
+        "rate": {
+          "min": 0.4762,
+          "max": 0.619,
+          "mean": 0.5238
+        }
+      }
+    },
+    "review_share": {
+      "n": {
+        "min": 89,
+        "max": 89,
+        "mean": 89
+      },
+      "count": {
+        "min": 0,
+        "max": 1,
+        "mean": 0.6667
+      },
+      "rate": {
+        "min": 0,
+        "max": 0.0112,
+        "mean": 0.0075
+      }
+    },
+    "precision": {
+      "new": {
+        "value": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "passed_good": {
+          "min": 17,
+          "max": 17,
+          "mean": 17
+        },
+        "passed": {
+          "min": 17,
+          "max": 17,
+          "mean": 17
+        }
+      },
+      "update": {
+        "value": {
+          "min": 0.7857,
+          "max": 0.8889,
+          "mean": 0.8403
+        },
+        "passed_good": {
+          "min": 8,
+          "max": 11,
+          "mean": 10
+        },
+        "passed": {
+          "min": 9,
+          "max": 14,
+          "mean": 12
+        }
+      }
+    },
+    "criteria": {
+      "new": {
+        "good": {
+          "reusable": {
+            "n": {
+              "min": 19,
+              "max": 19,
+              "mean": 19
+            },
+            "mean": {
+              "min": 4.211,
+              "max": 4.263,
+              "mean": 4.2283
+            }
+          },
+          "nonRedundancy": {
+            "n": {
+              "min": 19,
+              "max": 19,
+              "mean": 19
+            },
+            "mean": {
+              "min": 5,
+              "max": 5,
+              "mean": 5
+            }
+          },
+          "grounding": {
+            "n": {
+              "min": 19,
+              "max": 19,
+              "mean": 19
+            },
+            "mean": {
+              "min": 3.632,
+              "max": 3.684,
+              "mean": 3.6667
+            }
+          }
+        },
+        "bad": {
+          "reusable": {
+            "n": {
+              "min": 70,
+              "max": 70,
+              "mean": 70
+            },
+            "mean": {
+              "min": 2.314,
+              "max": 2.371,
+              "mean": 2.352
+            }
+          },
+          "nonRedundancy": {
+            "n": {
+              "min": 70,
+              "max": 70,
+              "mean": 70
+            },
+            "mean": {
+              "min": 4.229,
+              "max": 4.257,
+              "mean": 4.2477
+            }
+          },
+          "grounding": {
+            "n": {
+              "min": 70,
+              "max": 70,
+              "mean": 70
+            },
+            "mean": {
+              "min": 1.914,
+              "max": 1.957,
+              "mean": 1.938
+            }
+          }
+        }
+      },
+      "update": {
+        "good": {
+          "reusable": {
+            "n": {
+              "min": 21,
+              "max": 21,
+              "mean": 21
+            },
+            "mean": {
+              "min": 4.429,
+              "max": 4.524,
+              "mean": 4.4763
+            }
+          },
+          "nonRedundancy": {
+            "n": {
+              "min": 21,
+              "max": 21,
+              "mean": 21
+            },
+            "mean": {
+              "min": 3.286,
+              "max": 3.429,
+              "mean": 3.3653
+            }
+          },
+          "grounding": {
+            "n": {
+              "min": 21,
+              "max": 21,
+              "mean": 21
+            },
+            "mean": {
+              "min": 4.381,
+              "max": 4.524,
+              "mean": 4.4603
+            }
+          }
+        },
+        "bad": {
+          "reusable": {
+            "n": {
+              "min": 68,
+              "max": 68,
+              "mean": 68
+            },
+            "mean": {
+              "min": 3.029,
+              "max": 3.118,
+              "mean": 3.0783
+            }
+          },
+          "nonRedundancy": {
+            "n": {
+              "min": 68,
+              "max": 68,
+              "mean": 68
+            },
+            "mean": {
+              "min": 2.588,
+              "max": 2.691,
+              "mean": 2.637
+            }
+          },
+          "grounding": {
+            "n": {
+              "min": 68,
+              "max": 68,
+              "mean": 68
+            },
+            "mean": {
+              "min": 2.426,
+              "max": 2.456,
+              "mean": 2.441
+            }
+          }
+        }
+      }
+    },
+    "routes": {
+      "new/good": {
+        "pass": {
+          "min": 17,
+          "max": 17,
+          "mean": 17
+        },
+        "review": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "reject": {
+          "min": 2,
+          "max": 2,
+          "mean": 2
+        }
+      },
+      "new/ungrounded": {
+        "pass": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "review": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "reject": {
+          "min": 42,
+          "max": 42,
+          "mean": 42
+        }
+      },
+      "new/one-run": {
+        "pass": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "review": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "reject": {
+          "min": 9,
+          "max": 9,
+          "mean": 9
+        }
+      },
+      "update/good": {
+        "pass": {
+          "min": 8,
+          "max": 11,
+          "mean": 10
+        },
+        "review": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "reject": {
+          "min": 10,
+          "max": 13,
+          "mean": 11
+        }
+      },
+      "new/dated-status": {
+        "pass": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "review": {
+          "min": 0,
+          "max": 1,
+          "mean": 0.6667
+        },
+        "reject": {
+          "min": 6,
+          "max": 7,
+          "mean": 6.3333
+        }
+      },
+      "update/ungrounded": {
+        "pass": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "review": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "reject": {
+          "min": 39,
+          "max": 39,
+          "mean": 39
+        }
+      },
+      "new/duplicate-asset": {
+        "pass": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "review": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "reject": {
+          "min": 12,
+          "max": 12,
+          "mean": 12
+        }
+      },
+      "update/restated-update": {
+        "pass": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "review": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "reject": {
+          "min": 16,
+          "max": 16,
+          "mean": 16
+        }
+      },
+      "update/off-rule-update": {
+        "pass": {
+          "min": 1,
+          "max": 3,
+          "mean": 2
+        },
+        "review": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "reject": {
+          "min": 10,
+          "max": 12,
+          "mean": 11
+        }
+      }
+    },
+    "no_verdict": {
+      "error": {
+        "n": {
+          "min": 178,
+          "max": 178,
+          "mean": 178
+        },
+        "count": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "unparseable": {
+        "n": {
+          "min": 178,
+          "max": 178,
+          "mean": 178
+        },
+        "count": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      }
+    },
+    "akm_failed": {
+      "n": {
+        "min": 178,
+        "max": 178,
+        "mean": 178
+      },
+      "count": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "rate": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      }
+    },
+    "seconds": {
+      "mean": {
+        "min": 1.696,
+        "max": 1.827,
+        "mean": 1.7603
+      },
+      "median": {
+        "min": 1.7,
+        "max": 1.8,
+        "mean": 1.7333
+      },
+      "max": {
+        "min": 2.2,
+        "max": 2.3,
+        "mean": 2.2667
+      }
+    },
+    "baselines": {
+      "pass_all": {
+        "new": {
+          "good": {
+            "n": {
+              "min": 19,
+              "max": 19,
+              "mean": 19
+            },
+            "passed": {
+              "min": 19,
+              "max": 19,
+              "mean": 19
+            },
+            "rate": {
+              "min": 1,
+              "max": 1,
+              "mean": 1
+            }
+          },
+          "bad": {
+            "n": {
+              "min": 70,
+              "max": 70,
+              "mean": 70
+            },
+            "passed": {
+              "min": 70,
+              "max": 70,
+              "mean": 70
+            },
+            "rate": {
+              "min": 1,
+              "max": 1,
+              "mean": 1
+            }
+          },
+          "precision": {
+            "min": 0.2135,
+            "max": 0.2135,
+            "mean": 0.2135
+          }
+        },
+        "update": {
+          "good": {
+            "n": {
+              "min": 21,
+              "max": 21,
+              "mean": 21
+            },
+            "passed": {
+              "min": 21,
+              "max": 21,
+              "mean": 21
+            },
+            "rate": {
+              "min": 1,
+              "max": 1,
+              "mean": 1
+            }
+          },
+          "bad": {
+            "n": {
+              "min": 68,
+              "max": 68,
+              "mean": 68
+            },
+            "passed": {
+              "min": 68,
+              "max": 68,
+              "mean": 68
+            },
+            "rate": {
+              "min": 1,
+              "max": 1,
+              "mean": 1
+            }
+          },
+          "precision": {
+            "min": 0.236,
+            "max": 0.236,
+            "mean": 0.236
+          }
+        }
+      },
+      "reject_all": {
+        "new": {
+          "good": {
+            "n": {
+              "min": 19,
+              "max": 19,
+              "mean": 19
+            },
+            "passed": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            },
+            "rate": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            }
+          },
+          "bad": {
+            "n": {
+              "min": 70,
+              "max": 70,
+              "mean": 70
+            },
+            "passed": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            },
+            "rate": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            }
+          },
+          "precision": null
+        },
+        "update": {
+          "good": {
+            "n": {
+              "min": 21,
+              "max": 21,
+              "mean": 21
+            },
+            "passed": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            },
+            "rate": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            }
+          },
+          "bad": {
+            "n": {
+              "min": 68,
+              "max": 68,
+              "mean": 68
+            },
+            "passed": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            },
+            "rate": {
+              "min": 0,
+              "max": 0,
+              "mean": 0
+            }
+          },
+          "precision": null
+        }
+      }
+    }
+  }
+}

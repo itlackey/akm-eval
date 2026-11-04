@@ -1,0 +1,836 @@
+{
+  "eval": "pair-judge",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "fast-qwen3-6-35b-a3b-r2",
+  "date": "2026-11-04T03:00:50.935Z",
+  "git_commit": "5a7d941",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261105",
+  "akm_bin": "bun ~/.cache/agent-judge-baseline/akm/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-3182-gcc4872fe8",
+  "akm_build_fingerprint": null,
+  "config_form": "connections",
+  "limit": null,
+  "config_patch": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "engines": {
+      "judge": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "judge"
+    }
+  },
+  "engine": {
+    "engine": "judge",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "<MODEL_BASE_URL>",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "judge": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "b3622b4f93c5196bf8ca60220bbc70caa7ca699638363ac47a14177587ce574d",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 92,
+  "n_run": 92,
+  "n_scored": 92,
+  "n_errored": 0,
+  "timeouts": 0,
+  "metrics": {
+    "unsafe": {
+      "n": 72,
+      "count": 2,
+      "rate": 0.0278
+    },
+    "found": {
+      "n": 54,
+      "count": 50,
+      "rate": 0.9259
+    },
+    "precision": {
+      "value": 0.9615,
+      "safe": 50,
+      "retired": 52
+    },
+    "failed": {
+      "n": 92,
+      "count": 0,
+      "rate": 0
+    },
+    "relation": {
+      "n": 92,
+      "count": 86,
+      "rate": 0.9348
+    },
+    "confusion": {
+      "overlap": {
+        "overlap": 38
+      },
+      "subsumed": {
+        "subsumed": 30,
+        "overlap": 2,
+        "duplicate": 2
+      },
+      "duplicate": {
+        "duplicate": 18,
+        "subsumed": 2
+      }
+    },
+    "by_kind": {
+      "contradicts": {
+        "n": 13,
+        "failed": 0,
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "kept": 13,
+        "right": 13
+      },
+      "subsumed": {
+        "n": 18,
+        "failed": 0,
+        "retired_safe": 15,
+        "retired_unsafe": 2,
+        "kept": 1,
+        "right": 15
+      },
+      "supersedes": {
+        "n": 16,
+        "failed": 0,
+        "retired_safe": 15,
+        "retired_unsafe": 0,
+        "kept": 1,
+        "right": 15
+      },
+      "duplicate": {
+        "n": 20,
+        "failed": 0,
+        "retired_safe": 20,
+        "retired_unsafe": 0,
+        "kept": 0,
+        "right": 18
+      },
+      "overlap": {
+        "n": 17,
+        "failed": 0,
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "kept": 17,
+        "right": 17
+      },
+      "lookalike": {
+        "n": 8,
+        "failed": 0,
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "kept": 8,
+        "right": 8
+      }
+    },
+    "claims": {
+      "labelled": 136,
+      "unmatchable": 0,
+      "found": 129,
+      "listed": 151,
+      "wrong_side": 0,
+      "unlabelled": 11,
+      "found_rate": 0.9485
+    },
+    "confidence": {
+      "right": {
+        "n": 86,
+        "mean": 1
+      },
+      "wrong": {
+        "n": 6,
+        "mean": 1
+      }
+    },
+    "seconds": {
+      "n": 92,
+      "mean": 2.0293
+    },
+    "baselines": {
+      "never_retire": {
+        "unsafe": {
+          "n": 72,
+          "count": 0,
+          "rate": 0
+        },
+        "found": {
+          "n": 54,
+          "count": 0,
+          "rate": 0
+        }
+      },
+      "always_retire_older": {
+        "unsafe": {
+          "n": 72,
+          "count": 48,
+          "rate": 0.6667
+        },
+        "found": {
+          "n": 54,
+          "count": 44,
+          "rate": 0.8148
+        }
+      },
+      "most_common_relation": {
+        "relation": "overlap",
+        "accuracy": {
+          "n": 92,
+          "count": 38,
+          "rate": 0.413
+        }
+      }
+    }
+  },
+  "model_calls": {
+    "calls": 92,
+    "errors": 0,
+    "prompt_tokens": 1221.7,
+    "completion_tokens": 72.5,
+    "seconds": 1.65,
+    "output_tokens_per_second": 43.8
+  },
+  "semantic_verification": null,
+  "concurrency": 2,
+  "timeout_ms": 900000,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "pair-judge",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.1"
+    },
+    "scorer": {
+      "version": "0.1"
+    },
+    "cases": {
+      "contradicts-04": {
+        "input_sha256": "41e8bee6d98858f51970b8fd282f626581a0090b574fffb79684f321e46c56a1",
+        "label_sha256": "603526c9a202fffbced01eb8a53b2e311c4a51dd3327b9b4e0c7d4273e52761f"
+      },
+      "contradicts-13": {
+        "input_sha256": "123be17d84aef6357322e10f2261426ae0a37d010fee9ac7834d2561a21775fe",
+        "label_sha256": "0fd029fcf393b5dcd5421c6eca1792751f97e3474704bb05dda36ba1f7f69d11"
+      },
+      "contradicts-11": {
+        "input_sha256": "4a1f4f6194f8e6a3d092e1d2e44352b05185173e8bce8147eb52df0452a4f20a",
+        "label_sha256": "3ae66704152c203df49e604ee0a99a1a33da8f552eccf7cc81bcab0aa0978276"
+      },
+      "pool-contradicts-01": {
+        "input_sha256": "896d185c96375047a0cc91cafc7b05e79d06cc1680fa4ce66b7cedcf12d7c8f9",
+        "label_sha256": "e00e8b0ec70dc09846df42941e5eb3f49ff95b9ee0d2d7993e7c185d15907696"
+      },
+      "subsumed-02": {
+        "input_sha256": "f21433a2f0297681839a4f1de5b6b5b5059e6708758d9269c1cce95695a75b80",
+        "label_sha256": "4d393aa50f3edf667558d4348ab9e59611022583e03aea8d92ea972120b4bd47"
+      },
+      "pool-supersedes-03": {
+        "input_sha256": "1b4fa7783a9199d08db129e9f24d4a9dee0d21fb02d1148171c013929d54e5e2",
+        "label_sha256": "78eb86de6f7d8e51490e3ff479ff1b08c107ab51924174b4600d944ac32dea95"
+      },
+      "pool-triple-01-1": {
+        "input_sha256": "e8e96fbe94c5ac7ea33519d1cc1e0baf71b02cfe27800d12480ec93f8db71e4d",
+        "label_sha256": "323ea9f796a83270c2aaf1a9832bf405513be7297accc6fc1f78d6a431f4ca63"
+      },
+      "contradicts-02": {
+        "input_sha256": "8b733913cb54eae9fb2e53973e87b6d9d2472da54d7cc982fcd6942ef9d08fa5",
+        "label_sha256": "a19afbdbdd88f3f79f199798307cafdee42fdf5f66ba3bd6ee67946727ed397c"
+      },
+      "pool-supersedes-01": {
+        "input_sha256": "5678d0cd2bc34ba326388c0e1e14c5c7c392b8c3e9a625fe8b67f814a42e0ebd",
+        "label_sha256": "1f5f38d7c737fc084535f395f42bd3b567f1023fd1a3f09ad201602581f9c2d1"
+      },
+      "duplicate-06": {
+        "input_sha256": "75d08fec7c3be3a4d389bee82054803e4fda54df63038cc7315bf960f487e261",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "supersedes-11": {
+        "input_sha256": "111b23bf0ce95d26e34b230258926505d74fc70fa668e520bad4a7206dd97074",
+        "label_sha256": "6f5c049a5f2d1708e608c6281f5a884eb74cc3f46fb5e17f923d299875ff2032"
+      },
+      "overlap-04": {
+        "input_sha256": "10080e68c2d597e57f6cceb0cb7716fcb48b8dace6c9e63f0b8f8eb21c8fa730",
+        "label_sha256": "553e98170a47913c0bd62f7285f8e23c2139cb43811ca4a369e95f05dd81585e"
+      },
+      "duplicate-04": {
+        "input_sha256": "202292da07e1514c395689588e1369451b19c49a3a4a7550c66b3cb721cb77d3",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "contradicts-03": {
+        "input_sha256": "f366d079f2795a3ea8e021d0f530fb12015a929d4d97bbde8c6bc7adb65f37be",
+        "label_sha256": "a60a30eb6614e1c5f56a7c90451c65f88c7b34ad451659cd9469ffa13d4b5b17"
+      },
+      "subsumed-05": {
+        "input_sha256": "6d9278a49febf78287201b49062805b0e56889d1bad47313c69c378e05a795a1",
+        "label_sha256": "23812876ca9350ffff5193835ba2fe57c43b2ade4aa71146de4cee397f78c12c"
+      },
+      "subsumed-09": {
+        "input_sha256": "c197bca68b756b0f429467e48f5e2aecb30fda87dd17c0043350e18a1d6087f1",
+        "label_sha256": "6c6bfb88912138768da8c5d76c21b8b22f7485527f97aab5a5b3659c7ca3a6ee"
+      },
+      "pool-subsumed-01": {
+        "input_sha256": "2c89ded1ac8419d6abd5b7598bfe16f9cde6a82b783d84ff1ed742c82dbd2a2c",
+        "label_sha256": "f08c7f269f279260ce672e37c9d9563ab1a84284c31f982b590288d60aabe782"
+      },
+      "duplicate-02": {
+        "input_sha256": "0f62e768b86c622f3b1cef2791ceab924386b36ad1eec4533dfc37b32ff7312f",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "subsumed-04": {
+        "input_sha256": "72ad9b9dd695b50f7b8ac5375a84de0a961908f0aabb7a767295b12a843e27bd",
+        "label_sha256": "b0bc02b1d2637a55690d895e2371ae37cb13df961399d38eadfcd071a3cd6776"
+      },
+      "duplicate-08": {
+        "input_sha256": "c7b60c33238f701b94989d712f2d1e4dff82fc6568ea47d2b5560de98543cff8",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "pool-supersedes-04": {
+        "input_sha256": "9e2ab2ee064a9bf334b76025da75ca5a1bc25e4d2bf962084a90ae6ad941c5cc",
+        "label_sha256": "b6b3357bd4cda50d9c6529256d46f337ea82b08a0c5a8c4bc728802bc0e5ba10"
+      },
+      "pool-duplicate-01": {
+        "input_sha256": "900dd3ecc667968636679155e575f7173ed25294417c822fb5aa6aa594e2cde3",
+        "label_sha256": "323ea9f796a83270c2aaf1a9832bf405513be7297accc6fc1f78d6a431f4ca63"
+      },
+      "supersedes-04": {
+        "input_sha256": "fd65bb722025f1626b71da12ba0b5281bda1025f761fa17a110053907229616b",
+        "label_sha256": "e9fbdf8a412bf3f2d29fd51581e303876d114b40a7b7fc57432e30930e2ddf4c"
+      },
+      "duplicate-01": {
+        "input_sha256": "51f9b437dff78174be690bccccfef922201a2143e314042a243c678485b51cd8",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "subsumed-06": {
+        "input_sha256": "3f261b46ef80071946ef79af3d0d0be43d363f7c7349374fece1efdd31652969",
+        "label_sha256": "f984fe04a126e5f901d70396c101e53bdf0c818b5c20a13b9bd43870f90c129a"
+      },
+      "contradicts-12": {
+        "input_sha256": "b62eb76d6f5d42db2081900ca07abd984920b21bffce88ae0477556094abdb58",
+        "label_sha256": "6c26e0dbea8de4d97970a09c259a834b4cf0d96779ce447a7756b8e010e19ea0"
+      },
+      "supersedes-13": {
+        "input_sha256": "676567eb56178da7abda5a936a778a4d41fa986bce64da48673575484ddd2d1b",
+        "label_sha256": "a10c1df40d3a3ceed146dabfa6f4fa60983bfeb20f4d94910b5dda237c3b977e"
+      },
+      "contradicts-06": {
+        "input_sha256": "8eda03c0cea7efdefd9605a1cdb71b0975cb3663f6d15e06aca94277006b3469",
+        "label_sha256": "acdc6ff254c7d83cf74cb3e0c45f7782a6a695e566a8afcae839deaf2907d096"
+      },
+      "pool-lookalike-02": {
+        "input_sha256": "95ad0f087c4861be4b10f7372f0cb4b4ca442bfc908319a8a2e286eee0a1a34d",
+        "label_sha256": "ca3ac75ae1ecf1d010917d604a56b32620403a3a461c426125bc305517e5c7d4"
+      },
+      "supersedes-02": {
+        "input_sha256": "d520e754b7b1a7dafe9f85c69b446a9dcb7c7c4fc99b6838e8ca2243f1d9a7fa",
+        "label_sha256": "5f1784be38e5e870d5b4985689c15b08fcf2bd1e327d4a510d280cbb3a432c91"
+      },
+      "supersedes-01": {
+        "input_sha256": "e6223b567fc07da9510b66c9b58c47713a46147be32c949a0a46ff934bd79ee0",
+        "label_sha256": "999c591c81e9aedb52d73e86db61207e832e6125fe3dcea2d9f05f4a0bfa39e4"
+      },
+      "contradicts-09": {
+        "input_sha256": "6411ff3131b9c1c8c29eed794a853d61a074515ccfa7b847a2e2c1a175c74ac4",
+        "label_sha256": "3034c8017723cd67515968f43839fb5c569e44c9b27b4896d6664c2a44ea94b4"
+      },
+      "pool-supersedes-02": {
+        "input_sha256": "befd16936c819d91411acf87159d4ffa6613965544c372a760fe3c6a1c4a38d2",
+        "label_sha256": "1819df6cdfea6889bfd72f44c310f1bc18f7dc40238dd624d8613b020bd47198"
+      },
+      "duplicate-07": {
+        "input_sha256": "c4b26e5f48ce22fd1fdf90c2fec80c0bcb6db680bcd6e964511b5fe188e9b309",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "pool-lookalike-01": {
+        "input_sha256": "83c7465238d0b89593cc1bc4f262ce1a54c1fd36e0555e89a5bed488dc458c45",
+        "label_sha256": "6be649f142ebb9124d68eeaa1965e3161118f77439fc2420c1bfb068c0025ff1"
+      },
+      "supersedes-12": {
+        "input_sha256": "021c677fdb36b48d7bb9a6d3bc0fc351e173e176953ff90a3df582ee10c66c62",
+        "label_sha256": "0f7e9264a60d256b43aecc3c189748784048fdd32fa13244af4fb52bb701dee8"
+      },
+      "duplicate-13": {
+        "input_sha256": "35ec26e9ee02bff8a5712cca8169a26acbf508a3572621d65aa88d5fc232a561",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "pool-lookalike-03": {
+        "input_sha256": "01ea9e6d5d949ebc7c866e2697f61a7cde6442ddcb0d627b54096e43949849b3",
+        "label_sha256": "b0ed2555e91371bfdebef74beba4bc136d8ef831bd427ba909e5f53f4906b5bd"
+      },
+      "duplicate-11": {
+        "input_sha256": "d814d8d533914b579c94038a42f96815a94eae51f132bab834fc423955cc0306",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "pool-subsumed-02": {
+        "input_sha256": "bae5c94847e3948ffd304453651ee3a56f89f29eea7c517406224ceb62f478fb",
+        "label_sha256": "7afc753b9ef26318782041c86d75ea25f7092a7ca9d7951da48bf9f68739c754"
+      },
+      "duplicate-03": {
+        "input_sha256": "466ee07b89b8da229aadce33b2d7ead4050270d37e9f514523502370c57c0352",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "supersedes-07": {
+        "input_sha256": "50ab50ea6322db2cbaeef42183a2ee9276cc5117e92e865aabc871055150688d",
+        "label_sha256": "af04804b322b33cecb6ff7312ec24068b0ca6890fbbe0240ff018a9d43bfe5db"
+      },
+      "contradicts-07": {
+        "input_sha256": "46e29c9b4edfb2b430e1fbae1fce0e69488bd3abd2ed75d766e3280b8ae3107a",
+        "label_sha256": "30b6e333e10f1293423e6bcfd282f592b57fcb2ca24806edb01fae5131fd6a55"
+      },
+      "supersedes-09": {
+        "input_sha256": "a1862964445e94da0f0e202b9318b6b19d3d6ca8f78b89b8ffb39eb224348488",
+        "label_sha256": "902f6ceaac32899aec9281ae5324dd283d9a6595684ee4d75d1db9e32c4cd995"
+      },
+      "unrelated-09": {
+        "input_sha256": "b554b6ab6f68651da956c687193ca8dd8b953ca2f6b8cdb3f1f91c7c3d081efd",
+        "label_sha256": "98be4f42e5d64aa69f46ba54c202b475610d79705ece878b09210aca1c5539c5"
+      },
+      "pool-triple-02-1": {
+        "input_sha256": "5c4db9f62f4ad9e8ecdbf9fbb3429b2537977ef936ddfc0d529c5c598ca686eb",
+        "label_sha256": "323ea9f796a83270c2aaf1a9832bf405513be7297accc6fc1f78d6a431f4ca63"
+      },
+      "pool-triple-02-2": {
+        "input_sha256": "788b896e9365875247ec2977e012aa36229971d035a63b29a68fd17a1beabbdf",
+        "label_sha256": "1b0c615b9a6812588a886a406291b4ed28f395da34ed49d65ac4e69226030877"
+      },
+      "duplicate-12": {
+        "input_sha256": "9ba71de8ffda62a70ae7581de555904d78180a16b85aeb7d7addc439f954b30a",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "duplicate-09": {
+        "input_sha256": "0d68f7a01a21af3e68fcc348d1dd35856f469db50c573e8b263b1c5b54235d1f",
+        "label_sha256": "cc7e9b8e81bddce70cbd47f530f538a6a81e31a89dc6226d25d797eff8c79762"
+      },
+      "pool-triple-01-2": {
+        "input_sha256": "9ec18528a1d5a189a47a1b1d58ade7c2ecb9a9e974cb2b7b293773a153d2d62b",
+        "label_sha256": "323ea9f796a83270c2aaf1a9832bf405513be7297accc6fc1f78d6a431f4ca63"
+      },
+      "pool-triple-01-3": {
+        "input_sha256": "4198a2dddfd0cf7b9892a9f91b4adf7440d9649920dff607569d1eb238ec1aa5",
+        "label_sha256": "323ea9f796a83270c2aaf1a9832bf405513be7297accc6fc1f78d6a431f4ca63"
+      },
+      "subsumed-14": {
+        "input_sha256": "7b558980afe1b106124209d52ed2f2f15d9375f646ab82c92c2e6a5ff497f4a6",
+        "label_sha256": "24455903ccd25f973c0445ec8c13bdc112fe9b071ab832305236b2f8263fffc2"
+      },
+      "supersedes-06": {
+        "input_sha256": "eef2963a5b9e8ec66f2ebfcc23a65f1b1885fdaf206812ebba929277ba9e5043",
+        "label_sha256": "7f0060065f6654341c9770be078df207366743063e93a9c18885165ca0be1238"
+      },
+      "subsumed-12": {
+        "input_sha256": "dd2d489bd2737509ff08d4e60c31a6b8e0b0da006b2ea0e21dd3472ab414c89b",
+        "label_sha256": "36cceac6c0c499242bc6452a42c402732bc30fd6581a3a8ffcec535b5b665097"
+      },
+      "overlap-09": {
+        "input_sha256": "c9c77c661bc64e3697e70b230346072a9832b85fd23922e20a6ad7bb3f825424",
+        "label_sha256": "f926a6a9da6c7d50d9e114180ad1573de4cb22e5af153087f1a6559c6c6b6794"
+      },
+      "pool-overlap-05": {
+        "input_sha256": "9ee19337f919d7f49e6082dd2964e957fc210b24a7850f265d480fb4c67d5c92",
+        "label_sha256": "3435d9171e22dc11b47b2c9115921691fcdeb261bc4e836bdbae4405c9525c1b"
+      },
+      "pool-subsumed-04": {
+        "input_sha256": "185011445461195c6de0df9a0a6930b48ccf7b684df13dd8c2ee464701425da9",
+        "label_sha256": "e8c28fd1385f93706514fed9a0c0afea40500a4bb3cc9782cc3297d8fb808fe2"
+      },
+      "subsumed-07": {
+        "input_sha256": "2c325faefdfadd3b1e0b9c6426750eb674384f289fe1efec1ce225a0e9678ef6",
+        "label_sha256": "6237592231d45e30c14c912879d51b56f8f612d2aff2a3729dd5321d12c668a1"
+      },
+      "supersedes-03": {
+        "input_sha256": "13a5ac2561afc55f4a5f5058fc918646622573107b962ad765ac2534831aaf5f",
+        "label_sha256": "321e252aac01a6246ebb80dbe8604da83e596739d8e873ec5ab65397acc01013"
+      },
+      "unrelated-06": {
+        "input_sha256": "9ea1c25596c4f1f48c2f8c71a7b3cc145d19c3bbe4a53f9984b60e778c678d3c",
+        "label_sha256": "6e0791f3d3227fc0a666d5f2802c0dabf6220d8ff31d7f5f434dae2db542c5b1"
+      },
+      "pool-overlap-04": {
+        "input_sha256": "02b0967688347a17fde2adfab8fe69d306f625f5809ed3754f7aed515c9a6055",
+        "label_sha256": "5d3510c83814946f983decbc846ac9cb502bf3831c4408f8b3942077a1b644b4"
+      },
+      "pool-overlap-06": {
+        "input_sha256": "cc5dc5b646403cffbc4ee469962167d82c680214ba34d532df3616c7178c6f28",
+        "label_sha256": "02768d89fbd517b4adfba4a00c32558cb684d5093880a2702a61aa1fa2ab5e3f"
+      },
+      "overlap-06": {
+        "input_sha256": "fff99e66809bbc04110adabd54edeae03e3d21b0150230a6480a3fee4f47a0b6",
+        "label_sha256": "da39ff2623a6bdd92767910dab7b5ce76fffe56ffbae4dba604f4d6728b75d1b"
+      },
+      "pool-overlap-03": {
+        "input_sha256": "a27936d51fd415e7da0226bc757dbe22c1e567ef19fb8ab56a7a393a322f555a",
+        "label_sha256": "83d5bcee9db74d507908607c1e6f8c3713e6f821cca2bf6975b0a42f2287fb97"
+      },
+      "supersedes-08": {
+        "input_sha256": "30c9a6e464dd135ddb34313361b57c67801cd7e488306474ce71c630e3a0cdda",
+        "label_sha256": "2c42913c2729d1fec256f17fb842b49db605097a3801fc65f8ff99be9e68ce5e"
+      },
+      "overlap-12": {
+        "input_sha256": "ed478f8ab1f47fab7afe080f8622b4b0dc4cacc180b8cd825eb7669bdb3fb569",
+        "label_sha256": "fe1894aab3c5a96d20e2e664a092b0bf843de32a98abc975bcb7e10ffc4703a4"
+      },
+      "contradicts-01": {
+        "input_sha256": "d48ce75fc6aa43268c2a184128c8c07b6416a5c845b56330f2da72da548d5272",
+        "label_sha256": "6c12d67c3c22a9fdc70de013b1c1f6b26d2a0e44c938883abaa9bda7441dc6af"
+      },
+      "overlap-11": {
+        "input_sha256": "0989643c84418289c007f719b7994c973688740b4b157a1c77032f317578274b",
+        "label_sha256": "4c2ac86e2fc803f0266da489312849734c6185333d89b138735f3653ca05d595"
+      },
+      "unrelated-13": {
+        "input_sha256": "6548549f3f000e20e79fb6861c40044467649a47b7bc95ca366d08a6accfc55d",
+        "label_sha256": "0fd8c57bfffb331638d6a89c39e5eeafd40747dea0d24fd18ad5279a1f525166"
+      },
+      "subsumed-01": {
+        "input_sha256": "843276ba172f6467c2096c796bb8d207075c7006b9a721b00a1e8d58e13091a1",
+        "label_sha256": "6380a360b3c046fb99e0f774702b7ed78618433ce84155f0dfa01539d3222fda"
+      },
+      "overlap-02": {
+        "input_sha256": "d8dd2db09a50ebba515ef8e2127187954e778416cfd56ba9bdc2c13da9ab1845",
+        "label_sha256": "39c7757450b711672efd0fa06ab3d6009f300c12ccad90a90229c10b935f7c14"
+      },
+      "overlap-03": {
+        "input_sha256": "5f37a4ab227789f74a61cc5c8d2a1a07729ec3d33239b4b12888c5d41ef2acaa",
+        "label_sha256": "836e6073332ecb337ca61c3c29314fcf5f3c787774d1e62ec6e54be070261618"
+      },
+      "unrelated-10": {
+        "input_sha256": "6ad1ad0f9c510420a8c512acd96635b3082fedbb70ac004d0106ca3f0a57fe0d",
+        "label_sha256": "989c6f38409d4d4f7f97ffc3b9286c61879df1b964b8494bb9b7bd0bad523ab0"
+      },
+      "subsumed-11": {
+        "input_sha256": "dc550a8ef02dcfea79e2722d9f96d02d6121b6e46b6e00b400ec79a9724f3e82",
+        "label_sha256": "1665a1fb350daf0b3d33a34225ecfd22f95b0fce7c90900e0f2de8b30fba3eca"
+      },
+      "subsumed-10": {
+        "input_sha256": "9f9baab92d9a4ea2b34e807e0c8acaceca28ffe8f30ae79745231d34ef923c69",
+        "label_sha256": "5d7e36975a2b9e5ccced0e2ae071ffa5ca4c1fa7f96f9ad2b8d0554b09d716c1"
+      },
+      "unrelated-08": {
+        "input_sha256": "e40dd32aa18de0149043822903ce68c1870cdc3f99e5cd578c7d763fa510e109",
+        "label_sha256": "8d4a9bf459f3b0d3f981aeb5f91b03003d9d3ca0f1754831d765b34ef877bd03"
+      },
+      "pool-duplicate-06": {
+        "input_sha256": "89cac4d80750cf701b981b03a907b053c211e3b4210c5b823f198fa81626a416",
+        "label_sha256": "323ea9f796a83270c2aaf1a9832bf405513be7297accc6fc1f78d6a431f4ca63"
+      },
+      "overlap-07": {
+        "input_sha256": "6f2ad0c284816b5c55c4c7a3ee6aff7d0b2cecd146f3a1d5ef6aa186f5b46470",
+        "label_sha256": "3df68fed8220344009a76f8f4ac25a63d1cd4305e0e39735c4aa1ed98ca3e46f"
+      },
+      "overlap-08": {
+        "input_sha256": "376d94831c6d054e32e30df6439b8603c6c77b0d4c01e234a818b9454b97bc1c",
+        "label_sha256": "204923087179e4c3cc68c17a385c80257d89bef1e3fddf4b56b6e754af3a681a"
+      },
+      "overlap-13": {
+        "input_sha256": "0cfc6a91a5a7a91a48ad16cc83da3703872959df7286939c422e90ea4f0a2f6f",
+        "label_sha256": "d68198cefe69aaa3e56b9ed5751c08692b6637e3c822de84e9bf4d24f062d859"
+      },
+      "overlap-01": {
+        "input_sha256": "16c11077525c95b32bcec586c8607e00e5d13008684a7ef8a0bc00c858044cfa",
+        "label_sha256": "f4a1260df38eaa14df024f28b6545ee42c586b0f3038b14ec38bbcbe5cfddbf5"
+      },
+      "pool-duplicate-03": {
+        "input_sha256": "d3fb4883fa1d1b8cc73acf9aeb9a9d755a393cb24751355aaf00427da356e619",
+        "label_sha256": "323ea9f796a83270c2aaf1a9832bf405513be7297accc6fc1f78d6a431f4ca63"
+      },
+      "contradicts-08": {
+        "input_sha256": "aa1dac2a3ab7d478c2b8b5124d61c092052ce8f290a7520451fc78ff477aa28e",
+        "label_sha256": "b4da9616e42da0e928d2858ee4f17a9c00a2ab914c9de58eb4698c7d3d26da9a"
+      },
+      "pool-duplicate-04": {
+        "input_sha256": "5b3c92a794b996e1d7370c84e659d642486245562fcf7295cf83cbfc79e7c2ef",
+        "label_sha256": "323ea9f796a83270c2aaf1a9832bf405513be7297accc6fc1f78d6a431f4ca63"
+      },
+      "pool-subsumed-03": {
+        "input_sha256": "889c18d479fe9397cd37ee8a21dbbb232aa83428b852c09b4e41788082514103",
+        "label_sha256": "4a853d556bc2ac130b3bc3b157d222f57f52b3525f20a2fb26effcab4e6467ac"
+      },
+      "pool-duplicate-05": {
+        "input_sha256": "fb084314d0127335c3efad5da40938e31de495685dc51a02d606f149fbbcc99a",
+        "label_sha256": "323ea9f796a83270c2aaf1a9832bf405513be7297accc6fc1f78d6a431f4ca63"
+      },
+      "pool-overlap-01": {
+        "input_sha256": "0be75c7d79f35de8358dd1062023d4d66a753abd30dd510b93a92f347f6e4f12",
+        "label_sha256": "c677bd01135a1211a86b7ddc28fd5709b7448c53b9c5e674b547a7720d811183"
+      },
+      "pool-triple-02-3": {
+        "input_sha256": "18671e5cc46a5c340edc4c411cbe14e662ae4bdba12581370e44806ca55b3f82",
+        "label_sha256": "1b0c615b9a6812588a886a406291b4ed28f395da34ed49d65ac4e69226030877"
+      },
+      "hand-late-overlap-03": {
+        "input_sha256": "8cc0efd651dcd81bfbfb8c40c7c0204ddd7e0e39f76ded8863b5434478dc8615",
+        "label_sha256": "3de9e357642efac0308be51d2d3c781469a245fac95979563e8ba15ea79289b2"
+      },
+      "hand-late-subsumed-01": {
+        "input_sha256": "43467c38c0b673556b71d1cfd0ff3ac2faf1d128d2939d4c5e4d39437f3c9599",
+        "label_sha256": "d50fff09040382beeb2064c30be790dc25ec23616087c45fd977002e8ea735bc"
+      },
+      "hand-late-contradicts-06": {
+        "input_sha256": "c81ad48e624e6e48ce4809944c745d0ae3ecf7a24279d0cc8c0ced97a6e9aad7",
+        "label_sha256": "c98f8868456ec67c5b359ee55f89163c9061b65374d5546dd47a585f8e225ebc"
+      },
+      "hand-late-supersedes-01": {
+        "input_sha256": "0c1b6b8ce7ad445e05e4f3b2e3e356735d2ed15755f8f9169878d46333b9353b",
+        "label_sha256": "64a49d0148a1042ef7dbae61aac7a307e433b428233431b3866aad6763581328"
+      }
+    },
+    "akm": {
+      "version": "0.10.261105",
+      "bin": "bun ~/.cache/agent-judge-baseline/akm/src/cli.ts",
+      "build": "v0.9.0-beta.60-3182-gcc4872fe8",
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "off",
+        "registries": [],
+        "engines": {
+          "judge": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "judge"
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 900000,
+      "seed": null
+    },
+    "engines": {
+      "judge": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "contradicts-04",
+        "contradicts-13",
+        "contradicts-11",
+        "pool-contradicts-01",
+        "subsumed-02",
+        "pool-supersedes-03",
+        "pool-triple-01-1",
+        "contradicts-02",
+        "pool-supersedes-01",
+        "duplicate-06",
+        "supersedes-11",
+        "overlap-04",
+        "duplicate-04",
+        "contradicts-03",
+        "subsumed-05",
+        "subsumed-09",
+        "pool-subsumed-01",
+        "duplicate-02",
+        "subsumed-04",
+        "duplicate-08",
+        "pool-supersedes-04",
+        "pool-duplicate-01",
+        "supersedes-04",
+        "duplicate-01",
+        "subsumed-06",
+        "contradicts-12",
+        "supersedes-13",
+        "contradicts-06",
+        "pool-lookalike-02",
+        "supersedes-02",
+        "supersedes-01",
+        "contradicts-09",
+        "pool-supersedes-02",
+        "duplicate-07",
+        "pool-lookalike-01",
+        "supersedes-12",
+        "duplicate-13",
+        "pool-lookalike-03",
+        "duplicate-11",
+        "pool-subsumed-02",
+        "duplicate-03",
+        "supersedes-07",
+        "contradicts-07",
+        "supersedes-09",
+        "unrelated-09",
+        "pool-triple-02-1",
+        "pool-triple-02-2",
+        "duplicate-12",
+        "duplicate-09",
+        "pool-triple-01-2",
+        "pool-triple-01-3",
+        "subsumed-14",
+        "supersedes-06",
+        "subsumed-12",
+        "overlap-09",
+        "pool-overlap-05",
+        "pool-subsumed-04",
+        "subsumed-07",
+        "supersedes-03",
+        "unrelated-06",
+        "pool-overlap-04",
+        "pool-overlap-06",
+        "overlap-06",
+        "pool-overlap-03",
+        "supersedes-08",
+        "overlap-12",
+        "contradicts-01",
+        "overlap-11",
+        "unrelated-13",
+        "subsumed-01",
+        "overlap-02",
+        "overlap-03",
+        "unrelated-10",
+        "subsumed-11",
+        "subsumed-10",
+        "unrelated-08",
+        "pool-duplicate-06",
+        "overlap-07",
+        "overlap-08",
+        "overlap-13",
+        "overlap-01",
+        "pool-duplicate-03",
+        "contradicts-08",
+        "pool-duplicate-04",
+        "pool-subsumed-03",
+        "pool-duplicate-05",
+        "pool-overlap-01",
+        "pool-triple-02-3",
+        "hand-late-overlap-03",
+        "hand-late-subsumed-01",
+        "hand-late-contradicts-06",
+        "hand-late-supersedes-01"
+      ],
+      "scored": [
+        "contradicts-04",
+        "contradicts-13",
+        "contradicts-11",
+        "pool-contradicts-01",
+        "subsumed-02",
+        "pool-supersedes-03",
+        "pool-triple-01-1",
+        "contradicts-02",
+        "pool-supersedes-01",
+        "duplicate-06",
+        "supersedes-11",
+        "overlap-04",
+        "duplicate-04",
+        "contradicts-03",
+        "subsumed-05",
+        "subsumed-09",
+        "pool-subsumed-01",
+        "duplicate-02",
+        "subsumed-04",
+        "duplicate-08",
+        "pool-supersedes-04",
+        "pool-duplicate-01",
+        "supersedes-04",
+        "duplicate-01",
+        "subsumed-06",
+        "contradicts-12",
+        "supersedes-13",
+        "contradicts-06",
+        "pool-lookalike-02",
+        "supersedes-02",
+        "supersedes-01",
+        "contradicts-09",
+        "pool-supersedes-02",
+        "duplicate-07",
+        "pool-lookalike-01",
+        "supersedes-12",
+        "duplicate-13",
+        "pool-lookalike-03",
+        "duplicate-11",
+        "pool-subsumed-02",
+        "duplicate-03",
+        "supersedes-07",
+        "contradicts-07",
+        "supersedes-09",
+        "unrelated-09",
+        "pool-triple-02-1",
+        "pool-triple-02-2",
+        "duplicate-12",
+        "duplicate-09",
+        "pool-triple-01-2",
+        "pool-triple-01-3",
+        "subsumed-14",
+        "supersedes-06",
+        "subsumed-12",
+        "overlap-09",
+        "pool-overlap-05",
+        "pool-subsumed-04",
+        "subsumed-07",
+        "supersedes-03",
+        "unrelated-06",
+        "pool-overlap-04",
+        "pool-overlap-06",
+        "overlap-06",
+        "pool-overlap-03",
+        "supersedes-08",
+        "overlap-12",
+        "contradicts-01",
+        "overlap-11",
+        "unrelated-13",
+        "subsumed-01",
+        "overlap-02",
+        "overlap-03",
+        "unrelated-10",
+        "subsumed-11",
+        "subsumed-10",
+        "unrelated-08",
+        "pool-duplicate-06",
+        "overlap-07",
+        "overlap-08",
+        "overlap-13",
+        "overlap-01",
+        "pool-duplicate-03",
+        "contradicts-08",
+        "pool-duplicate-04",
+        "pool-subsumed-03",
+        "pool-duplicate-05",
+        "pool-overlap-01",
+        "pool-triple-02-3",
+        "hand-late-overlap-03",
+        "hand-late-subsumed-01",
+        "hand-late-contradicts-06",
+        "hand-late-supersedes-01"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 94.006
+}

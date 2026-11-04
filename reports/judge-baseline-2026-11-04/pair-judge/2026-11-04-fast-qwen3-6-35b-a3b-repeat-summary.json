@@ -1,0 +1,524 @@
+{
+  "eval": "pair-judge",
+  "corpus": "public",
+  "label": "fast-qwen3-6-35b-a3b",
+  "repeat": 3,
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261105",
+  "akm_bin": "bun ~/.cache/agent-judge-baseline/akm/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-3182-gcc4872fe8",
+  "akm_build_fingerprint": null,
+  "runs": [
+    "2026-11-04-fast-qwen3-6-35b-a3b-r1",
+    "2026-11-04-fast-qwen3-6-35b-a3b-r2",
+    "2026-11-04-fast-qwen3-6-35b-a3b-r3"
+  ],
+  "n_errored": {
+    "min": 0,
+    "max": 0,
+    "mean": 0
+  },
+  "timeouts": {
+    "min": 0,
+    "max": 0,
+    "mean": 0
+  },
+  "seconds": {
+    "min": 89.887,
+    "max": 95.47,
+    "mean": 93.121
+  },
+  "metrics": {
+    "unsafe": {
+      "n": {
+        "min": 72,
+        "max": 72,
+        "mean": 72
+      },
+      "count": {
+        "min": 2,
+        "max": 3,
+        "mean": 2.3333
+      },
+      "rate": {
+        "min": 0.0278,
+        "max": 0.0417,
+        "mean": 0.0324
+      }
+    },
+    "found": {
+      "n": {
+        "min": 54,
+        "max": 54,
+        "mean": 54
+      },
+      "count": {
+        "min": 50,
+        "max": 52,
+        "mean": 51
+      },
+      "rate": {
+        "min": 0.9259,
+        "max": 0.963,
+        "mean": 0.9444
+      }
+    },
+    "precision": {
+      "value": {
+        "min": 0.9455,
+        "max": 0.9623,
+        "mean": 0.9564
+      },
+      "safe": {
+        "min": 50,
+        "max": 52,
+        "mean": 51
+      },
+      "retired": {
+        "min": 52,
+        "max": 55,
+        "mean": 53.3333
+      }
+    },
+    "failed": {
+      "n": {
+        "min": 92,
+        "max": 92,
+        "mean": 92
+      },
+      "count": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "rate": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      }
+    },
+    "relation": {
+      "n": {
+        "min": 92,
+        "max": 92,
+        "mean": 92
+      },
+      "count": {
+        "min": 86,
+        "max": 87,
+        "mean": 86.3333
+      },
+      "rate": {
+        "min": 0.9348,
+        "max": 0.9457,
+        "mean": 0.9384
+      }
+    },
+    "confusion": {
+      "overlap": {
+        "overlap": {
+          "min": 37,
+          "max": 38,
+          "mean": 37.6667
+        },
+        "subsumed": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        }
+      },
+      "subsumed": {
+        "subsumed": {
+          "min": 30,
+          "max": 32,
+          "mean": 31
+        },
+        "duplicate": {
+          "min": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "overlap": {
+          "min": 1,
+          "max": 2,
+          "mean": 1.5
+        }
+      },
+      "duplicate": {
+        "duplicate": {
+          "min": 17,
+          "max": 18,
+          "mean": 17.6667
+        },
+        "subsumed": {
+          "min": 2,
+          "max": 3,
+          "mean": 2.3333
+        }
+      }
+    },
+    "by_kind": {
+      "contradicts": {
+        "n": {
+          "min": 13,
+          "max": 13,
+          "mean": 13
+        },
+        "failed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "retired_safe": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "retired_unsafe": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "kept": {
+          "min": 13,
+          "max": 13,
+          "mean": 13
+        },
+        "right": {
+          "min": 13,
+          "max": 13,
+          "mean": 13
+        }
+      },
+      "subsumed": {
+        "n": {
+          "min": 18,
+          "max": 18,
+          "mean": 18
+        },
+        "failed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "retired_safe": {
+          "min": 15,
+          "max": 16,
+          "mean": 15.3333
+        },
+        "retired_unsafe": {
+          "min": 2,
+          "max": 2,
+          "mean": 2
+        },
+        "kept": {
+          "min": 0,
+          "max": 1,
+          "mean": 0.6667
+        },
+        "right": {
+          "min": 15,
+          "max": 16,
+          "mean": 15.3333
+        }
+      },
+      "supersedes": {
+        "n": {
+          "min": 16,
+          "max": 16,
+          "mean": 16
+        },
+        "failed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "retired_safe": {
+          "min": 15,
+          "max": 16,
+          "mean": 15.6667
+        },
+        "retired_unsafe": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "kept": {
+          "min": 0,
+          "max": 1,
+          "mean": 0.3333
+        },
+        "right": {
+          "min": 15,
+          "max": 16,
+          "mean": 15.6667
+        }
+      },
+      "duplicate": {
+        "n": {
+          "min": 20,
+          "max": 20,
+          "mean": 20
+        },
+        "failed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "retired_safe": {
+          "min": 20,
+          "max": 20,
+          "mean": 20
+        },
+        "retired_unsafe": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "kept": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "right": {
+          "min": 17,
+          "max": 18,
+          "mean": 17.6667
+        }
+      },
+      "overlap": {
+        "n": {
+          "min": 17,
+          "max": 17,
+          "mean": 17
+        },
+        "failed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "retired_safe": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "retired_unsafe": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "kept": {
+          "min": 17,
+          "max": 17,
+          "mean": 17
+        },
+        "right": {
+          "min": 17,
+          "max": 17,
+          "mean": 17
+        }
+      },
+      "lookalike": {
+        "n": {
+          "min": 8,
+          "max": 8,
+          "mean": 8
+        },
+        "failed": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "retired_safe": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "retired_unsafe": {
+          "min": 0,
+          "max": 1,
+          "mean": 0.3333
+        },
+        "kept": {
+          "min": 7,
+          "max": 8,
+          "mean": 7.6667
+        },
+        "right": {
+          "min": 7,
+          "max": 8,
+          "mean": 7.6667
+        }
+      }
+    },
+    "claims": {
+      "labelled": {
+        "min": 136,
+        "max": 136,
+        "mean": 136
+      },
+      "unmatchable": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "found": {
+        "min": 125,
+        "max": 129,
+        "mean": 127.6667
+      },
+      "listed": {
+        "min": 147,
+        "max": 151,
+        "mean": 149.6667
+      },
+      "wrong_side": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "unlabelled": {
+        "min": 8,
+        "max": 11,
+        "mean": 9.6667
+      },
+      "found_rate": {
+        "min": 0.9191,
+        "max": 0.9485,
+        "mean": 0.9387
+      }
+    },
+    "confidence": {
+      "right": {
+        "n": {
+          "min": 86,
+          "max": 87,
+          "mean": 86.3333
+        },
+        "mean": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        }
+      },
+      "wrong": {
+        "n": {
+          "min": 5,
+          "max": 6,
+          "mean": 5.6667
+        },
+        "mean": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        }
+      }
+    },
+    "seconds": {
+      "n": {
+        "min": 92,
+        "max": 92,
+        "mean": 92
+      },
+      "mean": {
+        "min": 1.9457,
+        "max": 2.062,
+        "mean": 2.0123
+      }
+    },
+    "baselines": {
+      "never_retire": {
+        "unsafe": {
+          "n": {
+            "min": 72,
+            "max": 72,
+            "mean": 72
+          },
+          "count": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "rate": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "found": {
+          "n": {
+            "min": 54,
+            "max": 54,
+            "mean": 54
+          },
+          "count": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "rate": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        }
+      },
+      "always_retire_older": {
+        "unsafe": {
+          "n": {
+            "min": 72,
+            "max": 72,
+            "mean": 72
+          },
+          "count": {
+            "min": 48,
+            "max": 48,
+            "mean": 48
+          },
+          "rate": {
+            "min": 0.6667,
+            "max": 0.6667,
+            "mean": 0.6667
+          }
+        },
+        "found": {
+          "n": {
+            "min": 54,
+            "max": 54,
+            "mean": 54
+          },
+          "count": {
+            "min": 44,
+            "max": 44,
+            "mean": 44
+          },
+          "rate": {
+            "min": 0.8148,
+            "max": 0.8148,
+            "mean": 0.8148
+          }
+        }
+      },
+      "most_common_relation": {
+        "relation": null,
+        "accuracy": {
+          "n": {
+            "min": 92,
+            "max": 92,
+            "mean": 92
+          },
+          "count": {
+            "min": 38,
+            "max": 38,
+            "mean": 38
+          },
+          "rate": {
+            "min": 0.413,
+            "max": 0.413,
+            "mean": 0.413
+          }
+        }
+      }
+    }
+  }
+}

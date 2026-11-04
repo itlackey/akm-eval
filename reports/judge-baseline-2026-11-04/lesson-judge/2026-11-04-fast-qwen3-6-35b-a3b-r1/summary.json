@@ -1,0 +1,1571 @@
+{
+  "eval": "lesson-judge",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "fast-qwen3-6-35b-a3b-r1",
+  "date": "2026-11-04T02:52:26.366Z",
+  "git_commit": "5a7d941",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261105",
+  "akm_bin": "bun ~/.cache/agent-judge-baseline/akm/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-3182-gcc4872fe8",
+  "akm_build_fingerprint": null,
+  "config_form": "connections",
+  "limit": null,
+  "strategy": "default",
+  "config_patch": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "engines": {
+      "judge": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "judge",
+      "improveStrategy": "default"
+    },
+    "improve": {
+      "strategies": {
+        "default": {
+          "engine": "judge",
+          "processes": {
+            "distill": {
+              "qualityGate": {
+                "engine": "judge"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "engine": {
+    "engine": "judge",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "<MODEL_BASE_URL>",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "judge": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "563823ab5a4af14f46f9477814f1da8b3b599942eaf98ed0a0d0a51cae1c9561",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 178,
+  "n_run": 178,
+  "n_scored": 178,
+  "n_errored": 0,
+  "timeouts": 0,
+  "metrics": {
+    "good": {
+      "new": {
+        "n": 19,
+        "passed": 17,
+        "rate": 0.8947
+      },
+      "update": {
+        "n": 21,
+        "passed": 11,
+        "rate": 0.5238
+      }
+    },
+    "bad": {
+      "new": {
+        "n": 70,
+        "passed": 0,
+        "rate": 0
+      },
+      "update": {
+        "n": 68,
+        "passed": 2,
+        "rate": 0.0294
+      }
+    },
+    "by_origin": {
+      "real": {
+        "good": {
+          "new": {
+            "n": 16,
+            "passed": 14,
+            "rate": 0.875
+          },
+          "update": {
+            "n": 9,
+            "passed": 4,
+            "rate": 0.4444
+          }
+        },
+        "bad": {
+          "new": {
+            "n": 4,
+            "passed": 0,
+            "rate": 0
+          },
+          "update": {
+            "n": 0,
+            "passed": 0,
+            "rate": null
+          }
+        }
+      },
+      "hand-written": {
+        "good": {
+          "new": {
+            "n": 3,
+            "passed": 3,
+            "rate": 1
+          },
+          "update": {
+            "n": 12,
+            "passed": 7,
+            "rate": 0.5833
+          }
+        },
+        "bad": {
+          "new": {
+            "n": 66,
+            "passed": 0,
+            "rate": 0
+          },
+          "update": {
+            "n": 68,
+            "passed": 2,
+            "rate": 0.0294
+          }
+        }
+      }
+    },
+    "bad_by_kind": {
+      "new/dated-status": {
+        "n": 7,
+        "passed": 0,
+        "rate": 0
+      },
+      "new/duplicate-asset": {
+        "n": 12,
+        "passed": 0,
+        "rate": 0
+      },
+      "new/one-run": {
+        "n": 9,
+        "passed": 0,
+        "rate": 0
+      },
+      "new/ungrounded": {
+        "n": 42,
+        "passed": 0,
+        "rate": 0
+      },
+      "update/off-rule-update": {
+        "n": 13,
+        "passed": 2,
+        "rate": 0.1538
+      },
+      "update/restated-update": {
+        "n": 16,
+        "passed": 0,
+        "rate": 0
+      },
+      "update/ungrounded": {
+        "n": 39,
+        "passed": 0,
+        "rate": 0
+      }
+    },
+    "good_rejected": {
+      "new": {
+        "n": 19,
+        "count": 2,
+        "rate": 0.1053
+      },
+      "update": {
+        "n": 21,
+        "count": 10,
+        "rate": 0.4762
+      }
+    },
+    "review_share": {
+      "n": 89,
+      "count": 1,
+      "rate": 0.0112
+    },
+    "precision": {
+      "new": {
+        "value": 1,
+        "passed_good": 17,
+        "passed": 17
+      },
+      "update": {
+        "value": 0.8462,
+        "passed_good": 11,
+        "passed": 13
+      }
+    },
+    "criteria": {
+      "new": {
+        "good": {
+          "reusable": {
+            "n": 19,
+            "mean": 4.211
+          },
+          "nonRedundancy": {
+            "n": 19,
+            "mean": 5
+          },
+          "grounding": {
+            "n": 19,
+            "mean": 3.684
+          }
+        },
+        "bad": {
+          "reusable": {
+            "n": 70,
+            "mean": 2.371
+          },
+          "nonRedundancy": {
+            "n": 70,
+            "mean": 4.257
+          },
+          "grounding": {
+            "n": 70,
+            "mean": 1.943
+          }
+        }
+      },
+      "update": {
+        "good": {
+          "reusable": {
+            "n": 21,
+            "mean": 4.524
+          },
+          "nonRedundancy": {
+            "n": 21,
+            "mean": 3.381
+          },
+          "grounding": {
+            "n": 21,
+            "mean": 4.524
+          }
+        },
+        "bad": {
+          "reusable": {
+            "n": 68,
+            "mean": 3.029
+          },
+          "nonRedundancy": {
+            "n": 68,
+            "mean": 2.691
+          },
+          "grounding": {
+            "n": 68,
+            "mean": 2.456
+          }
+        }
+      }
+    },
+    "routes": {
+      "new/good": {
+        "pass": 17,
+        "review": 0,
+        "reject": 2
+      },
+      "new/ungrounded": {
+        "pass": 0,
+        "review": 0,
+        "reject": 42
+      },
+      "new/one-run": {
+        "pass": 0,
+        "review": 0,
+        "reject": 9
+      },
+      "update/good": {
+        "pass": 11,
+        "review": 0,
+        "reject": 10
+      },
+      "new/dated-status": {
+        "pass": 0,
+        "review": 1,
+        "reject": 6
+      },
+      "update/ungrounded": {
+        "pass": 0,
+        "review": 0,
+        "reject": 39
+      },
+      "new/duplicate-asset": {
+        "pass": 0,
+        "review": 0,
+        "reject": 12
+      },
+      "update/restated-update": {
+        "pass": 0,
+        "review": 0,
+        "reject": 16
+      },
+      "update/off-rule-update": {
+        "pass": 2,
+        "review": 0,
+        "reject": 11
+      }
+    },
+    "no_verdict": {
+      "error": {
+        "n": 178,
+        "count": 0,
+        "rate": 0
+      },
+      "unparseable": {
+        "n": 178,
+        "count": 0,
+        "rate": 0
+      }
+    },
+    "akm_failed": {
+      "n": 178,
+      "count": 0,
+      "rate": 0
+    },
+    "seconds": {
+      "mean": 1.758,
+      "median": 1.7,
+      "max": 2.2
+    },
+    "baselines": {
+      "pass_all": {
+        "new": {
+          "good": {
+            "n": 19,
+            "passed": 19,
+            "rate": 1
+          },
+          "bad": {
+            "n": 70,
+            "passed": 70,
+            "rate": 1
+          },
+          "precision": 0.2135
+        },
+        "update": {
+          "good": {
+            "n": 21,
+            "passed": 21,
+            "rate": 1
+          },
+          "bad": {
+            "n": 68,
+            "passed": 68,
+            "rate": 1
+          },
+          "precision": 0.236
+        }
+      },
+      "reject_all": {
+        "new": {
+          "good": {
+            "n": 19,
+            "passed": 0,
+            "rate": 0
+          },
+          "bad": {
+            "n": 70,
+            "passed": 0,
+            "rate": 0
+          },
+          "precision": null
+        },
+        "update": {
+          "good": {
+            "n": 21,
+            "passed": 0,
+            "rate": 0
+          },
+          "bad": {
+            "n": 68,
+            "passed": 0,
+            "rate": 0
+          },
+          "precision": null
+        }
+      }
+    }
+  },
+  "rubric_version": 1,
+  "model_calls": {
+    "calls": 178,
+    "errors": 0,
+    "prompt_tokens": 767.5,
+    "completion_tokens": 67,
+    "seconds": 1.42,
+    "output_tokens_per_second": 47.3
+  },
+  "semantic_verification": null,
+  "concurrency": 2,
+  "timeout_ms": 900000,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "lesson-judge",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.1"
+    },
+    "scorer": {
+      "version": "0.1"
+    },
+    "cases": {
+      "real-claim-01": {
+        "input_sha256": "197ae402d42d17fa4185ad7e63584490918ff6cfbe1244da35a05ef8eb1bdcac",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-claim-02": {
+        "input_sha256": "a1eac5e097879ee02a21b4173b91fb62fda02b3b1304d2c4fde7242637348687",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-claim-04": {
+        "input_sha256": "f9134817f90f65649169fbcb65e4cccae9c3609efbff32e9d8e43a30be93a644",
+        "label_sha256": "e4955a02e5b9cefbad3116a5de2b62b481460ae657a5a32e9bdc50413f8f0a2a"
+      },
+      "real-claim-05": {
+        "input_sha256": "a60223b19a1c4ea9c94e40f0c8901437d7e40c572893c7a6ed46847e3e509ef3",
+        "label_sha256": "ba9b327d7a58acca61a6604c37264614c05bd705badbe3d104919a6bb8c792b1"
+      },
+      "real-claim-11": {
+        "input_sha256": "255033f40a5e3b59b2df769211fcab247ead70f18e835fa8e48ad78ae3baf4b1",
+        "label_sha256": "ba9b327d7a58acca61a6604c37264614c05bd705badbe3d104919a6bb8c792b1"
+      },
+      "real-claim-12": {
+        "input_sha256": "be5eab421eca32584dd7728e86188532c6d738a66da27f75ad1d84675becd03c",
+        "label_sha256": "e4955a02e5b9cefbad3116a5de2b62b481460ae657a5a32e9bdc50413f8f0a2a"
+      },
+      "real-claim-14": {
+        "input_sha256": "920d57ecfea75fe38fe1cdc39c0630fa018a61aeba137edecd7c04357eab5321",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-claim-15": {
+        "input_sha256": "207dee626de5af0fe4751351f7721ab9933cb478825904850a954dfd63fa8970",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-claim-16": {
+        "input_sha256": "778b158619e40379925c973ce0751904a65039c0cd8ed2f7a73e935e53579ef9",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-dup-04": {
+        "input_sha256": "ec1c62349aa51a8b449dba812344a47d1c3e2f9682e2f403a0b77f01b63d9362",
+        "label_sha256": "3743350ee930c971672a0edb4028359722e06c4c69d44cd358499fdc39fed2f0"
+      },
+      "real-lesson-05": {
+        "input_sha256": "86d564708c9298aa2ab77365181329d79815c1194e353e5c78e84124c7055bec",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-lesson-06": {
+        "input_sha256": "e7795a79fa39ec9b1707e608f8fb3f0b01063be53a2a3733f9cd5375228bcab2",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-lesson-08": {
+        "input_sha256": "c0d46029b793c09ec8c21e0c5abdbb0cf628482835a9917bfe957dd9a49bb896",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-lesson-10": {
+        "input_sha256": "0f4dbe87d021be40d54c8f4adc8486afafeb9a106bc3ccb758d62cb05be05fec",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-lesson-12": {
+        "input_sha256": "da0d9176610a858a37fe1370dd8afdb5a573b088d853cc9d5582543a4c1b2b3c",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-lesson-13": {
+        "input_sha256": "adeb6c18af551e139b0869977b18af6bfaa970fdf6cf3fae651f81eb913529ac",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-lesson-17": {
+        "input_sha256": "8d6fd9737cb3bbf90c4fbae79fa6c0e096b191581440d80a1a40c8257fbbb044",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-lesson-19": {
+        "input_sha256": "99025fdf153037cba16ed4b3952edd8808a55e089df15b6fb779632493ed49f2",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-lesson-20": {
+        "input_sha256": "f33fe0118f0cb3daaa2da353b4250aa918840ad7cbe62d94fe79d6271413fc47",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-upd-02": {
+        "input_sha256": "ea4f115fd17e25a502cb5c2544d640e60be63b3d303bafe676b736497d7014b3",
+        "label_sha256": "3743350ee930c971672a0edb4028359722e06c4c69d44cd358499fdc39fed2f0"
+      },
+      "real-upd-03": {
+        "input_sha256": "69aa2b0ec33af8aa7a31cd2f75a5e1b3f2d456b7d91f8e1fc2fd6fc5536e018d",
+        "label_sha256": "3743350ee930c971672a0edb4028359722e06c4c69d44cd358499fdc39fed2f0"
+      },
+      "real-upd-04": {
+        "input_sha256": "543c4f6eea710be8e585b4dc1614001f0fff836248057f1606c7d8cad83c9681",
+        "label_sha256": "3743350ee930c971672a0edb4028359722e06c4c69d44cd358499fdc39fed2f0"
+      },
+      "real-upd-06": {
+        "input_sha256": "2e4cbf1d88effbe64dd0fa1b8ca8c2b667d6936debb7d9f17667d0a6259bff77",
+        "label_sha256": "3743350ee930c971672a0edb4028359722e06c4c69d44cd358499fdc39fed2f0"
+      },
+      "real-upd-08": {
+        "input_sha256": "e48e7a1ca8e89e26dcabc6b46e3a89c539e68633375f892e90b2c0876c4e209c",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-upd-09": {
+        "input_sha256": "42a0bc851aaaa1a0482fb48082e461572e66e3ef4cf86240be81d6993e901080",
+        "label_sha256": "3743350ee930c971672a0edb4028359722e06c4c69d44cd358499fdc39fed2f0"
+      },
+      "real-upd-10": {
+        "input_sha256": "2457a682a14767a70715edbbde7645569155751c19aad1b77192e2102f026aef",
+        "label_sha256": "df9d3e2cd6ffc630cf24f41a59c8ec7e05a0c3898a7c8356f62a49101b6a4201"
+      },
+      "real-upd-11": {
+        "input_sha256": "399b2683fae4ce4837ace303b48868eeb3976e8fd8d730c8580325a793ed3882",
+        "label_sha256": "3743350ee930c971672a0edb4028359722e06c4c69d44cd358499fdc39fed2f0"
+      },
+      "real-upd-13": {
+        "input_sha256": "628d63972510367f29c60bb6152cdb0d331e133228b4e15aab648203783a8de4",
+        "label_sha256": "3743350ee930c971672a0edb4028359722e06c4c69d44cd358499fdc39fed2f0"
+      },
+      "real-upd-14": {
+        "input_sha256": "8b6278e0a6c59a59910a5a8c3995be20c4eb746fd1a8fe2e40728291dd532c68",
+        "label_sha256": "3743350ee930c971672a0edb4028359722e06c4c69d44cd358499fdc39fed2f0"
+      },
+      "hand-claim-01-bad": {
+        "input_sha256": "0f8c4ce99f408ac4316b87e3cf36c93975f84a453d9c7514d0c7461ae856efe2",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-01-bad-fb": {
+        "input_sha256": "3df76293d8e459172f9b35052d07aa4e768ee852460d4e9033e066d466301f0d",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-02-bad": {
+        "input_sha256": "07999af797c568814d0dd4cad3e406bde292c400c8a6ad117b230bec3441e717",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-02-cause": {
+        "input_sha256": "4d883bd23d5791c1e823f0c6fae613bc62c809e1bf3a44b0cbf4577bde368167",
+        "label_sha256": "eb612f73a9067d68e1e86ecf94a50bcd4c952bd377aef1d718d4ffbc3b83fb20"
+      },
+      "hand-claim-02-cause-fb": {
+        "input_sha256": "adb5a30e87567ccbf27a69c7acf9c50b509811d15caf96fa06e2b5af733e1140",
+        "label_sha256": "eb612f73a9067d68e1e86ecf94a50bcd4c952bd377aef1d718d4ffbc3b83fb20"
+      },
+      "hand-claim-02-rule": {
+        "input_sha256": "86df7e1b32ff7105182918ae685b4f6b2d0ad2f753c5e7cc57dbf6ff73cf3b1c",
+        "label_sha256": "eb612f73a9067d68e1e86ecf94a50bcd4c952bd377aef1d718d4ffbc3b83fb20"
+      },
+      "hand-claim-04-bad": {
+        "input_sha256": "c297d1b009c91a644dad49a03f01672ac51e3ddc6552b8ba567a278d525c4b37",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-04-bad-fb": {
+        "input_sha256": "ce1021386f69c61010e4cc53618b421ff75fd5ded23f7a0ddada60fe476676cf",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-04-rev": {
+        "input_sha256": "6acf26982e497d50646648176dcaf7fbc9e89559034f06ae3dcf128c425a7558",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-05-rule": {
+        "input_sha256": "5c1026ebdcd1d5a53d84686e4cb25ade99e872e998543967fce2f420af9095c3",
+        "label_sha256": "eb612f73a9067d68e1e86ecf94a50bcd4c952bd377aef1d718d4ffbc3b83fb20"
+      },
+      "hand-claim-06-bad": {
+        "input_sha256": "0774b7b8cabad067c8a0d896186719e8bcb1c818f4f631830a2e93d8d1f4d2b9",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-07-bad": {
+        "input_sha256": "28f2501bde7496bdc9d37b0cb736207c044e119a5d1a475c9703e2a2045f1eac",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-07-rev-fb": {
+        "input_sha256": "2d4ceef669c11237f3cf661360347e3726311d9a8c55752c118647e6d646f440",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-08-rev": {
+        "input_sha256": "c06c224ed70146e8896c9d3593c6f56acf1397385f834b865d1068f0d51076cd",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-09-bad": {
+        "input_sha256": "0f43bd88f673ba16588b2dc90802659f858fa71d50e623ca7f1a08a9b04d5a3f",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-09-good-fb": {
+        "input_sha256": "1296faedd10d7c91eb2012e69e48a2d5b2c9c34b32ea923cabf11e2386e3be2f",
+        "label_sha256": "fbe5cc914bcef3dca504b2d5e0330e94dd18f788b81bad021c169c80bcd7440c"
+      },
+      "hand-claim-10-bad": {
+        "input_sha256": "f3513220c893c28abc3c13d5e23bcf0556dcea893799127931269aaffc275aa4",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-11-bad": {
+        "input_sha256": "5ee947bc98aea6b8f413c48d973044d8638bf96db150e9e57dd8948a6c642313",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-11-cause": {
+        "input_sha256": "3606a84b06b02e5d761a0aa537d87d5e482c668e7cd4bdc1888ce7703fe46703",
+        "label_sha256": "eb612f73a9067d68e1e86ecf94a50bcd4c952bd377aef1d718d4ffbc3b83fb20"
+      },
+      "hand-claim-11-rule": {
+        "input_sha256": "af5075bc0dc69d2f99b39925947aeea332bd81d003e986e04764dacd66448661",
+        "label_sha256": "eb612f73a9067d68e1e86ecf94a50bcd4c952bd377aef1d718d4ffbc3b83fb20"
+      },
+      "hand-claim-12-bad": {
+        "input_sha256": "096b515eb11c0f2b1b57d4cf89ad752254e636f430636e7e736bbcf30572727e",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-12-rev": {
+        "input_sha256": "786fb3687f6b3b3b72aca163a7c8b0dd51e000bcee4cdd8b6eeaf356e2e7e856",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-14-bad": {
+        "input_sha256": "3c05c8a2095bf2e5ff9b8afb7013318c7b01cd7ee79b150bdf1a62fb12d37747",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-15-bad": {
+        "input_sha256": "210967596b4d952462d57b6fdac4279fe5567e208d756381fa0b12a5f0fff499",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-16-bad": {
+        "input_sha256": "bbcc161bc142157d632c6206b933909f4ce10532c571b232fa68805d1284c6eb",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-claim-17-bad": {
+        "input_sha256": "a0d43bf13425e8e54f76e7924fb16e27b4364ae72981b8e3d88d37f01ef2cae7",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-01-bad": {
+        "input_sha256": "186070c3f61859945115d49d51390c98aa967aef40850aa2aeda7872977d005b",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-02-bad": {
+        "input_sha256": "e068efbee28bf943c58b5e07949be8ce79f3d3e067a12cfa2ecf26f3f104f88c",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-03-good-fb": {
+        "input_sha256": "91332c18c9b67fa6eac8b0c6596d7ef43252554556d047d186d5e587ec9811af",
+        "label_sha256": "fbe5cc914bcef3dca504b2d5e0330e94dd18f788b81bad021c169c80bcd7440c"
+      },
+      "hand-lesson-04-bad": {
+        "input_sha256": "8cf901f5f961dbfeec5e0c7222864351ebc569c72f5098ed0c9db1c55f836b8c",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-04-rev": {
+        "input_sha256": "f5b7219ef6718c5a95cc4b0bdbaf55cf9b4f7b60f5e139f504e6f1b25cb03c76",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-05-bad": {
+        "input_sha256": "d9a4a41e85b71857e15366df974202974714733c80e47bca7b329355283efdb7",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-06-good-fb": {
+        "input_sha256": "dbcd2f600af6dccd283f4f9381b9e4a3ed3d9a88550f96095161bab6a5fa94bb",
+        "label_sha256": "fbe5cc914bcef3dca504b2d5e0330e94dd18f788b81bad021c169c80bcd7440c"
+      },
+      "hand-lesson-07-bad": {
+        "input_sha256": "2fb93697eec446b17f6423fdda63f43d37a7cecafd5124e783c14cc14d74ff96",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-08-bad": {
+        "input_sha256": "6133032928a80a3b9434bbea70dd0ecc3b7c71467f5e215c1bc394ec460a6b8a",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-08-rev": {
+        "input_sha256": "6c9ac959dd4074f4025614a85392766ce2e1f2cdd02500e35c6e30826c13ad9a",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-10-bad": {
+        "input_sha256": "c92c0b422cf376d9b5f07a2ac8617ff44256c92056c42ed3584e4e6b92a0012c",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-11-bad": {
+        "input_sha256": "6e355f65c16d751a328ce8e7071b682a306c2b9bb91c246b70c18aa0726193cc",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-12-bad": {
+        "input_sha256": "b9864049d8df89993b80414a64f07e67d51c236b65668204742c801996c3e38b",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-13-bad": {
+        "input_sha256": "a1f373b6dc1d94fe038516fa87d6dcc66a332eb162fbd346f24c6011d793c7e7",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-14-bad": {
+        "input_sha256": "61526b47f9211d4f59274816f8ddd972fcdf48f048f42412287e0104360dbf61",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-15-bad": {
+        "input_sha256": "2e84dd229c336289157be1d191f5a298214680f759684388f89875f611b98393",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-16-rev": {
+        "input_sha256": "6070180c1e6eb38e6b1f9a1de98aa2e746f846165e18e734581a6af1ac761a2e",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-17-bad": {
+        "input_sha256": "1d83e624d08daec74a03f7d43134c3b8a65d0d81bb533187ad2117432ccd1300",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-18-bad": {
+        "input_sha256": "0cbef2b9375a81f35f8c48c39d2ab0b4d494f00deee76c9e058a229ae1a8e810",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-20-bad": {
+        "input_sha256": "ceba0b6a82218f8b7ee56c78b7e904ebb788ea8edbe6f37345f4894cc27d4b57",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-20-rev": {
+        "input_sha256": "97445a62f67dbda52b1f7875241cc3a20117e97ee8ff4e56113046cf758f7665",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-21-bad": {
+        "input_sha256": "1d0673633346f1f7df87f0c0d80adafe878f9e11935d3eb5d1230db5e5c7f953",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-lesson-23-bad": {
+        "input_sha256": "35be915407e9fbe305cdb6c006803e2859867008417ceb975a7e0227c7d99133",
+        "label_sha256": "06c96497edd861c15fb38a1c167e50cff488937e947f8af1356ced4f1becdb9e"
+      },
+      "hand-status-01-a": {
+        "input_sha256": "05c80d2620017825f69fc302b595f2557e3e244a3f40ce43e82766eda70add03",
+        "label_sha256": "e6dc0f53988d099a03c4abc17213a1ea4c88c7a6277c8ce65d2d697979b208f0"
+      },
+      "hand-status-01-b": {
+        "input_sha256": "c3465cda1757fa0d55348b8e25347100b0d8f92386b62fc99a606629fa4ab6d7",
+        "label_sha256": "e6dc0f53988d099a03c4abc17213a1ea4c88c7a6277c8ce65d2d697979b208f0"
+      },
+      "hand-status-02-a": {
+        "input_sha256": "3ddc707102d38762405d84ad265c833269ae650bbd0ff6f1f21c809dfcdc69c9",
+        "label_sha256": "e6dc0f53988d099a03c4abc17213a1ea4c88c7a6277c8ce65d2d697979b208f0"
+      },
+      "hand-status-03-oneRunRule": {
+        "input_sha256": "9a8bd48426c664faf72788e7a655f8347a703de19160e7733fdf84b066232276",
+        "label_sha256": "eb612f73a9067d68e1e86ecf94a50bcd4c952bd377aef1d718d4ffbc3b83fb20"
+      },
+      "hand-status-04-a": {
+        "input_sha256": "68e640051cd2e0b363e0993d5ff28d64c77c452cc389dde73ff2817729011ded",
+        "label_sha256": "e6dc0f53988d099a03c4abc17213a1ea4c88c7a6277c8ce65d2d697979b208f0"
+      },
+      "hand-status-05-a": {
+        "input_sha256": "f9c43264959b247e7b2ac4a659059bcd0337f61b8ec999cef82a6adec8d2a0a8",
+        "label_sha256": "e6dc0f53988d099a03c4abc17213a1ea4c88c7a6277c8ce65d2d697979b208f0"
+      },
+      "hand-status-05-b": {
+        "input_sha256": "c0b9089f07724fcea1795f4a017e96b13e5ba8b52580000e1417736ac35e5048",
+        "label_sha256": "e6dc0f53988d099a03c4abc17213a1ea4c88c7a6277c8ce65d2d697979b208f0"
+      },
+      "hand-status-06-b": {
+        "input_sha256": "bb0f172ca5fe6902ea9f85a98cca50c8ff0d180a910d08d3526b5fc991f73632",
+        "label_sha256": "e6dc0f53988d099a03c4abc17213a1ea4c88c7a6277c8ce65d2d697979b208f0"
+      },
+      "hand-upd-01-bad": {
+        "input_sha256": "02a7272f59b46b822ded4af8a90727f5b3c8e360b6f64abfc945af8eefb419b3",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-01-dup": {
+        "input_sha256": "72578598214ade08fda6a3d2a04ad2e35dbba9dbbe72b81678f85073dcba7339",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-01-good-fb": {
+        "input_sha256": "a417ffdcb9da64484fed529b5082b4514e15b0ba9b706402beeb314782e6298d",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-01-restate": {
+        "input_sha256": "5e3bc69b86df4d94f1aaffde99a55e7cbaf7540f0e84efa6ba5645c11dda1bf4",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-02-bad": {
+        "input_sha256": "68781c153ea2651533d74327ee19c7e21ddbc32873abd76e1e4d637385673132",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-02-restate": {
+        "input_sha256": "9e35306de3eff573899200d505223c2a0ba5675787b4e46333f5e466aaab1dae",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-03-bad": {
+        "input_sha256": "9bb8a1a5d170957db764970820359ac7cdfb8ae58cfd6f3fac7ab04c485308bb",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-03-dup": {
+        "input_sha256": "f07124e8fb44196a2b8db582e5368db2a3ffaaf6a7e9c1954f1b963a75cd9b4c",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-03-restate": {
+        "input_sha256": "c00fba12e3b2111145d8a54df4625d7f8b7600b084e0bd6584235a17d0381103",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-04-bad-fb": {
+        "input_sha256": "4696a611fbf8ee8dc8a2cda92958680e7fdc722291dd47c2fcbfec8dcc481484",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-04-dup": {
+        "input_sha256": "3a47fe57c0d8bc294b241d0feeab1deddf0beeb62a492c2b291ccf24b2996a71",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-04-rev": {
+        "input_sha256": "7f1b51dbdd4cfbdd0d267fbc1e7683df6d28c43077088d65e18bff03aff75ff4",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-05-bad": {
+        "input_sha256": "be71649e0bb1320c914549b381fcfe437aab8535f6b30ae82824b7929e53417e",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-05-restate": {
+        "input_sha256": "26a431a5bb8cad89cbf5a24a7150f86d33131edc07a43fa993353b85e55f5132",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-06-dup": {
+        "input_sha256": "daec1a2148aa57f192385404d0fd2e3bb8e4ab8b609cfb885441b9ad9dbe373f",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-06-restate": {
+        "input_sha256": "7d4942fc0de717252830341cdedc9033396fa372c5d408fc6c230fa1970df31a",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-07-bad": {
+        "input_sha256": "641188dba91edf11ace9c5ef0f51a78b9a73645da8f25b2b82411dc9f8d7e979",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-07-dup": {
+        "input_sha256": "03b21228359790da4f7ea2500c74cbd0b3fe49eb8b6fd5df22d661c810b20d51",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-07-good": {
+        "input_sha256": "c5ba19b657d94a1e08f6b71430e0761a141b599ae87c3869e19b9d1af5ea6097",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-07-restate": {
+        "input_sha256": "2dcc1d58aca26d640beb0ecbd6cc24a631afc33f239143f3578e4533280a0d4b",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-08-bad": {
+        "input_sha256": "693590a233bd0aa3b3f69e4545ee7d55c828c761e2210733ff435da12fe27b59",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-08-dup": {
+        "input_sha256": "deeede38a1fb080d01dcdb7e84653f873ece5efa38bc9f143e27f48d727708bf",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-08-rev": {
+        "input_sha256": "9405fc2ba6703a01f994dd1f5b2aea7b05575d068bc9cef9646a8f23750de828",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-09-good-fb": {
+        "input_sha256": "da2cc94e82b725417edec1b388babb79a1c23f0d2344a6990c060c4e1c0ac182",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-09-restate": {
+        "input_sha256": "fca9a55eeacd359b86181cc74a15df7e2d596cb9d1062715e8e963dc5e8378b6",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-10-bad": {
+        "input_sha256": "47c0ddd2c2954a67f051afaf4283507b67f9a9bff58dda101f7ad0eff3fe3975",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-10-dup": {
+        "input_sha256": "a21662643787d33a2b80da48755722382fffeeb6de45fb129f3b46ebdfed2f71",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-10-restate": {
+        "input_sha256": "199a58d5696145579818b3222fd54c39257f03c8d62919357d3d93383157f3fa",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-11-bad": {
+        "input_sha256": "ecda8f5ef157f6284deb9b5d6607f59b3d2933fd994a04bfbac582c3f73499d8",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-11-dup": {
+        "input_sha256": "3828f5f2da4b3a6c57c07a503a1ce44c0d34483dc13598a1d1c91f0a2484bc6f",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-11-restate": {
+        "input_sha256": "de98f437353067f415438c97a215a93871bc9dd2402a904876b66f843633a179",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-12-bad": {
+        "input_sha256": "ec4548d00eb66e305446f1692eed545f836ab86487961024851da01602f7e0b7",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-12-dup": {
+        "input_sha256": "d3c4eb96e20a16a1a19ee02b30ffbf4d1b45b8cdfd4c42fe2d87ebda39c8d85e",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-13-bad": {
+        "input_sha256": "a7b730f6907d9bd3b8cad5a564d1873caf94db06ba0450392a8fa8916e7dc7d2",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-13-restate": {
+        "input_sha256": "0f01ee9504f5f8aae8b3a4ef499631ecde7add1d808840ccc9d942377ce81a6f",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-13-restate-fb": {
+        "input_sha256": "176c6883b1e7e76ec991e0341c35d7094555883442da662d3d67440970f2776f",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-14-bad": {
+        "input_sha256": "b6db89762e85aa3552f84e0970b1741f9f18d91600b76723be83f465379fc717",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-14-dup": {
+        "input_sha256": "f1296a659707cfbcb0d4b049a9aa433493ee35557ce06192f06ab4e54d7adf0e",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-14-restate": {
+        "input_sha256": "c1f4012c9be6ae34ed7d82204773614091ac6edefc02bb8e02a60bbbb0c158de",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-15-bad": {
+        "input_sha256": "4186fa09383b34365bece17f0b5aed686ee373c690832f157834a08661e54618",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-15-dup": {
+        "input_sha256": "4700f5ad0682ebc944c709ce6d0d4315981969c9001fbfd1b315993211aa3f83",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-16-dup": {
+        "input_sha256": "82a051c86aaab1be45bf317d5549f8c1d44d9661894ecfdc16dfead1c9cf93eb",
+        "label_sha256": "eaf065b0b202b74457b48998dc20764542e4ab027b4007f23ccb028968a9bf2a"
+      },
+      "hand-upd-16-good": {
+        "input_sha256": "9002b4a5573c1cdd17c81dcbc5bdc2c4b4ad315bb24eb6a3df62c07a9e63a4ba",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-16-restate": {
+        "input_sha256": "537134609725ea1d13b1ef6cc79842a08f5a6d4c38f4e6eb5fb276a847e4dfe6",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-16-rev": {
+        "input_sha256": "ddca19b8bfdc02b934f9930b4e61f3a8208de0def0d60f7398d4dfc82004f171",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-17-bad": {
+        "input_sha256": "1480553e8dfed6c21ffe7252b17540badbd4a433a97796cecc6518ee2535c5ba",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-17-good": {
+        "input_sha256": "0a17ae9cb843af3a011e73d6753beb152d2569917af01c56df431901bbb3d079",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-17-restate": {
+        "input_sha256": "3a7c295c336d0939de604de9eb8c256d4ec2cc39799f525d4c1b92881cf39e36",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-18-bad": {
+        "input_sha256": "0f9ee5253ec1df126f6dd27a130987d522d23700dd3cac357a271411280f2644",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-18-good": {
+        "input_sha256": "311f1ca0d6327076e910f299b13cf59548c2cbbc41ed0f5f57457e55c6819531",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-18-restate": {
+        "input_sha256": "cac754161663472dfd524c1f0d93ca8153d379d7e0c5a3c3258f1ca49d91ec4e",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-20-bad": {
+        "input_sha256": "8fab5d2d704d7b5b05af31c977e69ab6b16f97f77c9f0f80c7c5111492c27f5d",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-20-good": {
+        "input_sha256": "330cb95edea136ecdfd3ef6a4bf8676c2bb5ee19fbb2070d3be537b919848a16",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-20-restate": {
+        "input_sha256": "53d9ac6de6eced46138659824f2c01d9063547950edbc3771116e8c43900b043",
+        "label_sha256": "fae755afcf1304be9e284a2d688348aef18d7a7f741526cee2ad4b31fc34e828"
+      },
+      "hand-upd-20-rev": {
+        "input_sha256": "28db83ea4842453bef4f78e4ab8f7bfa5f6e583cd3dbdcfbd2012636cff8ff8c",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-21-bad": {
+        "input_sha256": "6d4694a17bd848d4de58987f3db4f95e6915cec8cb8d5f6bc5e4cfdc3f64a67a",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-21-good": {
+        "input_sha256": "cb26720829a786400118800598b924bb7e46da9df46e75cfb04c5dec6ccb8a1e",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-21-retold": {
+        "input_sha256": "41a704adc265467ad1827d789662cd862e4ef8ce4e5c737eabcd74d752c15f06",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-21-retold-fb": {
+        "input_sha256": "9b39a5ce2558a161d0c9735b6553d077e8e4ccc94cb51e09fc292cf4b415fbc9",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-22-good": {
+        "input_sha256": "687f1d7ed40f56f75cd8f49971532796b0b0977dbf20846ae001e5c9a99ea92f",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-22-retold": {
+        "input_sha256": "8202839909a9c1815b7a31b33a8f9a5dde1b9557d7075f7c0101d6a90039d32a",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-23-bad": {
+        "input_sha256": "33046b523c336fad465874c74391e226b44b4391f93431dda51cbf37114f5c1b",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-24-bad": {
+        "input_sha256": "7edaca9c4abbb8846a508acda8b43838f090063f81b4e1c64c2e2f1622f0e35b",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-24-retold": {
+        "input_sha256": "6eaf7e69be4fa80c6edb3ba86874b4eabd2814c1bb3bd817cff0081ac9800826",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-24-rev": {
+        "input_sha256": "02bc5fb09125dac923dd1de19ab0e445b705528cc3df778f532c33610eeff7a4",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-25-retold": {
+        "input_sha256": "1f7d255883942f183b5df6dcd21b865d50c3d6af5c2b296d5a279255540d0a29",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-26-bad": {
+        "input_sha256": "e70cba12535613dde51e61479c795d41ea935f5fcbad1acd31cf41bcef642f78",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-26-retold": {
+        "input_sha256": "b1956fba5276f2cd06674df68c913387dd16b58068dbf357835de4043f710b87",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-27-bad": {
+        "input_sha256": "fbfcb3f625d21b0d90dbe6a44b3f321e1e38bb8062cae41d2b2d29791a349f04",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-28-bad": {
+        "input_sha256": "c4ca6c0b9f232ec2363cc5fc6b9ac38199251a70945c5e3f4bfeb737f0533387",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-28-retold": {
+        "input_sha256": "1fbb72cda49545e06a4c0f3410ca7eb7079ebea82ef4b8ea537563d0fc1f7ef7",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-29-bad": {
+        "input_sha256": "3d87d07f7f5357ba270766bed4f2154e31b582dba1713b1a8baba3847b6815f1",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-29-retold": {
+        "input_sha256": "4483a9ddece6e413d234eb6b6c4a6029cdd73471da990cfd8922032cd8a854ea",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-30-bad": {
+        "input_sha256": "a045299c0b47b5fdf7729288ae08e243f15b7226cefe41be4bc8bf1822408fc6",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-30-retold": {
+        "input_sha256": "64229b2837e793071135f3ec8cac42edabca1c8ed9ad36e56596281a14dd5b16",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-31-bad": {
+        "input_sha256": "4af9a01430b3b1bb6cc5fb7b7602d9ed814d1e83553b9e363804df05e6c7b814",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-32-retold": {
+        "input_sha256": "31973a1d568f6523805071439f13e5c213bec9a1870f306f74ee3a2939a5f6ff",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-32-rev": {
+        "input_sha256": "0d592e6db506d5466a6a42324064911dcdd4abfad0ae5ca815d6bbf6b61a940b",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-33-bad": {
+        "input_sha256": "4a486f12c92bd785bed4e848fb8a3b16a3beeef2318a63dee3bc71e3f9468acc",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-33-retold": {
+        "input_sha256": "ba21e53763159e0ce9c840ef7f7754615a8074321bc775112f74f82a33476f4b",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-34-bad": {
+        "input_sha256": "f10cbf932731f70ee8a6979703573a7ae92df2ff956a01017f699f67da9185d7",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-34-retold": {
+        "input_sha256": "d25cf56cd789c193ff6d8ce7eaa2a4d1db0a01cb57686224efce922d11efcd87",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-36-bad": {
+        "input_sha256": "7b4461f80b5181205bc3dc3cd5c46e22b6f601d6011b425772a907e1be23976f",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-36-retold": {
+        "input_sha256": "d9084c6348e4c15812341dbdb240788bfb10781c02c70fd5bc2342b01a180e91",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-36-rev": {
+        "input_sha256": "e74f56a123ac92cb9d2f8e0d7103ddae0f90c319b534dd6989daaa1d2a4b343c",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-37-bad": {
+        "input_sha256": "58af2eb06bb0cd655042e5d932ae97dc638f0763a06bd0edc53d6b64f7b808f8",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-37-retold": {
+        "input_sha256": "b9d14183b9a4f5fd72fc24a284075b92cb1845b04ceeecfa3ab4f3a14e926809",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-38-retold": {
+        "input_sha256": "b5e7a391ff3bb06825d4d67a5b4619f7ee2568853d9a7a886b7b0e48312b3725",
+        "label_sha256": "ad56f819b992209dff866c29f4349904168cffb25fe681b3e84c1e9f93673953"
+      },
+      "hand-upd-39-bad": {
+        "input_sha256": "6dabf9bbb6f663fafb69581f2792a077e91f8f42d7c635dd63ca13e6a9eedf43",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-40-bad": {
+        "input_sha256": "a440b582643b1806977e1b42dfc2c71930c4f1237c1ded654b757fc41a6d5b3f",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      },
+      "hand-upd-40-retold": {
+        "input_sha256": "7ebe6afd076710bd232368f34befec1e69a7a03fc9d45fb07e256e49d5b89496",
+        "label_sha256": "3fc3210766b4500c6269c842efd60dad2dae1f16382cdfa6e4cb45ac2c141410"
+      },
+      "hand-upd-40-rev": {
+        "input_sha256": "e885b849ca7434d04b66aa63b158d0c654ba8e2ca43fdcd51b5356abb758d9eb",
+        "label_sha256": "4e6ebdacb2d678e20a025a4b46e00202ca94f4ddd247528bab174849efd67d52"
+      }
+    },
+    "akm": {
+      "version": "0.10.261105",
+      "bin": "bun ~/.cache/agent-judge-baseline/akm/src/cli.ts",
+      "build": "v0.9.0-beta.60-3182-gcc4872fe8",
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "off",
+        "registries": [],
+        "engines": {
+          "judge": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "judge",
+          "improveStrategy": "default"
+        },
+        "improve": {
+          "strategies": {
+            "default": {
+              "engine": "judge",
+              "processes": {
+                "distill": {
+                  "qualityGate": {
+                    "engine": "judge"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": "default",
+      "config_patch_sha256": null,
+      "timeout_ms": 900000,
+      "seed": null
+    },
+    "engines": {
+      "judge": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "real-claim-01",
+        "real-claim-02",
+        "real-claim-04",
+        "real-claim-05",
+        "real-claim-11",
+        "real-claim-12",
+        "real-claim-14",
+        "real-claim-15",
+        "real-claim-16",
+        "real-dup-04",
+        "real-lesson-05",
+        "real-lesson-06",
+        "real-lesson-08",
+        "real-lesson-10",
+        "real-lesson-12",
+        "real-lesson-13",
+        "real-lesson-17",
+        "real-lesson-19",
+        "real-lesson-20",
+        "real-upd-02",
+        "real-upd-03",
+        "real-upd-04",
+        "real-upd-06",
+        "real-upd-08",
+        "real-upd-09",
+        "real-upd-10",
+        "real-upd-11",
+        "real-upd-13",
+        "real-upd-14",
+        "hand-claim-01-bad",
+        "hand-claim-01-bad-fb",
+        "hand-claim-02-bad",
+        "hand-claim-02-cause",
+        "hand-claim-02-cause-fb",
+        "hand-claim-02-rule",
+        "hand-claim-04-bad",
+        "hand-claim-04-bad-fb",
+        "hand-claim-04-rev",
+        "hand-claim-05-rule",
+        "hand-claim-06-bad",
+        "hand-claim-07-bad",
+        "hand-claim-07-rev-fb",
+        "hand-claim-08-rev",
+        "hand-claim-09-bad",
+        "hand-claim-09-good-fb",
+        "hand-claim-10-bad",
+        "hand-claim-11-bad",
+        "hand-claim-11-cause",
+        "hand-claim-11-rule",
+        "hand-claim-12-bad",
+        "hand-claim-12-rev",
+        "hand-claim-14-bad",
+        "hand-claim-15-bad",
+        "hand-claim-16-bad",
+        "hand-claim-17-bad",
+        "hand-lesson-01-bad",
+        "hand-lesson-02-bad",
+        "hand-lesson-03-good-fb",
+        "hand-lesson-04-bad",
+        "hand-lesson-04-rev",
+        "hand-lesson-05-bad",
+        "hand-lesson-06-good-fb",
+        "hand-lesson-07-bad",
+        "hand-lesson-08-bad",
+        "hand-lesson-08-rev",
+        "hand-lesson-10-bad",
+        "hand-lesson-11-bad",
+        "hand-lesson-12-bad",
+        "hand-lesson-13-bad",
+        "hand-lesson-14-bad",
+        "hand-lesson-15-bad",
+        "hand-lesson-16-rev",
+        "hand-lesson-17-bad",
+        "hand-lesson-18-bad",
+        "hand-lesson-20-bad",
+        "hand-lesson-20-rev",
+        "hand-lesson-21-bad",
+        "hand-lesson-23-bad",
+        "hand-status-01-a",
+        "hand-status-01-b",
+        "hand-status-02-a",
+        "hand-status-03-oneRunRule",
+        "hand-status-04-a",
+        "hand-status-05-a",
+        "hand-status-05-b",
+        "hand-status-06-b",
+        "hand-upd-01-bad",
+        "hand-upd-01-dup",
+        "hand-upd-01-good-fb",
+        "hand-upd-01-restate",
+        "hand-upd-02-bad",
+        "hand-upd-02-restate",
+        "hand-upd-03-bad",
+        "hand-upd-03-dup",
+        "hand-upd-03-restate",
+        "hand-upd-04-bad-fb",
+        "hand-upd-04-dup",
+        "hand-upd-04-rev",
+        "hand-upd-05-bad",
+        "hand-upd-05-restate",
+        "hand-upd-06-dup",
+        "hand-upd-06-restate",
+        "hand-upd-07-bad",
+        "hand-upd-07-dup",
+        "hand-upd-07-good",
+        "hand-upd-07-restate",
+        "hand-upd-08-bad",
+        "hand-upd-08-dup",
+        "hand-upd-08-rev",
+        "hand-upd-09-good-fb",
+        "hand-upd-09-restate",
+        "hand-upd-10-bad",
+        "hand-upd-10-dup",
+        "hand-upd-10-restate",
+        "hand-upd-11-bad",
+        "hand-upd-11-dup",
+        "hand-upd-11-restate",
+        "hand-upd-12-bad",
+        "hand-upd-12-dup",
+        "hand-upd-13-bad",
+        "hand-upd-13-restate",
+        "hand-upd-13-restate-fb",
+        "hand-upd-14-bad",
+        "hand-upd-14-dup",
+        "hand-upd-14-restate",
+        "hand-upd-15-bad",
+        "hand-upd-15-dup",
+        "hand-upd-16-dup",
+        "hand-upd-16-good",
+        "hand-upd-16-restate",
+        "hand-upd-16-rev",
+        "hand-upd-17-bad",
+        "hand-upd-17-good",
+        "hand-upd-17-restate",
+        "hand-upd-18-bad",
+        "hand-upd-18-good",
+        "hand-upd-18-restate",
+        "hand-upd-20-bad",
+        "hand-upd-20-good",
+        "hand-upd-20-restate",
+        "hand-upd-20-rev",
+        "hand-upd-21-bad",
+        "hand-upd-21-good",
+        "hand-upd-21-retold",
+        "hand-upd-21-retold-fb",
+        "hand-upd-22-good",
+        "hand-upd-22-retold",
+        "hand-upd-23-bad",
+        "hand-upd-24-bad",
+        "hand-upd-24-retold",
+        "hand-upd-24-rev",
+        "hand-upd-25-retold",
+        "hand-upd-26-bad",
+        "hand-upd-26-retold",
+        "hand-upd-27-bad",
+        "hand-upd-28-bad",
+        "hand-upd-28-retold",
+        "hand-upd-29-bad",
+        "hand-upd-29-retold",
+        "hand-upd-30-bad",
+        "hand-upd-30-retold",
+        "hand-upd-31-bad",
+        "hand-upd-32-retold",
+        "hand-upd-32-rev",
+        "hand-upd-33-bad",
+        "hand-upd-33-retold",
+        "hand-upd-34-bad",
+        "hand-upd-34-retold",
+        "hand-upd-36-bad",
+        "hand-upd-36-retold",
+        "hand-upd-36-rev",
+        "hand-upd-37-bad",
+        "hand-upd-37-retold",
+        "hand-upd-38-retold",
+        "hand-upd-39-bad",
+        "hand-upd-40-bad",
+        "hand-upd-40-retold",
+        "hand-upd-40-rev"
+      ],
+      "scored": [
+        "real-claim-01",
+        "real-claim-02",
+        "real-claim-04",
+        "real-claim-05",
+        "real-claim-11",
+        "real-claim-12",
+        "real-claim-14",
+        "real-claim-15",
+        "real-claim-16",
+        "real-dup-04",
+        "real-lesson-05",
+        "real-lesson-06",
+        "real-lesson-08",
+        "real-lesson-10",
+        "real-lesson-12",
+        "real-lesson-13",
+        "real-lesson-17",
+        "real-lesson-19",
+        "real-lesson-20",
+        "real-upd-02",
+        "real-upd-03",
+        "real-upd-04",
+        "real-upd-06",
+        "real-upd-08",
+        "real-upd-09",
+        "real-upd-10",
+        "real-upd-11",
+        "real-upd-13",
+        "real-upd-14",
+        "hand-claim-01-bad",
+        "hand-claim-01-bad-fb",
+        "hand-claim-02-bad",
+        "hand-claim-02-cause",
+        "hand-claim-02-cause-fb",
+        "hand-claim-02-rule",
+        "hand-claim-04-bad",
+        "hand-claim-04-bad-fb",
+        "hand-claim-04-rev",
+        "hand-claim-05-rule",
+        "hand-claim-06-bad",
+        "hand-claim-07-bad",
+        "hand-claim-07-rev-fb",
+        "hand-claim-08-rev",
+        "hand-claim-09-bad",
+        "hand-claim-09-good-fb",
+        "hand-claim-10-bad",
+        "hand-claim-11-bad",
+        "hand-claim-11-cause",
+        "hand-claim-11-rule",
+        "hand-claim-12-bad",
+        "hand-claim-12-rev",
+        "hand-claim-14-bad",
+        "hand-claim-15-bad",
+        "hand-claim-16-bad",
+        "hand-claim-17-bad",
+        "hand-lesson-01-bad",
+        "hand-lesson-02-bad",
+        "hand-lesson-03-good-fb",
+        "hand-lesson-04-bad",
+        "hand-lesson-04-rev",
+        "hand-lesson-05-bad",
+        "hand-lesson-06-good-fb",
+        "hand-lesson-07-bad",
+        "hand-lesson-08-bad",
+        "hand-lesson-08-rev",
+        "hand-lesson-10-bad",
+        "hand-lesson-11-bad",
+        "hand-lesson-12-bad",
+        "hand-lesson-13-bad",
+        "hand-lesson-14-bad",
+        "hand-lesson-15-bad",
+        "hand-lesson-16-rev",
+        "hand-lesson-17-bad",
+        "hand-lesson-18-bad",
+        "hand-lesson-20-bad",
+        "hand-lesson-20-rev",
+        "hand-lesson-21-bad",
+        "hand-lesson-23-bad",
+        "hand-status-01-a",
+        "hand-status-01-b",
+        "hand-status-02-a",
+        "hand-status-03-oneRunRule",
+        "hand-status-04-a",
+        "hand-status-05-a",
+        "hand-status-05-b",
+        "hand-status-06-b",
+        "hand-upd-01-bad",
+        "hand-upd-01-dup",
+        "hand-upd-01-good-fb",
+        "hand-upd-01-restate",
+        "hand-upd-02-bad",
+        "hand-upd-02-restate",
+        "hand-upd-03-bad",
+        "hand-upd-03-dup",
+        "hand-upd-03-restate",
+        "hand-upd-04-bad-fb",
+        "hand-upd-04-dup",
+        "hand-upd-04-rev",
+        "hand-upd-05-bad",
+        "hand-upd-05-restate",
+        "hand-upd-06-dup",
+        "hand-upd-06-restate",
+        "hand-upd-07-bad",
+        "hand-upd-07-dup",
+        "hand-upd-07-good",
+        "hand-upd-07-restate",
+        "hand-upd-08-bad",
+        "hand-upd-08-dup",
+        "hand-upd-08-rev",
+        "hand-upd-09-good-fb",
+        "hand-upd-09-restate",
+        "hand-upd-10-bad",
+        "hand-upd-10-dup",
+        "hand-upd-10-restate",
+        "hand-upd-11-bad",
+        "hand-upd-11-dup",
+        "hand-upd-11-restate",
+        "hand-upd-12-bad",
+        "hand-upd-12-dup",
+        "hand-upd-13-bad",
+        "hand-upd-13-restate",
+        "hand-upd-13-restate-fb",
+        "hand-upd-14-bad",
+        "hand-upd-14-dup",
+        "hand-upd-14-restate",
+        "hand-upd-15-bad",
+        "hand-upd-15-dup",
+        "hand-upd-16-dup",
+        "hand-upd-16-good",
+        "hand-upd-16-restate",
+        "hand-upd-16-rev",
+        "hand-upd-17-bad",
+        "hand-upd-17-good",
+        "hand-upd-17-restate",
+        "hand-upd-18-bad",
+        "hand-upd-18-good",
+        "hand-upd-18-restate",
+        "hand-upd-20-bad",
+        "hand-upd-20-good",
+        "hand-upd-20-restate",
+        "hand-upd-20-rev",
+        "hand-upd-21-bad",
+        "hand-upd-21-good",
+        "hand-upd-21-retold",
+        "hand-upd-21-retold-fb",
+        "hand-upd-22-good",
+        "hand-upd-22-retold",
+        "hand-upd-23-bad",
+        "hand-upd-24-bad",
+        "hand-upd-24-retold",
+        "hand-upd-24-rev",
+        "hand-upd-25-retold",
+        "hand-upd-26-bad",
+        "hand-upd-26-retold",
+        "hand-upd-27-bad",
+        "hand-upd-28-bad",
+        "hand-upd-28-retold",
+        "hand-upd-29-bad",
+        "hand-upd-29-retold",
+        "hand-upd-30-bad",
+        "hand-upd-30-retold",
+        "hand-upd-31-bad",
+        "hand-upd-32-retold",
+        "hand-upd-32-rev",
+        "hand-upd-33-bad",
+        "hand-upd-33-retold",
+        "hand-upd-34-bad",
+        "hand-upd-34-retold",
+        "hand-upd-36-bad",
+        "hand-upd-36-retold",
+        "hand-upd-36-rev",
+        "hand-upd-37-bad",
+        "hand-upd-37-retold",
+        "hand-upd-38-retold",
+        "hand-upd-39-bad",
+        "hand-upd-40-bad",
+        "hand-upd-40-retold",
+        "hand-upd-40-rev"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 156.713
+}
