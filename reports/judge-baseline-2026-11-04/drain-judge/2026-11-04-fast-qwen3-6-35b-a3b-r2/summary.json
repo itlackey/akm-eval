@@ -1,0 +1,1407 @@
+{
+  "eval": "drain-judge",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "fast-qwen3-6-35b-a3b-r2",
+  "date": "2026-11-04T03:11:16.747Z",
+  "git_commit": "5a7d941",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261105",
+  "akm_bin": "bun ~/.cache/agent-judge-baseline/akm/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-3182-gcc4872fe8",
+  "akm_build_fingerprint": null,
+  "config_form": "connections",
+  "limit": null,
+  "config_patch": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "engines": {
+      "judge": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "judge"
+    }
+  },
+  "engine": {
+    "engine": "judge",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "<MODEL_BASE_URL>",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "judge": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "1d3c720a03bab7842a6d9d3d50b64c082b4d01ac62dc2ec2de578e9b8fb7c27d",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 184,
+  "n_run": 184,
+  "n_scored": 184,
+  "n_errored": 0,
+  "timeouts": 0,
+  "metrics": {
+    "good_accepted": {
+      "n": 45,
+      "count": 45,
+      "rate": 1
+    },
+    "bad_accepted": {
+      "n": 139,
+      "count": 9,
+      "rate": 0.0647
+    },
+    "by_category": {
+      "ephemeral": {
+        "n": 49,
+        "count": 2,
+        "rate": 0.0408
+      },
+      "duplicate": {
+        "n": 45,
+        "count": 0,
+        "rate": 0
+      },
+      "stale": {
+        "n": 45,
+        "count": 7,
+        "rate": 0.1556
+      }
+    },
+    "bad_by_origin": {
+      "real": {
+        "n": 0,
+        "count": 0,
+        "rate": null
+      },
+      "corpus": {
+        "n": 4,
+        "count": 1,
+        "rate": 0.25
+      },
+      "hand-written": {
+        "n": 135,
+        "count": 8,
+        "rate": 0.0593
+      }
+    },
+    "precision": {
+      "value": 0.8333,
+      "accepted_good": 45,
+      "accepted": 54
+    },
+    "good_rejected": {
+      "n": 45,
+      "count": 0,
+      "rate": 0
+    },
+    "defer_rate": {
+      "good": {
+        "n": 45,
+        "count": 0,
+        "rate": 0
+      },
+      "bad": {
+        "n": 139,
+        "count": 0,
+        "rate": 0
+      }
+    },
+    "left_pending": {
+      "good": {
+        "n": 45,
+        "count": 0,
+        "rate": 0
+      },
+      "bad": {
+        "n": 139,
+        "count": 0,
+        "rate": 0
+      }
+    },
+    "confusion": {
+      "good": {
+        "accept": 45,
+        "reject": 0,
+        "defer": 0,
+        "unparseable": 0,
+        "error": 0
+      },
+      "ephemeral": {
+        "accept": 2,
+        "reject": 47,
+        "defer": 0,
+        "unparseable": 0,
+        "error": 0
+      },
+      "duplicate": {
+        "accept": 0,
+        "reject": 45,
+        "defer": 0,
+        "unparseable": 0,
+        "error": 0
+      },
+      "stale": {
+        "accept": 7,
+        "reject": 38,
+        "defer": 0,
+        "unparseable": 0,
+        "error": 0
+      }
+    },
+    "baselines": {
+      "accept_all": {
+        "good_accepted": {
+          "n": 45,
+          "count": 45,
+          "rate": 1
+        },
+        "bad_accepted": {
+          "n": 139,
+          "count": 139,
+          "rate": 1
+        },
+        "precision": 0.2446
+      },
+      "reject_all": {
+        "good_accepted": {
+          "n": 45,
+          "count": 0,
+          "rate": 0
+        },
+        "bad_accepted": {
+          "n": 139,
+          "count": 0,
+          "rate": 0
+        },
+        "precision": null
+      },
+      "defer_all": {
+        "good_accepted": {
+          "n": 45,
+          "count": 0,
+          "rate": 0
+        },
+        "bad_accepted": {
+          "n": 139,
+          "count": 0,
+          "rate": 0
+        },
+        "precision": null
+      }
+    },
+    "error_rate": {
+      "n": 184,
+      "count": 0,
+      "rate": 0
+    },
+    "unparseable_rate": {
+      "n": 184,
+      "count": 0,
+      "rate": 0
+    },
+    "seconds": {
+      "mean": 1.5,
+      "median": 1.5,
+      "max": 1.9
+    }
+  },
+  "rubric_version": 1,
+  "model_calls": {
+    "calls": 184,
+    "errors": 0,
+    "prompt_tokens": 1085.1,
+    "completion_tokens": 60.5,
+    "seconds": 1.18,
+    "output_tokens_per_second": 51.1
+  },
+  "semantic_verification": null,
+  "concurrency": 1,
+  "timeout_ms": 900000,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "drain-judge",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.1"
+    },
+    "scorer": {
+      "version": "0.1"
+    },
+    "cases": {
+      "good-apprise-matrix-room-hash-encoding": {
+        "input_sha256": "34b696abecf3613b7901383f1e3276dcbd4f0c1e2053bfc6e087ceebdca336b2",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-ci-updated-snapshots-and-passed": {
+        "input_sha256": "030d616127bc3267df1c7a93e969dd6dc6fa241ddabd362870b7e647ce32be09",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-cover-pdf-rgb-black-rejected": {
+        "input_sha256": "bb01e57cbc9660932e54be651d6cccbfbcd6fff141b509f3afe8aea51d890dff",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-cron-backup-restic-not-found": {
+        "input_sha256": "2a4c2b817509cf104a5050a0b3e8b4706f7891ab735740a25e5a71c5fede445a",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-delegated-json-wrapped-in-fences": {
+        "input_sha256": "bbe9f6604c635b538ad2cc4f36c0e950b28512ef58d1baeaa95334578c452d32",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-exporter-removal-string-dispatch": {
+        "input_sha256": "ecb161e3d2ad0194474b62f7e8ecbf880351d17807613d4bfaf26999b44a8c3c",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-gh-issue-list-default-limit": {
+        "input_sha256": "2e4bb4599b70aa7124d4860f12636a9783bdd4eacf85ecb9669e4048957eaa71",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-gws-service-account-shared-drive-member": {
+        "input_sha256": "4e563437008d72e00fec3d5eaf145c6ed3e2fb6f836b7024028a8a0b61043266",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-harrow-coffee-rota": {
+        "input_sha256": "b7a56f309058e5ec9ba3efba599f468fc7b5080f633a90603d53e7a2f4681110",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-home-dev-harborlight-cli-color-handling": {
+        "input_sha256": "8b121c0b5c1962946a29d7d2d2c74aeb31d1afe09927ce828bd91daf7b82c7bc",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-harborlight-commit-convention": {
+        "input_sha256": "5c348d3388c280899ad53f0b7b6288c18ce000607bd87d331829a0a6a0cba399",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-harborlight-docs-style-guide": {
+        "input_sha256": "25dba0bdbd9957157a174a6fc50fb8568daa943218c56e9734bbf5200948f624",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-harborlight-pr-review-convention": {
+        "input_sha256": "642fe61addb92e5629eba7b14bc8d5a20ddd17b15f8a6a19b88fd75cba11d700",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-harborlight-retry-after-unit": {
+        "input_sha256": "4ec2cba488c220e5d938adb2651aa3a5bfcf6ed6bc0fb0e0d8d7eb08c6e61dd9",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-ledgerline-crm-region-field": {
+        "input_sha256": "13cd80a8c28136e1072160793e8fc928e043ae5c6e55902b2cc82711f42b4b80",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-ledgerline-disk-full-du-df-discrepancy": {
+        "input_sha256": "d608946bcde865f4a63dcaac7137f4cc6957dfca2185e0710fbc34ebc7aca52c",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-ledgerline-ledgerline-export-memory-lim": {
+        "input_sha256": "3b669f1b03842042c9b481bf6ff585059ec20c22e13f4a3677b65ae1d003dd4a",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-ledgerline-reporting-timezone-europe-be": {
+        "input_sha256": "35f5bdb3c4abf06d971709d0ca8193f0575f71c2476f0ed0395153940ac2aef7",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-ledgerline-terraform-workflow": {
+        "input_sha256": "6c12a2442d620d6b5bbd44e65cfd26f2d975de0e52289ccf77a59f28e2807976",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-ledgerline-vendor-export-unit-change": {
+        "input_sha256": "bda455f0fec49950d4686b9402c01eff0e6601d937e917caa6874cdcfb36e139",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-quillmark-quillmark-pdf-box-defaults": {
+        "input_sha256": "6fd8657c8c423c1665399e076cc98a864cd2f714ff92e1fc0a12b928c065cf38",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-quillmark-quillmark-theme-search-path": {
+        "input_sha256": "24271dacec79a9a8dfcda329eea5c3dbf11ffdbe6ed61d502535ef3946a02bf6",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-quillmark-registry-structure": {
+        "input_sha256": "e415ec7561a575c71f361195e6f6b78e76980890287d33376b3acc572b1b7ded",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-quillmark-test-failure-reporting-conven": {
+        "input_sha256": "bdbe7d03266f53ebee964c9ba8a464acba46cbf8c4648a0a857e36683f2b84cb",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-home-dev-quillmark-testing-and-golden-file-conve": {
+        "input_sha256": "ce14997e26e91014d46f02bb41d19e12fa2d61bc1fe7673b71433f7e7c9f47bf",
+        "label_sha256": "f607cbe9f7656be6145b808819559920d6cfcc3dc5643d935d82a85d19ea4bf2"
+      },
+      "good-juniper-translation-glossary": {
+        "input_sha256": "3138ac0273311cf308cb98e89d4e525e220972e414b0863fadd31ad0f95bffe2",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-kestrel-drone-battery-care": {
+        "input_sha256": "c63dd0c34c4b6108fc8d3058ee7666d0d47e70bacbd50c6f98644f706ee42dc2",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-lindenhall-parking-rules": {
+        "input_sha256": "65eec3081ea6a71f3dbec70fd9b824f5e3fb091c6a784b0bd34d6d50373da4f4",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-litellm-key-rpm-shared-across-models": {
+        "input_sha256": "136f5dfebb3b6278505c6d721ba28ade641a61a2a0c594b06688fb6fd521d1ea",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-moorfield-onboarding-quiz": {
+        "input_sha256": "53980fa7e71e90f88e204d0aae6f7691095e618d0a6e63f8f94413b72c49fe45",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-newsletter-merge-field-header-mismatch": {
+        "input_sha256": "a6a5c6fe70930f7abd3aaecfcdd6716aa617f9c49a2b0dc54eed10ef06eaae1f",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-northgate-invoice-archive": {
+        "input_sha256": "e3f1fe0304e9393e9bbe4592b41d87554ac7e4a83cb8821bcf0dc563aabc6c9d",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-oldcastle-ferry-timetable": {
+        "input_sha256": "8a720443ef82d39361a20d7c55fc6c6792a264677949e1181549a04ec14e6a17",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-playwright-networkidle-chat-widget": {
+        "input_sha256": "6c76e9d1963aea2e11681876d5e02d1ad79ab7bc439fbb24a0b0625914dd4a7c",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-quarry-hill-sampling-plan": {
+        "input_sha256": "e3a8927046033b08d758e495ce490491508fa1b0f12b0ccb58abf349a7ce61ff",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-ravenscar-podcast-gear": {
+        "input_sha256": "075ec62658403a168c60e01f7c2991c744f3f2188fc36f5b94b0e296894626fa",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-release-tag-follow-tags-lightweight": {
+        "input_sha256": "63e7f2b286b728931e47fbf7bf171c8746cab2950dff1e926ed368f873ce6365",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-renewed-cert-not-served-until-reload": {
+        "input_sha256": "d16a374b28b4c70cade106aa7c5489d6fea28b313acde4e67c0495e464345a6f",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-search-pod-liveness-restart-loop": {
+        "input_sha256": "33a1c9145e40af1c06e1a9017d9bfd8bab6d7b83aeee8e762993c5033c709ae9",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-sheets-append-raw-dates-as-text": {
+        "input_sha256": "8c693190c51806e1ff8371baeb5dc9a7daf5dd626ab859bb7c1cd169ee8ed29d",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "good-stanmore-library-loans": {
+        "input_sha256": "e00746b91616febf9b6e63718fffdabc28be49a83fd88a760e509c8441487479",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-thornley-fire-drill": {
+        "input_sha256": "c232aed118a71a1be8cb8bfbf3ac3da5fcf19d93f637e7d29682fbc52db4f6a8",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-ulverston-wiki-style": {
+        "input_sha256": "e59c15f782a14f3ba5a81d7adaf8cee2152584081c170b92fd42785efa8ae31b",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-wetherby-courier-contract": {
+        "input_sha256": "dfc2362aed87103ffc46727eb44334f31f95c11cdd18105e33504299e23f2c84",
+        "label_sha256": "c8dea85146be2759a4218d4a7606fd4732139dc9931e3e4de74912f970f636df"
+      },
+      "good-windows-agent-crlf-shell-scripts": {
+        "input_sha256": "82eb8eec6a000cdfece6c2e7130c6ffafa12d3e9d40ac8e3d550f129839b4337",
+        "label_sha256": "e2af73efda33fa374a7a14ddf89b3c05da31a067650ef51f766064d761de1992"
+      },
+      "ephemeral-apprise-matrix-room-hash-encoding": {
+        "input_sha256": "77c1bedbefea3400d3c344a03017b1ac665a83af7958ba34abd320326776cd1a",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-ci-template-migration-progress": {
+        "input_sha256": "50b224d2d810e84c6dead3b17003d245b026f70d2c15e7ed292d80d6c44e6801",
+        "label_sha256": "88041221d0d3091a72a5f844147453ae6f2f1ef5ae6ecb978906ad4e57b9eff6"
+      },
+      "ephemeral-ci-updated-snapshots-and-passed": {
+        "input_sha256": "16e9bd438ca83116e10eb13bae6be3e3c17baaa65a7006bd030b1c1db8e8389c",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-cover-pdf-rgb-black-rejected": {
+        "input_sha256": "b994510b54fce0598cac018b27ded535db086318da2b4d901a8b9f81f1489b62",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-cron-backup-restic-not-found": {
+        "input_sha256": "22ee2d53e14db5fc902e78993a61ee1c6ec66c841eac6f539f9334156d6bb61f",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-delegated-json-wrapped-in-fences": {
+        "input_sha256": "d08b26efb18c7d6d6cafd8cfd8f8dc8cdd1250d74db530885766f8d18847b00d",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-exporter-removal-string-dispatch": {
+        "input_sha256": "977bd59b273a556a27f4e3368af629df8fd228a2db37d12f8ca524782c87ced4",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-gh-issue-list-default-limit": {
+        "input_sha256": "13135fe147e8325b2f78611d198fb5db7a33f9db5b9900773f7e4c87dfd24017",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-gws-service-account-shared-drive-member": {
+        "input_sha256": "b8089533050251ea1d248ac1cdf984a93eef37e0b88f73193cc0dc21619317b9",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-harrow-coffee-rota": {
+        "input_sha256": "338a1f04782ab7049223a955dbf8b09d792b4b77962b807566b5bc6d83c749f5",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-harborlight-cli-color-handling": {
+        "input_sha256": "d685bac40f882442a66f08ac8a86f7049b5cf65f06c077b6c3d4329e1fe80494",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-harborlight-commit-convention": {
+        "input_sha256": "4f10bbf95c59142d8d40f8d242bded2e7595002c55129b0f48b88829a5baf961",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-harborlight-docs-style-guide": {
+        "input_sha256": "c13e38c427ee04dffa9a841ec2839ed5234f39095ea39b980f1dae8cc76693aa",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-harborlight-pr-review-convention": {
+        "input_sha256": "21357ced5b7b8a0024929ef4e24fd24960c39d4e09f7fad571ae2d4256912a68",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-harborlight-retry-after-unit": {
+        "input_sha256": "11d5f371f9512f765380d77e33c95fac54c4051bc689f721c759aef689c18d33",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-ledgerline-crm-region-field": {
+        "input_sha256": "5b2d4140107599d4706195728a437bb9d125b09bf3a27189392fca69f85a4cd4",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-ledgerline-disk-full-du-df-discrepancy": {
+        "input_sha256": "8c96a0ce3cf726a0622a830f3f4b6784310a73c390c26e11d022d1edf085e0f3",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-ledgerline-ledgerline-export-memory-lim": {
+        "input_sha256": "72480da59728a470bc2b8a2047b685e968f2d5ff7c2de81c32ce667168dfb11a",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-ledgerline-reporting-timezone-europe-be": {
+        "input_sha256": "1380b3cc2bc471c84d5f6c5e617225639fb7ea2df9628f2419d491fa64773b7e",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-ledgerline-terraform-workflow": {
+        "input_sha256": "beb86bfd5943bc7f090754206200b98b6350964abc00c8781fabf75073028af1",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-ledgerline-vendor-export-unit-change": {
+        "input_sha256": "591a50c9a0c4f61fd8ebc00ea96d2297989c1fd1b53d9d656c45ed50c8b263e7",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-quillmark-quillmark-pdf-box-defaults": {
+        "input_sha256": "a246bf9bc67c15d8cbd0dfffe1e8ffeacef53e5dbd0928c9e5188ddbd4b9ca58",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-quillmark-quillmark-theme-search-path": {
+        "input_sha256": "473286819ebab8501f9b91176532ca8220f53d0d8f3f6cf81849f5ffa6c6902a",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-quillmark-registry-structure": {
+        "input_sha256": "54bd65143744f6ed3873434755166011cc937719887fbfefe41eefc9d9af4aed",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-quillmark-test-failure-reporting-conven": {
+        "input_sha256": "fce484de74731ea2d441e091c7fc551e9467c5f3ffbd2fb759a6f605e402e02f",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-home-dev-quillmark-testing-and-golden-file-conve": {
+        "input_sha256": "930b017445ebdef4b37901648864aa35be7508e19e9362e6c56c04825c81b58b",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-juniper-translation-glossary": {
+        "input_sha256": "c7cc3c457f9bc7173dcd2ca6927916b6b67ea0a8538e4ecad2526a8ce486ba0d",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-kestrel-drone-battery-care": {
+        "input_sha256": "282d75a148f0b653fdf46d64e1a61382a9f870f82f5b0549b49638e57a156f8b",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-lindenhall-parking-rules": {
+        "input_sha256": "c69bc0f4a03f4ef26de8a4c9aec7b421fe85a9205451a69f7252f8ee105b3a7d",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-litellm-key-rpm-shared-across-models": {
+        "input_sha256": "fadf71ff92531edb24f0f2f43a20ae3d4862f9086657a83ef5b9b71637de5fa0",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-moorfield-onboarding-quiz": {
+        "input_sha256": "9e78e7adbfde2d36718401a73ecc98f2d8e3bba0a5e970a53be4b3cd78aa4c90",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-newsletter-merge-field-header-mismatch": {
+        "input_sha256": "495b4c41b06f582dcfd690c85c7e58e36d94a98b95f3a5648dab283abd672927",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-nightly-e2e-run-2026-09-18": {
+        "input_sha256": "d001780017994f74eb6e97112b563be74808579cf46aa507c9aad7119a2cebef",
+        "label_sha256": "88041221d0d3091a72a5f844147453ae6f2f1ef5ae6ecb978906ad4e57b9eff6"
+      },
+      "ephemeral-node-18-support-decision-pending": {
+        "input_sha256": "96c7022ce7f4d861d40bc8d1ccec500ce465235a1997b427c3e5a4b29f4faa6e",
+        "label_sha256": "88041221d0d3091a72a5f844147453ae6f2f1ef5ae6ecb978906ad4e57b9eff6"
+      },
+      "ephemeral-northgate-invoice-archive": {
+        "input_sha256": "d511adb88064c60f6ef1acbf4e1800e0e3b9a53667cba58e0c824c40f67232e1",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-oldcastle-ferry-timetable": {
+        "input_sha256": "80deaf30dc9fa70d640a7288fedc1f955c97b004d771e9fa3a172e1302fb7b18",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-playwright-networkidle-chat-widget": {
+        "input_sha256": "3e58c729ef855e70a334948b993c150ff313cd6d1fd5bd1733e0f1868914108f",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-quarry-hill-sampling-plan": {
+        "input_sha256": "5e6816a31fa4b4123025a8c487ad1251561dc6390f6fcdbe02692070f936bf64",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-ravenscar-podcast-gear": {
+        "input_sha256": "da784127dab891f99b6c68b43da86ca15529a33c708cf63177c11adc5b64af1b",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-release-tag-follow-tags-lightweight": {
+        "input_sha256": "1ea252633643af35be5c438cc09a223afb68d0027abeda6943b438456221c6d7",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-renewed-cert-not-served-until-reload": {
+        "input_sha256": "98f359f0fff212a1c302f055e3096ce2a9a2f49201f135038fb5c2ac1ac7e396",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-search-pod-liveness-restart-loop": {
+        "input_sha256": "3a9a50b3371bc18cbebb9a9ab1bce674eed3b4feda218f888d03162743952ee5",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-sheets-append-raw-dates-as-text": {
+        "input_sha256": "6a2eaa820b92c17d0808be450c513f790204378924bcc4ba998be0ec68581f68",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-sprint-41-retro-notes": {
+        "input_sha256": "369dfb7855d2f735404c0128d332297363ad5c020758d0bed457239929af375c",
+        "label_sha256": "88041221d0d3091a72a5f844147453ae6f2f1ef5ae6ecb978906ad4e57b9eff6"
+      },
+      "ephemeral-stanmore-library-loans": {
+        "input_sha256": "162c25cf0bcaf14e8d477d863014b8e3c0384c901fa900783437cbc8d6af2a36",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-thornley-fire-drill": {
+        "input_sha256": "a1da67b4daff22707facafedec7190998bf957a952480b119e80319d76316cb6",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-ulverston-wiki-style": {
+        "input_sha256": "a154c982ad1f664fb6a0d7b6e747fc1b13f6b340404f6ac868f6a72a07faeb49",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-wetherby-courier-contract": {
+        "input_sha256": "5e63c705fd32eeb0e0bedfa2c4dadb7f9899471ddfb42fec86026d6a29f446b8",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "ephemeral-windows-agent-crlf-shell-scripts": {
+        "input_sha256": "cc0bf1079aea9c07e103428af2f798319434bf573053af49f9cc30e08e984fcd",
+        "label_sha256": "1b36080e9ebb5dc7b81d4ffdf1c12e97dce2d3fc468ef40a81d2e953b2fdb691"
+      },
+      "duplicate-apprise-matrix-room-hash-encoding": {
+        "input_sha256": "1b7f3f5e6d397cf136b6166e13186015b2312d30f5cff19ff5abb4032516680a",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-ci-updated-snapshots-and-passed": {
+        "input_sha256": "2d548ba3bd248cc5dcb0cbece7902c08a451afce4b95131ec2fe78f51e72597f",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-cover-pdf-rgb-black-rejected": {
+        "input_sha256": "67645f97d6a748b10a5f0d40f8fb7467549192d4d1bf5be80c111e7292d13980",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-cron-backup-restic-not-found": {
+        "input_sha256": "d61675ebc537cdf5615fc74e3b487e08f6002b854f3f17f28272f00c7b089cc6",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-delegated-json-wrapped-in-fences": {
+        "input_sha256": "0b4db594a5f89a5fb086319b16edb196765af60445e1fad2417a0e7db1d4feeb",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-exporter-removal-string-dispatch": {
+        "input_sha256": "1f7cc945ff761ca882c9517e7e3a0827df1b225f8c0bfa3ca4d20758fc96d18f",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-gh-issue-list-default-limit": {
+        "input_sha256": "8b4450417911a84ab8bd1b3116a80cfe8756057cda0727d0dd03753df236219e",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-gws-service-account-shared-drive-member": {
+        "input_sha256": "178cd7615cd7fa3e12f04c6afa26b34c9456462f8a7524884e915b5673dd2601",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-harrow-coffee-rota": {
+        "input_sha256": "2587c0c0f78d4d97916c46b10ce22bd1288b7e8173050578dc8e0c1a5c8faf1f",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-harborlight-cli-color-handling": {
+        "input_sha256": "a7a05a0ac9dd774def9234ca4e8337d70fe1400a0fd2f296122ab71256825f55",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-harborlight-commit-convention": {
+        "input_sha256": "470fd24866942d0fd833a5b324d7fac4e966f5e9251f3fff40d21a10f2d52df0",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-harborlight-docs-style-guide": {
+        "input_sha256": "9e3f103f952b26b40464b78826f52b0050f15827fb269d582b3a0cba834b9d85",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-harborlight-pr-review-convention": {
+        "input_sha256": "825cb6042d2b59849119335b9ddeaffbe222ad8e59afd12c1fd67abf9901402a",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-harborlight-retry-after-unit": {
+        "input_sha256": "bca965b30b35a47da0ce50b195fc8a1f98a634ad93839fe3b559aac510f2b3fd",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-ledgerline-crm-region-field": {
+        "input_sha256": "b1fbc008f4d99d39d772e45e55b9e99c602da8270096028ed72716a6b9a8e8ea",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-ledgerline-disk-full-du-df-discrepancy": {
+        "input_sha256": "e616665b6e0bc8b68aa5f492a3b250d71ff8c0fc6700db9b33be034207e56614",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-ledgerline-ledgerline-export-memory-lim": {
+        "input_sha256": "9f01b0ad0bb0034773870da904b4c638c620b9313cb8350939f1e8c8cea548bf",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-ledgerline-reporting-timezone-europe-be": {
+        "input_sha256": "171b437dd0d8fed5c02fabeea9fb298a6f1b724c927961f4f67f0e685f7661e3",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-ledgerline-terraform-workflow": {
+        "input_sha256": "ccbd7226d4995a207e04c9ecdc182c0994188ca3eb789781fab37b6cf9079028",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-ledgerline-vendor-export-unit-change": {
+        "input_sha256": "58c11cc08147ea360fa177ff03ffd962714d67d7ed55d2f49ac4355df2e1dc89",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-quillmark-quillmark-pdf-box-defaults": {
+        "input_sha256": "a666a80c451343d8f80f407ebeb5771ac30c6e3be60ee741223b8894f7c51e92",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-quillmark-quillmark-theme-search-path": {
+        "input_sha256": "1441e3a4cb0bb8bc7cc524b538f236f29e4fbe21dcd0c5905f619b2f4fe1f0c3",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-quillmark-registry-structure": {
+        "input_sha256": "ee448617be41fafe4b0fb344367bd74ae72ac1e0f87e8a7c41da241564f4ef37",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-quillmark-test-failure-reporting-conven": {
+        "input_sha256": "dccf186ed6b13b02ad1ae3a367cf492ee7e622c3e06ca17775ed037a47422d8b",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-home-dev-quillmark-testing-and-golden-file-conve": {
+        "input_sha256": "5b17b35a30e4f5a0ab61133c259fc259ebebf1043532855af9241606409b721b",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-juniper-translation-glossary": {
+        "input_sha256": "4ae4d4b617f1f58fca7bb32ebb3792b5c628c180085d96a8b9a7c1ccc835c67e",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-kestrel-drone-battery-care": {
+        "input_sha256": "60a157d044deb9a848a5d63268e18e29bd78d7f6bfa986bafe1dc197c2456832",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-lindenhall-parking-rules": {
+        "input_sha256": "da46399c8cd5e30b3bb2566d65c3db7671463c925136a85cd094834e06c31f70",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-litellm-key-rpm-shared-across-models": {
+        "input_sha256": "040c29eb116f1cdfa738e2ecf844f3cdac5a337509f09c9504dc1d75ce781d89",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-moorfield-onboarding-quiz": {
+        "input_sha256": "711f9bdc128a3b095244c37038353e82f013898fc494972521aa249620637ca2",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-newsletter-merge-field-header-mismatch": {
+        "input_sha256": "d99b8f62c01fa2fba92f975bda4f3ceba277dcce9a2f9d75e34ce1874d698367",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-northgate-invoice-archive": {
+        "input_sha256": "e5caa327d493de1daa1f696c6979dc5f5fe5542a0b7f6c2c208b0424ca8d71fe",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-oldcastle-ferry-timetable": {
+        "input_sha256": "6969a6dcd0fc3cf60921bcc74e77b4d77d0cbbfe8c497d493a16157e2cf0f3eb",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-playwright-networkidle-chat-widget": {
+        "input_sha256": "b2598b2d3c4fff5e05bca9d22d2ec4556f38b9a4666152e00f4b146115727d84",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-quarry-hill-sampling-plan": {
+        "input_sha256": "5067889832accace78f2a2b1b5e37ec3e2394099c7821c71335fbee6baed2b6a",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-ravenscar-podcast-gear": {
+        "input_sha256": "469763418ecee0b8b2b74af4eb701607933b6af3b69f2dce55f61331737d775d",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-release-tag-follow-tags-lightweight": {
+        "input_sha256": "ae2a6868e71676c47886f69ac4af0b2f599eb58cabe7155f71394f2db1592824",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-renewed-cert-not-served-until-reload": {
+        "input_sha256": "e4af93525949a7ff6843c0a3f095720b81380076e6d0f93e57badd744aeee38d",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-search-pod-liveness-restart-loop": {
+        "input_sha256": "d3cb7a955248e373aa30387f82c2320dbb2d0af3ef4cb4da85e0b3739051854b",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-sheets-append-raw-dates-as-text": {
+        "input_sha256": "0e4d52657e193364852a6997ab239046e3375361dd4ec8c66be8d82fddad0d22",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-stanmore-library-loans": {
+        "input_sha256": "1e4faf2c00f4fd407e1923b2ace68c969178f37c57e701ddb6fa5fe6c5b45fc2",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-thornley-fire-drill": {
+        "input_sha256": "cb766a6e3f9c99f35b52531dec3cfe1f03e08eec4d96bef5f9964a1fa7d5d27a",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-ulverston-wiki-style": {
+        "input_sha256": "7f93196a8cbd6a45295f3b23b27067be5fbef6b7d43e13f4e43b74cbaea59914",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-wetherby-courier-contract": {
+        "input_sha256": "2242aa27951357e4dd307204c2da15e2c4c9b65752e585f4b7a95780466bc804",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "duplicate-windows-agent-crlf-shell-scripts": {
+        "input_sha256": "a7f9e1b7830a5d3f87904aacaab4474e64905675ca535d3095a665124856fcaf",
+        "label_sha256": "e491adb5e979e7960fabbbc05a6a69916866c9b5a533df9f5aa8ffe631d7747a"
+      },
+      "stale-apprise-matrix-room-hash-encoding": {
+        "input_sha256": "12ad15b9c2bd9ca3d27bf7a773d0dd0b3a3cdafb9916d97a810b024a8f202c45",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-ci-updated-snapshots-and-passed": {
+        "input_sha256": "c4cb1b8e8d549b9c411e225e4630711152928d1112e26c33374b91a1c5fd07b0",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-cover-pdf-rgb-black-rejected": {
+        "input_sha256": "4865f8e1d95ede3826b8ee0d7cc35eb3712b15b704f166d05f507b07748ecc22",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-cron-backup-restic-not-found": {
+        "input_sha256": "368e1874739e063c917b73f382c127e5f1a49da718d4a5de8a6d08c63dbd7d90",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-delegated-json-wrapped-in-fences": {
+        "input_sha256": "ae7833f41f8dd0f9a1d795b4194494a5a31ce56c3491bf6a4912d012d696424b",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-exporter-removal-string-dispatch": {
+        "input_sha256": "099e1c944e44a4dc7909f74f0d93535a6ae8d7ccd728974a9a9d76105521a2b8",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-gh-issue-list-default-limit": {
+        "input_sha256": "da654c02283ac9fca5dc30959614900730e2353919479cd81fbb8bd6cf2a0f8e",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-gws-service-account-shared-drive-member": {
+        "input_sha256": "24464e1da1f50b92e05d69f1316bb5f110d027a5dfd958b084b1f02fdd623d73",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-harrow-coffee-rota": {
+        "input_sha256": "f82e35f02de5b98832426dd823a0ea9e3d18cfa598d34e3ff08b7c2cb181097c",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-harborlight-cli-color-handling": {
+        "input_sha256": "2083c403031a0211ea1c8e5f9b825a78bc5a152d89ea1bcef087669a467b8c08",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-harborlight-commit-convention": {
+        "input_sha256": "f26f0ae08ccf782e28f76ba18e54f2f8c68c75fa956b52a232b842bcdb16b23b",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-harborlight-docs-style-guide": {
+        "input_sha256": "e777c69cfbf0fe422d0ff1a1d0ae008d90334ffcadecfe962c04af0dab2813c8",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-harborlight-pr-review-convention": {
+        "input_sha256": "47ef95e71dcbde946f86bd8deea9f4ebe74bf0f04762d0b2ffe140e95b0c340b",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-harborlight-retry-after-unit": {
+        "input_sha256": "69f0a52be195dc3d301cd993c46038caa6fc9412d8a13be58cc5bfbca3c9a944",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-ledgerline-crm-region-field": {
+        "input_sha256": "ae72768430f7f804ff59028c941a1bb667259da90e0d68c68c67ba86afc88987",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-ledgerline-disk-full-du-df-discrepancy": {
+        "input_sha256": "a0ff1148f19f38823412624b6c65fdeb5ba5f50b2ead48376d3477bd0bc6b3a3",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-ledgerline-ledgerline-export-memory-lim": {
+        "input_sha256": "408ae2415f0ff958a33ff67ac49b5c7c15ccba5017ae71a110bd2096f8899e55",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-ledgerline-reporting-timezone-europe-be": {
+        "input_sha256": "01cc46898cf4f371b8f073f2c74c5aa6cb3479f55a8886c1b1be90762e6423a5",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-ledgerline-terraform-workflow": {
+        "input_sha256": "053a2153c4bbe639e2698de9daad024be21529982db8f5152f291877bd3dfeee",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-ledgerline-vendor-export-unit-change": {
+        "input_sha256": "c6e2fbafda320663a74cc7f1a97bacb4deff22b304972b59e196df21b6b32829",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-quillmark-quillmark-pdf-box-defaults": {
+        "input_sha256": "d0c319fc8a177d951c9517a751bf16beaadbe49387030c6f5071e37453c41bb5",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-quillmark-quillmark-theme-search-path": {
+        "input_sha256": "bf39863e45f931e6241b8f0809337e90396b78a49d2749cc93711928c7bf397b",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-quillmark-registry-structure": {
+        "input_sha256": "b329b433f52181711a0551e575f9b523f7a87e017dc6c80bdb27a56dbd00e9a8",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-quillmark-test-failure-reporting-conven": {
+        "input_sha256": "80bcdb1427bcc2549a0264dd05c7021ec467d437639f28717a0ab5658b002626",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-home-dev-quillmark-testing-and-golden-file-conve": {
+        "input_sha256": "1895797fafc86a0a656376a17bf30b8500c4b4f82f1b03481c71a6e47f7d4ca3",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-juniper-translation-glossary": {
+        "input_sha256": "a51838406acf8248f6916228da57b1a86bdcf02d9ddfc135d9da93c3ea840e4e",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-kestrel-drone-battery-care": {
+        "input_sha256": "23a04c18b4e9347a819ba08ede38c27e0591604c15cca61748255cf26c1e90e7",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-lindenhall-parking-rules": {
+        "input_sha256": "31d6f0e37a569e359d0d31e340870f18f925b31a8532499acbb3537f46db2186",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-litellm-key-rpm-shared-across-models": {
+        "input_sha256": "17dc7ae4399915cc93416f3cc13bfd063942c1d4c8c892f454a9243d9d51ac22",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-moorfield-onboarding-quiz": {
+        "input_sha256": "4862ecfcea7597ed1d1ce65c712f4c29c81dc6ee17ba0caaee8693bbc30d10ab",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-newsletter-merge-field-header-mismatch": {
+        "input_sha256": "69e9c723b162de71de47d98d3634520bae7c4d9d83f7c74a5c7a96ef6a47470c",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-northgate-invoice-archive": {
+        "input_sha256": "0dd4b376c9033c31ca078ec84cd1a4a1c66acbebe15ea4417eab5da07934ee53",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-oldcastle-ferry-timetable": {
+        "input_sha256": "61709e0632ae1319716dc026033ded096472b0a7fae208938cf557797e28d778",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-playwright-networkidle-chat-widget": {
+        "input_sha256": "37e673c6bd9f0731ef313aa734fa6f701f46dde04b3efc4fdc5c6e079783fc74",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-quarry-hill-sampling-plan": {
+        "input_sha256": "bcd5c07df0a63408678db90d348cb959705a520ba2a7c04b2bfd657e1cb9e98c",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-ravenscar-podcast-gear": {
+        "input_sha256": "552c958dd97fa41e4a9112d8be3f88552b1d2797e7f929c029e70c209e272930",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-release-tag-follow-tags-lightweight": {
+        "input_sha256": "47b797f2129c5f1ede9913375ec628250bfc5424d74f5dce96d3a1a7b636a823",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-renewed-cert-not-served-until-reload": {
+        "input_sha256": "f6b849661eeb68b21651e910e07b03bf9dba87b82a40b03a820ac435f8c88628",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-search-pod-liveness-restart-loop": {
+        "input_sha256": "b5ed4fed4db7c751704130d6c938bedf7037f1ebaebec5e792191ed6edf8f841",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-sheets-append-raw-dates-as-text": {
+        "input_sha256": "a0ad1a476240aac84c38ac5ecda9c1e44cc363dfea55fc1611f8bcdbfb962eea",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-stanmore-library-loans": {
+        "input_sha256": "db67df9cfb41a13ded74b3d1f4ce99150173d7f792e1938d796d6aee74231a5d",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-thornley-fire-drill": {
+        "input_sha256": "51de33ce438410197f88c4d55500dcc4c6a7fd76b61beeba40c5f1d78bbbfafa",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-ulverston-wiki-style": {
+        "input_sha256": "98f8c82e5be96d71fce99792bfe7a65b3baa3b3c8a37bde6d16496f52214085f",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-wetherby-courier-contract": {
+        "input_sha256": "e95d235cc545dacb79d2cc8740320b85d2474dd8417bb600f6c547d419780416",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      },
+      "stale-windows-agent-crlf-shell-scripts": {
+        "input_sha256": "c6a0139162891fd21ad6516ada1abe872015e30428d6943562ac11142939cf09",
+        "label_sha256": "4cc452e592216c2b4ebd4eb5e46cf156501b5a8f752aa9550f5d890614a82f1a"
+      }
+    },
+    "akm": {
+      "version": "0.10.261105",
+      "bin": "bun ~/.cache/agent-judge-baseline/akm/src/cli.ts",
+      "build": "v0.9.0-beta.60-3182-gcc4872fe8",
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "off",
+        "registries": [],
+        "engines": {
+          "judge": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "judge"
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 900000,
+      "seed": null
+    },
+    "engines": {
+      "judge": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "good-apprise-matrix-room-hash-encoding",
+        "good-ci-updated-snapshots-and-passed",
+        "good-cover-pdf-rgb-black-rejected",
+        "good-cron-backup-restic-not-found",
+        "good-delegated-json-wrapped-in-fences",
+        "good-exporter-removal-string-dispatch",
+        "good-gh-issue-list-default-limit",
+        "good-gws-service-account-shared-drive-member",
+        "good-harrow-coffee-rota",
+        "good-home-dev-harborlight-cli-color-handling",
+        "good-home-dev-harborlight-commit-convention",
+        "good-home-dev-harborlight-docs-style-guide",
+        "good-home-dev-harborlight-pr-review-convention",
+        "good-home-dev-harborlight-retry-after-unit",
+        "good-home-dev-ledgerline-crm-region-field",
+        "good-home-dev-ledgerline-disk-full-du-df-discrepancy",
+        "good-home-dev-ledgerline-ledgerline-export-memory-lim",
+        "good-home-dev-ledgerline-reporting-timezone-europe-be",
+        "good-home-dev-ledgerline-terraform-workflow",
+        "good-home-dev-ledgerline-vendor-export-unit-change",
+        "good-home-dev-quillmark-quillmark-pdf-box-defaults",
+        "good-home-dev-quillmark-quillmark-theme-search-path",
+        "good-home-dev-quillmark-registry-structure",
+        "good-home-dev-quillmark-test-failure-reporting-conven",
+        "good-home-dev-quillmark-testing-and-golden-file-conve",
+        "good-juniper-translation-glossary",
+        "good-kestrel-drone-battery-care",
+        "good-lindenhall-parking-rules",
+        "good-litellm-key-rpm-shared-across-models",
+        "good-moorfield-onboarding-quiz",
+        "good-newsletter-merge-field-header-mismatch",
+        "good-northgate-invoice-archive",
+        "good-oldcastle-ferry-timetable",
+        "good-playwright-networkidle-chat-widget",
+        "good-quarry-hill-sampling-plan",
+        "good-ravenscar-podcast-gear",
+        "good-release-tag-follow-tags-lightweight",
+        "good-renewed-cert-not-served-until-reload",
+        "good-search-pod-liveness-restart-loop",
+        "good-sheets-append-raw-dates-as-text",
+        "good-stanmore-library-loans",
+        "good-thornley-fire-drill",
+        "good-ulverston-wiki-style",
+        "good-wetherby-courier-contract",
+        "good-windows-agent-crlf-shell-scripts",
+        "ephemeral-apprise-matrix-room-hash-encoding",
+        "ephemeral-ci-template-migration-progress",
+        "ephemeral-ci-updated-snapshots-and-passed",
+        "ephemeral-cover-pdf-rgb-black-rejected",
+        "ephemeral-cron-backup-restic-not-found",
+        "ephemeral-delegated-json-wrapped-in-fences",
+        "ephemeral-exporter-removal-string-dispatch",
+        "ephemeral-gh-issue-list-default-limit",
+        "ephemeral-gws-service-account-shared-drive-member",
+        "ephemeral-harrow-coffee-rota",
+        "ephemeral-home-dev-harborlight-cli-color-handling",
+        "ephemeral-home-dev-harborlight-commit-convention",
+        "ephemeral-home-dev-harborlight-docs-style-guide",
+        "ephemeral-home-dev-harborlight-pr-review-convention",
+        "ephemeral-home-dev-harborlight-retry-after-unit",
+        "ephemeral-home-dev-ledgerline-crm-region-field",
+        "ephemeral-home-dev-ledgerline-disk-full-du-df-discrepancy",
+        "ephemeral-home-dev-ledgerline-ledgerline-export-memory-lim",
+        "ephemeral-home-dev-ledgerline-reporting-timezone-europe-be",
+        "ephemeral-home-dev-ledgerline-terraform-workflow",
+        "ephemeral-home-dev-ledgerline-vendor-export-unit-change",
+        "ephemeral-home-dev-quillmark-quillmark-pdf-box-defaults",
+        "ephemeral-home-dev-quillmark-quillmark-theme-search-path",
+        "ephemeral-home-dev-quillmark-registry-structure",
+        "ephemeral-home-dev-quillmark-test-failure-reporting-conven",
+        "ephemeral-home-dev-quillmark-testing-and-golden-file-conve",
+        "ephemeral-juniper-translation-glossary",
+        "ephemeral-kestrel-drone-battery-care",
+        "ephemeral-lindenhall-parking-rules",
+        "ephemeral-litellm-key-rpm-shared-across-models",
+        "ephemeral-moorfield-onboarding-quiz",
+        "ephemeral-newsletter-merge-field-header-mismatch",
+        "ephemeral-nightly-e2e-run-2026-09-18",
+        "ephemeral-node-18-support-decision-pending",
+        "ephemeral-northgate-invoice-archive",
+        "ephemeral-oldcastle-ferry-timetable",
+        "ephemeral-playwright-networkidle-chat-widget",
+        "ephemeral-quarry-hill-sampling-plan",
+        "ephemeral-ravenscar-podcast-gear",
+        "ephemeral-release-tag-follow-tags-lightweight",
+        "ephemeral-renewed-cert-not-served-until-reload",
+        "ephemeral-search-pod-liveness-restart-loop",
+        "ephemeral-sheets-append-raw-dates-as-text",
+        "ephemeral-sprint-41-retro-notes",
+        "ephemeral-stanmore-library-loans",
+        "ephemeral-thornley-fire-drill",
+        "ephemeral-ulverston-wiki-style",
+        "ephemeral-wetherby-courier-contract",
+        "ephemeral-windows-agent-crlf-shell-scripts",
+        "duplicate-apprise-matrix-room-hash-encoding",
+        "duplicate-ci-updated-snapshots-and-passed",
+        "duplicate-cover-pdf-rgb-black-rejected",
+        "duplicate-cron-backup-restic-not-found",
+        "duplicate-delegated-json-wrapped-in-fences",
+        "duplicate-exporter-removal-string-dispatch",
+        "duplicate-gh-issue-list-default-limit",
+        "duplicate-gws-service-account-shared-drive-member",
+        "duplicate-harrow-coffee-rota",
+        "duplicate-home-dev-harborlight-cli-color-handling",
+        "duplicate-home-dev-harborlight-commit-convention",
+        "duplicate-home-dev-harborlight-docs-style-guide",
+        "duplicate-home-dev-harborlight-pr-review-convention",
+        "duplicate-home-dev-harborlight-retry-after-unit",
+        "duplicate-home-dev-ledgerline-crm-region-field",
+        "duplicate-home-dev-ledgerline-disk-full-du-df-discrepancy",
+        "duplicate-home-dev-ledgerline-ledgerline-export-memory-lim",
+        "duplicate-home-dev-ledgerline-reporting-timezone-europe-be",
+        "duplicate-home-dev-ledgerline-terraform-workflow",
+        "duplicate-home-dev-ledgerline-vendor-export-unit-change",
+        "duplicate-home-dev-quillmark-quillmark-pdf-box-defaults",
+        "duplicate-home-dev-quillmark-quillmark-theme-search-path",
+        "duplicate-home-dev-quillmark-registry-structure",
+        "duplicate-home-dev-quillmark-test-failure-reporting-conven",
+        "duplicate-home-dev-quillmark-testing-and-golden-file-conve",
+        "duplicate-juniper-translation-glossary",
+        "duplicate-kestrel-drone-battery-care",
+        "duplicate-lindenhall-parking-rules",
+        "duplicate-litellm-key-rpm-shared-across-models",
+        "duplicate-moorfield-onboarding-quiz",
+        "duplicate-newsletter-merge-field-header-mismatch",
+        "duplicate-northgate-invoice-archive",
+        "duplicate-oldcastle-ferry-timetable",
+        "duplicate-playwright-networkidle-chat-widget",
+        "duplicate-quarry-hill-sampling-plan",
+        "duplicate-ravenscar-podcast-gear",
+        "duplicate-release-tag-follow-tags-lightweight",
+        "duplicate-renewed-cert-not-served-until-reload",
+        "duplicate-search-pod-liveness-restart-loop",
+        "duplicate-sheets-append-raw-dates-as-text",
+        "duplicate-stanmore-library-loans",
+        "duplicate-thornley-fire-drill",
+        "duplicate-ulverston-wiki-style",
+        "duplicate-wetherby-courier-contract",
+        "duplicate-windows-agent-crlf-shell-scripts",
+        "stale-apprise-matrix-room-hash-encoding",
+        "stale-ci-updated-snapshots-and-passed",
+        "stale-cover-pdf-rgb-black-rejected",
+        "stale-cron-backup-restic-not-found",
+        "stale-delegated-json-wrapped-in-fences",
+        "stale-exporter-removal-string-dispatch",
+        "stale-gh-issue-list-default-limit",
+        "stale-gws-service-account-shared-drive-member",
+        "stale-harrow-coffee-rota",
+        "stale-home-dev-harborlight-cli-color-handling",
+        "stale-home-dev-harborlight-commit-convention",
+        "stale-home-dev-harborlight-docs-style-guide",
+        "stale-home-dev-harborlight-pr-review-convention",
+        "stale-home-dev-harborlight-retry-after-unit",
+        "stale-home-dev-ledgerline-crm-region-field",
+        "stale-home-dev-ledgerline-disk-full-du-df-discrepancy",
+        "stale-home-dev-ledgerline-ledgerline-export-memory-lim",
+        "stale-home-dev-ledgerline-reporting-timezone-europe-be",
+        "stale-home-dev-ledgerline-terraform-workflow",
+        "stale-home-dev-ledgerline-vendor-export-unit-change",
+        "stale-home-dev-quillmark-quillmark-pdf-box-defaults",
+        "stale-home-dev-quillmark-quillmark-theme-search-path",
+        "stale-home-dev-quillmark-registry-structure",
+        "stale-home-dev-quillmark-test-failure-reporting-conven",
+        "stale-home-dev-quillmark-testing-and-golden-file-conve",
+        "stale-juniper-translation-glossary",
+        "stale-kestrel-drone-battery-care",
+        "stale-lindenhall-parking-rules",
+        "stale-litellm-key-rpm-shared-across-models",
+        "stale-moorfield-onboarding-quiz",
+        "stale-newsletter-merge-field-header-mismatch",
+        "stale-northgate-invoice-archive",
+        "stale-oldcastle-ferry-timetable",
+        "stale-playwright-networkidle-chat-widget",
+        "stale-quarry-hill-sampling-plan",
+        "stale-ravenscar-podcast-gear",
+        "stale-release-tag-follow-tags-lightweight",
+        "stale-renewed-cert-not-served-until-reload",
+        "stale-search-pod-liveness-restart-loop",
+        "stale-sheets-append-raw-dates-as-text",
+        "stale-stanmore-library-loans",
+        "stale-thornley-fire-drill",
+        "stale-ulverston-wiki-style",
+        "stale-wetherby-courier-contract",
+        "stale-windows-agent-crlf-shell-scripts"
+      ],
+      "scored": [
+        "good-apprise-matrix-room-hash-encoding",
+        "good-ci-updated-snapshots-and-passed",
+        "good-cover-pdf-rgb-black-rejected",
+        "good-cron-backup-restic-not-found",
+        "good-delegated-json-wrapped-in-fences",
+        "good-exporter-removal-string-dispatch",
+        "good-gh-issue-list-default-limit",
+        "good-gws-service-account-shared-drive-member",
+        "good-harrow-coffee-rota",
+        "good-home-dev-harborlight-cli-color-handling",
+        "good-home-dev-harborlight-commit-convention",
+        "good-home-dev-harborlight-docs-style-guide",
+        "good-home-dev-harborlight-pr-review-convention",
+        "good-home-dev-harborlight-retry-after-unit",
+        "good-home-dev-ledgerline-crm-region-field",
+        "good-home-dev-ledgerline-disk-full-du-df-discrepancy",
+        "good-home-dev-ledgerline-ledgerline-export-memory-lim",
+        "good-home-dev-ledgerline-reporting-timezone-europe-be",
+        "good-home-dev-ledgerline-terraform-workflow",
+        "good-home-dev-ledgerline-vendor-export-unit-change",
+        "good-home-dev-quillmark-quillmark-pdf-box-defaults",
+        "good-home-dev-quillmark-quillmark-theme-search-path",
+        "good-home-dev-quillmark-registry-structure",
+        "good-home-dev-quillmark-test-failure-reporting-conven",
+        "good-home-dev-quillmark-testing-and-golden-file-conve",
+        "good-juniper-translation-glossary",
+        "good-kestrel-drone-battery-care",
+        "good-lindenhall-parking-rules",
+        "good-litellm-key-rpm-shared-across-models",
+        "good-moorfield-onboarding-quiz",
+        "good-newsletter-merge-field-header-mismatch",
+        "good-northgate-invoice-archive",
+        "good-oldcastle-ferry-timetable",
+        "good-playwright-networkidle-chat-widget",
+        "good-quarry-hill-sampling-plan",
+        "good-ravenscar-podcast-gear",
+        "good-release-tag-follow-tags-lightweight",
+        "good-renewed-cert-not-served-until-reload",
+        "good-search-pod-liveness-restart-loop",
+        "good-sheets-append-raw-dates-as-text",
+        "good-stanmore-library-loans",
+        "good-thornley-fire-drill",
+        "good-ulverston-wiki-style",
+        "good-wetherby-courier-contract",
+        "good-windows-agent-crlf-shell-scripts",
+        "ephemeral-apprise-matrix-room-hash-encoding",
+        "ephemeral-ci-template-migration-progress",
+        "ephemeral-ci-updated-snapshots-and-passed",
+        "ephemeral-cover-pdf-rgb-black-rejected",
+        "ephemeral-cron-backup-restic-not-found",
+        "ephemeral-delegated-json-wrapped-in-fences",
+        "ephemeral-exporter-removal-string-dispatch",
+        "ephemeral-gh-issue-list-default-limit",
+        "ephemeral-gws-service-account-shared-drive-member",
+        "ephemeral-harrow-coffee-rota",
+        "ephemeral-home-dev-harborlight-cli-color-handling",
+        "ephemeral-home-dev-harborlight-commit-convention",
+        "ephemeral-home-dev-harborlight-docs-style-guide",
+        "ephemeral-home-dev-harborlight-pr-review-convention",
+        "ephemeral-home-dev-harborlight-retry-after-unit",
+        "ephemeral-home-dev-ledgerline-crm-region-field",
+        "ephemeral-home-dev-ledgerline-disk-full-du-df-discrepancy",
+        "ephemeral-home-dev-ledgerline-ledgerline-export-memory-lim",
+        "ephemeral-home-dev-ledgerline-reporting-timezone-europe-be",
+        "ephemeral-home-dev-ledgerline-terraform-workflow",
+        "ephemeral-home-dev-ledgerline-vendor-export-unit-change",
+        "ephemeral-home-dev-quillmark-quillmark-pdf-box-defaults",
+        "ephemeral-home-dev-quillmark-quillmark-theme-search-path",
+        "ephemeral-home-dev-quillmark-registry-structure",
+        "ephemeral-home-dev-quillmark-test-failure-reporting-conven",
+        "ephemeral-home-dev-quillmark-testing-and-golden-file-conve",
+        "ephemeral-juniper-translation-glossary",
+        "ephemeral-kestrel-drone-battery-care",
+        "ephemeral-lindenhall-parking-rules",
+        "ephemeral-litellm-key-rpm-shared-across-models",
+        "ephemeral-moorfield-onboarding-quiz",
+        "ephemeral-newsletter-merge-field-header-mismatch",
+        "ephemeral-nightly-e2e-run-2026-09-18",
+        "ephemeral-node-18-support-decision-pending",
+        "ephemeral-northgate-invoice-archive",
+        "ephemeral-oldcastle-ferry-timetable",
+        "ephemeral-playwright-networkidle-chat-widget",
+        "ephemeral-quarry-hill-sampling-plan",
+        "ephemeral-ravenscar-podcast-gear",
+        "ephemeral-release-tag-follow-tags-lightweight",
+        "ephemeral-renewed-cert-not-served-until-reload",
+        "ephemeral-search-pod-liveness-restart-loop",
+        "ephemeral-sheets-append-raw-dates-as-text",
+        "ephemeral-sprint-41-retro-notes",
+        "ephemeral-stanmore-library-loans",
+        "ephemeral-thornley-fire-drill",
+        "ephemeral-ulverston-wiki-style",
+        "ephemeral-wetherby-courier-contract",
+        "ephemeral-windows-agent-crlf-shell-scripts",
+        "duplicate-apprise-matrix-room-hash-encoding",
+        "duplicate-ci-updated-snapshots-and-passed",
+        "duplicate-cover-pdf-rgb-black-rejected",
+        "duplicate-cron-backup-restic-not-found",
+        "duplicate-delegated-json-wrapped-in-fences",
+        "duplicate-exporter-removal-string-dispatch",
+        "duplicate-gh-issue-list-default-limit",
+        "duplicate-gws-service-account-shared-drive-member",
+        "duplicate-harrow-coffee-rota",
+        "duplicate-home-dev-harborlight-cli-color-handling",
+        "duplicate-home-dev-harborlight-commit-convention",
+        "duplicate-home-dev-harborlight-docs-style-guide",
+        "duplicate-home-dev-harborlight-pr-review-convention",
+        "duplicate-home-dev-harborlight-retry-after-unit",
+        "duplicate-home-dev-ledgerline-crm-region-field",
+        "duplicate-home-dev-ledgerline-disk-full-du-df-discrepancy",
+        "duplicate-home-dev-ledgerline-ledgerline-export-memory-lim",
+        "duplicate-home-dev-ledgerline-reporting-timezone-europe-be",
+        "duplicate-home-dev-ledgerline-terraform-workflow",
+        "duplicate-home-dev-ledgerline-vendor-export-unit-change",
+        "duplicate-home-dev-quillmark-quillmark-pdf-box-defaults",
+        "duplicate-home-dev-quillmark-quillmark-theme-search-path",
+        "duplicate-home-dev-quillmark-registry-structure",
+        "duplicate-home-dev-quillmark-test-failure-reporting-conven",
+        "duplicate-home-dev-quillmark-testing-and-golden-file-conve",
+        "duplicate-juniper-translation-glossary",
+        "duplicate-kestrel-drone-battery-care",
+        "duplicate-lindenhall-parking-rules",
+        "duplicate-litellm-key-rpm-shared-across-models",
+        "duplicate-moorfield-onboarding-quiz",
+        "duplicate-newsletter-merge-field-header-mismatch",
+        "duplicate-northgate-invoice-archive",
+        "duplicate-oldcastle-ferry-timetable",
+        "duplicate-playwright-networkidle-chat-widget",
+        "duplicate-quarry-hill-sampling-plan",
+        "duplicate-ravenscar-podcast-gear",
+        "duplicate-release-tag-follow-tags-lightweight",
+        "duplicate-renewed-cert-not-served-until-reload",
+        "duplicate-search-pod-liveness-restart-loop",
+        "duplicate-sheets-append-raw-dates-as-text",
+        "duplicate-stanmore-library-loans",
+        "duplicate-thornley-fire-drill",
+        "duplicate-ulverston-wiki-style",
+        "duplicate-wetherby-courier-contract",
+        "duplicate-windows-agent-crlf-shell-scripts",
+        "stale-apprise-matrix-room-hash-encoding",
+        "stale-ci-updated-snapshots-and-passed",
+        "stale-cover-pdf-rgb-black-rejected",
+        "stale-cron-backup-restic-not-found",
+        "stale-delegated-json-wrapped-in-fences",
+        "stale-exporter-removal-string-dispatch",
+        "stale-gh-issue-list-default-limit",
+        "stale-gws-service-account-shared-drive-member",
+        "stale-harrow-coffee-rota",
+        "stale-home-dev-harborlight-cli-color-handling",
+        "stale-home-dev-harborlight-commit-convention",
+        "stale-home-dev-harborlight-docs-style-guide",
+        "stale-home-dev-harborlight-pr-review-convention",
+        "stale-home-dev-harborlight-retry-after-unit",
+        "stale-home-dev-ledgerline-crm-region-field",
+        "stale-home-dev-ledgerline-disk-full-du-df-discrepancy",
+        "stale-home-dev-ledgerline-ledgerline-export-memory-lim",
+        "stale-home-dev-ledgerline-reporting-timezone-europe-be",
+        "stale-home-dev-ledgerline-terraform-workflow",
+        "stale-home-dev-ledgerline-vendor-export-unit-change",
+        "stale-home-dev-quillmark-quillmark-pdf-box-defaults",
+        "stale-home-dev-quillmark-quillmark-theme-search-path",
+        "stale-home-dev-quillmark-registry-structure",
+        "stale-home-dev-quillmark-test-failure-reporting-conven",
+        "stale-home-dev-quillmark-testing-and-golden-file-conve",
+        "stale-juniper-translation-glossary",
+        "stale-kestrel-drone-battery-care",
+        "stale-lindenhall-parking-rules",
+        "stale-litellm-key-rpm-shared-across-models",
+        "stale-moorfield-onboarding-quiz",
+        "stale-newsletter-merge-field-header-mismatch",
+        "stale-northgate-invoice-archive",
+        "stale-oldcastle-ferry-timetable",
+        "stale-playwright-networkidle-chat-widget",
+        "stale-quarry-hill-sampling-plan",
+        "stale-ravenscar-podcast-gear",
+        "stale-release-tag-follow-tags-lightweight",
+        "stale-renewed-cert-not-served-until-reload",
+        "stale-search-pod-liveness-restart-loop",
+        "stale-sheets-append-raw-dates-as-text",
+        "stale-stanmore-library-loans",
+        "stale-thornley-fire-drill",
+        "stale-ulverston-wiki-style",
+        "stale-wetherby-courier-contract",
+        "stale-windows-agent-crlf-shell-scripts"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 269.622
+}

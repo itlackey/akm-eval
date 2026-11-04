@@ -1,0 +1,553 @@
+{
+  "eval": "drain-judge",
+  "corpus": "public",
+  "label": "fast-qwen3-6-35b-a3b",
+  "repeat": 3,
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261105",
+  "akm_bin": "bun ~/.cache/agent-judge-baseline/akm/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-3182-gcc4872fe8",
+  "akm_build_fingerprint": null,
+  "runs": [
+    "2026-11-04-fast-qwen3-6-35b-a3b-r1",
+    "2026-11-04-fast-qwen3-6-35b-a3b-r2",
+    "2026-11-04-fast-qwen3-6-35b-a3b-r3"
+  ],
+  "n_errored": {
+    "min": 0,
+    "max": 0,
+    "mean": 0
+  },
+  "timeouts": {
+    "min": 0,
+    "max": 0,
+    "mean": 0
+  },
+  "seconds": {
+    "min": 265.805,
+    "max": 269.622,
+    "mean": 268.1807
+  },
+  "metrics": {
+    "good_accepted": {
+      "n": {
+        "min": 45,
+        "max": 45,
+        "mean": 45
+      },
+      "count": {
+        "min": 45,
+        "max": 45,
+        "mean": 45
+      },
+      "rate": {
+        "min": 1,
+        "max": 1,
+        "mean": 1
+      }
+    },
+    "bad_accepted": {
+      "n": {
+        "min": 139,
+        "max": 139,
+        "mean": 139
+      },
+      "count": {
+        "min": 9,
+        "max": 10,
+        "mean": 9.3333
+      },
+      "rate": {
+        "min": 0.0647,
+        "max": 0.0719,
+        "mean": 0.0671
+      }
+    },
+    "by_category": {
+      "ephemeral": {
+        "n": {
+          "min": 49,
+          "max": 49,
+          "mean": 49
+        },
+        "count": {
+          "min": 2,
+          "max": 3,
+          "mean": 2.3333
+        },
+        "rate": {
+          "min": 0.0408,
+          "max": 0.0612,
+          "mean": 0.0476
+        }
+      },
+      "duplicate": {
+        "n": {
+          "min": 45,
+          "max": 45,
+          "mean": 45
+        },
+        "count": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "stale": {
+        "n": {
+          "min": 45,
+          "max": 45,
+          "mean": 45
+        },
+        "count": {
+          "min": 7,
+          "max": 7,
+          "mean": 7
+        },
+        "rate": {
+          "min": 0.1556,
+          "max": 0.1556,
+          "mean": 0.1556
+        }
+      }
+    },
+    "bad_by_origin": {
+      "real": {
+        "n": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "count": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": null
+      },
+      "corpus": {
+        "n": {
+          "min": 4,
+          "max": 4,
+          "mean": 4
+        },
+        "count": {
+          "min": 1,
+          "max": 1,
+          "mean": 1
+        },
+        "rate": {
+          "min": 0.25,
+          "max": 0.25,
+          "mean": 0.25
+        }
+      },
+      "hand-written": {
+        "n": {
+          "min": 135,
+          "max": 135,
+          "mean": 135
+        },
+        "count": {
+          "min": 8,
+          "max": 9,
+          "mean": 8.3333
+        },
+        "rate": {
+          "min": 0.0593,
+          "max": 0.0667,
+          "mean": 0.0618
+        }
+      }
+    },
+    "precision": {
+      "value": {
+        "min": 0.8182,
+        "max": 0.8333,
+        "mean": 0.8283
+      },
+      "accepted_good": {
+        "min": 45,
+        "max": 45,
+        "mean": 45
+      },
+      "accepted": {
+        "min": 54,
+        "max": 55,
+        "mean": 54.3333
+      }
+    },
+    "good_rejected": {
+      "n": {
+        "min": 45,
+        "max": 45,
+        "mean": 45
+      },
+      "count": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "rate": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      }
+    },
+    "defer_rate": {
+      "good": {
+        "n": {
+          "min": 45,
+          "max": 45,
+          "mean": 45
+        },
+        "count": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "bad": {
+        "n": {
+          "min": 139,
+          "max": 139,
+          "mean": 139
+        },
+        "count": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      }
+    },
+    "left_pending": {
+      "good": {
+        "n": {
+          "min": 45,
+          "max": 45,
+          "mean": 45
+        },
+        "count": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "bad": {
+        "n": {
+          "min": 139,
+          "max": 139,
+          "mean": 139
+        },
+        "count": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "rate": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      }
+    },
+    "confusion": {
+      "good": {
+        "accept": {
+          "min": 45,
+          "max": 45,
+          "mean": 45
+        },
+        "reject": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "defer": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "unparseable": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "error": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "ephemeral": {
+        "accept": {
+          "min": 2,
+          "max": 3,
+          "mean": 2.3333
+        },
+        "reject": {
+          "min": 46,
+          "max": 47,
+          "mean": 46.6667
+        },
+        "defer": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "unparseable": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "error": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "duplicate": {
+        "accept": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "reject": {
+          "min": 45,
+          "max": 45,
+          "mean": 45
+        },
+        "defer": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "unparseable": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "error": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      },
+      "stale": {
+        "accept": {
+          "min": 7,
+          "max": 7,
+          "mean": 7
+        },
+        "reject": {
+          "min": 38,
+          "max": 38,
+          "mean": 38
+        },
+        "defer": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "unparseable": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "error": {
+          "min": 0,
+          "max": 0,
+          "mean": 0
+        }
+      }
+    },
+    "baselines": {
+      "accept_all": {
+        "good_accepted": {
+          "n": {
+            "min": 45,
+            "max": 45,
+            "mean": 45
+          },
+          "count": {
+            "min": 45,
+            "max": 45,
+            "mean": 45
+          },
+          "rate": {
+            "min": 1,
+            "max": 1,
+            "mean": 1
+          }
+        },
+        "bad_accepted": {
+          "n": {
+            "min": 139,
+            "max": 139,
+            "mean": 139
+          },
+          "count": {
+            "min": 139,
+            "max": 139,
+            "mean": 139
+          },
+          "rate": {
+            "min": 1,
+            "max": 1,
+            "mean": 1
+          }
+        },
+        "precision": {
+          "min": 0.2446,
+          "max": 0.2446,
+          "mean": 0.2446
+        }
+      },
+      "reject_all": {
+        "good_accepted": {
+          "n": {
+            "min": 45,
+            "max": 45,
+            "mean": 45
+          },
+          "count": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "rate": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "bad_accepted": {
+          "n": {
+            "min": 139,
+            "max": 139,
+            "mean": 139
+          },
+          "count": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "rate": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "precision": null
+      },
+      "defer_all": {
+        "good_accepted": {
+          "n": {
+            "min": 45,
+            "max": 45,
+            "mean": 45
+          },
+          "count": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "rate": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "bad_accepted": {
+          "n": {
+            "min": 139,
+            "max": 139,
+            "mean": 139
+          },
+          "count": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "rate": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        },
+        "precision": null
+      }
+    },
+    "error_rate": {
+      "n": {
+        "min": 184,
+        "max": 184,
+        "mean": 184
+      },
+      "count": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "rate": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      }
+    },
+    "unparseable_rate": {
+      "n": {
+        "min": 184,
+        "max": 184,
+        "mean": 184
+      },
+      "count": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "rate": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      }
+    },
+    "seconds": {
+      "mean": {
+        "min": 1.4,
+        "max": 1.5,
+        "mean": 1.4667
+      },
+      "median": {
+        "min": 1.4,
+        "max": 1.5,
+        "mean": 1.4667
+      },
+      "max": {
+        "min": 1.9,
+        "max": 1.9,
+        "mean": 1.9
+      }
+    }
+  }
+}
