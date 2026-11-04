@@ -870,7 +870,7 @@ describe("stampLegacy (#49)", () => {
     expect(rows.length).toBe(2033);
     expect(rows.filter((r) => !/^[0-9a-f]{64}$/.test(r.asset_sha256 ?? "")).length).toBe(0);
     expect(rows.filter((r) => r.judge === undefined).length).toBe(0);
-    expect(new Set(rows.map((r) => r.judge))).toEqual(new Set([LEGACY_JUDGE, "chat/qwen3.8-27b", "codex-review", "fast/qwen3.6-35b-a3b"])); // original grades plus the documented coverage expansions
+    expect(new Set(rows.map((r) => r.judge))).toEqual(new Set([LEGACY_JUDGE, "chat/qwen3.8-27b", "codex-review", "fast/qwen3.6-35b-a3b", "claude-review"])); // original grades plus the documented coverage expansions
   });
 
   test("the command: --stamp-legacy is for the public library, and says so for a set of your own", () => {

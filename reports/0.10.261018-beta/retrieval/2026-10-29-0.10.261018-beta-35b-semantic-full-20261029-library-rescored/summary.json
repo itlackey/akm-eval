@@ -46,48 +46,48 @@
   "metrics": {
     "search": {
       "n": 101,
-      "ndcg_10": 0.7697,
-      "ndcg_10_condensed": 0.7697,
+      "ndcg_10": 0.7704,
+      "ndcg_10_condensed": 0.7704,
       "p_5": 0.5683,
       "success_5": 0.9802,
       "mrr": 0.9231,
-      "recall_10": 0.7636,
+      "recall_10": 0.7628,
       "judged_10": 1,
       "banned_above": null,
       "banned_above_first": null
     },
     "curate": {
       "n": 101,
-      "ndcg_10": 0.7697,
-      "ndcg_10_condensed": 0.7697,
+      "ndcg_10": 0.7704,
+      "ndcg_10_condensed": 0.7704,
       "p_5": 0.5683,
       "success_5": 0.9802,
       "mrr": 0.9231,
-      "recall_10": 0.7636,
+      "recall_10": 0.7628,
       "judged_10": 1,
       "banned_above": null,
       "banned_above_first": null
     },
     "semantic_search": {
       "n": 101,
-      "ndcg_10": 0.826,
-      "ndcg_10_condensed": 0.826,
+      "ndcg_10": 0.828,
+      "ndcg_10_condensed": 0.828,
       "p_5": 0.6079,
       "success_5": 0.9901,
       "mrr": 0.9512,
-      "recall_10": 0.849,
+      "recall_10": 0.8515,
       "judged_10": 1,
       "banned_above": null,
       "banned_above_first": null
     },
     "semantic_curate": {
       "n": 101,
-      "ndcg_10": 0.826,
-      "ndcg_10_condensed": 0.826,
+      "ndcg_10": 0.828,
+      "ndcg_10_condensed": 0.828,
       "p_5": 0.6079,
       "success_5": 0.9901,
       "mrr": 0.9512,
-      "recall_10": 0.849,
+      "recall_10": 0.8515,
       "judged_10": 1,
       "banned_above": null,
       "banned_above_first": null
@@ -501,7 +501,7 @@
       "scorer": {
         "version": "0.3"
       },
-      "at": "2026-11-03T23:30:57.407Z",
+      "at": "2026-11-04T00:33:43.326Z",
       "dropped": []
     }
   },
@@ -512,7 +512,7 @@
     "scorer": {
       "version": "0.3"
     },
-    "at": "2026-11-03T23:30:57.407Z",
+    "at": "2026-11-04T00:33:43.326Z",
     "dropped": []
   }
 }

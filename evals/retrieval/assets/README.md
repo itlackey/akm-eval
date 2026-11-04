@@ -38,8 +38,8 @@ below describe the original grading work, not a new agreement study.
 ## Expanded judgments — 2026-11-03 (UTC)
 
 [Record](judgment-expansion-20261103.md). 157 library pairs that akm 0.10 returns in the top ten of the published library runs and no earlier grade covered, graded by
-`fast/qwen3.6-35b-a3b` (prompt `umbrela-akm-v1`, temperature 0). The library has 2,033 rows (2,001 query/asset identities), 605 of them relevant identities.
-Every column of every published library run is 100% judged. Retrieval scoring 0.5.
+`fast/qwen3.6-35b-a3b` (prompt `umbrela-akm-v1`, temperature 0). The library has 2,033 rows (2,001 query/asset identities), 604 of them relevant identities.
+Every column of every published library run is 100% judged. One of them, q012's `agents/print/qa-coordinator`, was then corrected from 3 to 1 in review (`claude-review`). Retrieval scoring 0.5.
 
 ## queries.jsonl
 
