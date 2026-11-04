@@ -76,6 +76,8 @@ export interface Row {
   runner: string | null;
   seconds: number;
   kind?: Kind;
+  /** The case's origin, so the metrics can keep real and hand-written cases apart. */
+  origin?: Case["origin"];
   /** Set when the judge gave no verdict. The row is routed as distill routes it, and `score` is null. */
   no_verdict?: NoVerdict;
   error?: string;
@@ -99,12 +101,12 @@ export interface Raw {
   timedOut?: boolean;
 }
 
-type Scored = Pick<Case, "id" | "mode" | "label" | "kind">;
+type Scored = Pick<Case, "id" | "mode" | "label" | "kind"> & Partial<Pick<Case, "origin">>;
 
 /** The route distill takes for a verdict that has one. */
 export const routeFor = (mode: Mode, v: { pass?: unknown; reviewNeeded?: unknown }): Route => (mode === "update" ? (v.pass === true ? "pass" : "reject") : routeOf(v));
 
-const identity = (c: Scored, seconds: number) => ({ id: c.id, mode: c.mode, label: c.label, seconds, ...(c.kind ? { kind: c.kind } : {}) });
+const identity = (c: Scored, seconds: number) => ({ id: c.id, mode: c.mode, label: c.label, seconds, ...(c.kind ? { kind: c.kind } : {}), ...(c.origin ? { origin: c.origin } : {}) });
 
 /** The route of the verdict `akm judge distill.lesson --format json` printed, or the no-verdict reading of its `error` or `unparseable` outcome. */
 export function rowFromVerdict(c: Scored, verdict: unknown, seconds: number): Row {
@@ -186,6 +188,8 @@ export interface Metrics {
   good: PerMode<Rate>;
   /** Bad lessons passed, by mode. THE HEADLINE: each pass is a bad lesson put before a person to accept. */
   bad: PerMode<Rate>;
+  /** good and bad, by the cases' origin: real pipeline output and hand-written writer replies, so a rate is not carried by the hand-written cases. */
+  by_origin: Record<"real" | "hand-written", { good: PerMode<Rate>; bad: PerMode<Rate> }>;
   /** Bad lessons passed, by `<mode>/<kind>`, for the kinds the set holds. */
   bad_by_kind: Record<string, Rate>;
   /** Good lessons refused outright: work lost, and (new lessons) a rejection window. */
@@ -257,6 +261,10 @@ export function metrics(rows: Row[]): Metrics {
   return {
     good: perMode((m) => rate(of(m, "good"))),
     bad: perMode((m) => rate(of(m, "bad"))),
+    by_origin: {
+      real: { good: perMode((m) => rate(of(m, "good").filter((r) => r.origin === "real"))), bad: perMode((m) => rate(of(m, "bad").filter((r) => r.origin === "real"))) },
+      "hand-written": { good: perMode((m) => rate(of(m, "good").filter((r) => r.origin === "hand-written"))), bad: perMode((m) => rate(of(m, "bad").filter((r) => r.origin === "hand-written"))) },
+    },
     bad_by_kind,
     good_rejected: perMode((m) => rejected(of(m, "good"))),
     review_share: { n: news.length, count: news.filter((r) => r.outcome === "review").length, rate: ratio(news.filter((r) => r.outcome === "review").length, news.length) },

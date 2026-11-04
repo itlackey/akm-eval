@@ -7,7 +7,9 @@
 //     (`assembleDistilledContent`), and has at most RELATED_COUNT (3) related assets of the types distill searches (lesson, knowledge, skill);
 //   - an update (`proposeLessonUpdate`) is the existing lesson with lines added: `diffLessonBody` drops no line of `extending` and finds a line added,
 //     the lesson has frontmatter, `source` is the memory's body as distill strips it, and no `related` is sent;
-//   - every feedback line is one `feedbackLines` writes (`- [signal] text`).
+//   - every feedback line is one `feedbackLines` writes (`- [signal] text`);
+//   - the frozen context is the library's files (`contextProblems`): `source` holds the body of the memory of the distill case the input was made
+//     from, each related asset's `content` is its file, and `extending` is the body of a lesson in that library.
 //
 // A real case was also captured from a run of this akm's pipeline (capture.ts); these checks are what is left to run later, on a newer akm, without a model.
 //
@@ -15,7 +17,7 @@
 //
 // Exits 1 and names the cases that fail, so they can be retired (assets/retired.jsonl).
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { CASES, parseCases } from "./lib.ts";
@@ -59,6 +61,30 @@ export async function loadAkm(dir: string): Promise<Akm> {
 const RELATED_FOLDERS = /^(lessons|knowledge|skills)\//;
 const RELATED_COUNT = 3;
 
+/** The distill eval's libraries, one per case: the cases were harvested from runs on them. */
+export const BUNDLES = resolve(import.meta.dir, "../../distill/assets/bundles");
+
+/** The file of a ref in a library, as akm lays it out: a skill is `<ref>/SKILL.md`, any other asset `<ref>.md`. */
+const fileOf = (bundle: string, ref: string): string => join(bundle, ref.startsWith("skills/") ? `${ref}/SKILL.md` : `${ref}.md`);
+
+/** Where a case's frozen context differs from the files of the library it was harvested from. Empty when it is those files. */
+export function contextProblems(akm: Pick<Akm, "parseFrontmatter">, c: Case, bundles = BUNDLES): string[] {
+  const bundle = join(bundles, c.from);
+  const read = (ref: string): string | null => (existsSync(fileOf(bundle, ref)) ? readFileSync(fileOf(bundle, ref), "utf8") : null);
+  const memory = read(c.memory);
+  if (memory === null) return [`${c.memory} is not in the library of ${c.from}`];
+  const out: string[] = [];
+  const body = (raw: string) => akm.parseFrontmatter(raw).content.trim();
+  // akm stamps the memory's frontmatter (salience) before distill reads it, so a new lesson's source is compared by its body.
+  if (body(c.input.source) !== body(memory)) out.push(`\`source\` is not the memory of ${c.from}`);
+  for (const r of c.input.related ?? []) if (read(r.ref) !== r.content) out.push(`related ${r.ref} is not that file of the library`);
+  if (c.mode === "update") {
+    const lessons = existsSync(join(bundle, "lessons")) ? readdirSync(join(bundle, "lessons")).map((f) => body(readFileSync(join(bundle, "lessons", f), "utf8"))) : [];
+    if (!lessons.includes(c.input.extending ?? "")) out.push(`\`extending\` is not the body of a lesson of ${c.from}`);
+  }
+  return out;
+}
+
 /** The reasons akm's distill could not send this case's input to the judge. Empty when it can. */
 export function problems(akm: Akm, c: Case): string[] {
   const out = akm.validate(c.input, akm.inputSchema).map((e) => `the input is not valid for the judge: ${e}`);
@@ -96,7 +122,7 @@ if (import.meta.main) {
   const cases = parseCases(readFileSync(file, "utf8"), file);
   let off = 0;
   for (const c of cases) {
-    const why = problems(akm, c);
+    const why = [...problems(akm, c), ...contextProblems(akm, c)];
     if (why.length > 0) {
       off++;
       console.error(`reachable: ${c.id} is not an input akm sends:\n  ${why.join("\n  ")}`);

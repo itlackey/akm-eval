@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseCases } from "./lib.ts";
-import { type Akm, loadAkm, problems } from "./reachable.ts";
+import { type Akm, contextProblems, loadAkm, problems } from "./reachable.ts";
 import type { Case } from "./score.ts";
 
 /** The rules of akm's distill that problems() calls, as far as these tests need them: a stand-in, so the checks around them are tested without a checkout. */
@@ -63,6 +63,25 @@ describe("problems", () => {
   });
 });
 
+describe("contextProblems", () => {
+  const real = parseCases(readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl"), "utf8"));
+  const newCase = real.find((c) => c.mode === "new" && (c.input.related ?? []).length > 0) as Case;
+  const update = real.find((c) => c.mode === "update") as Case;
+
+  test("a case whose source, related assets and extended lesson are the library's files has none", () => {
+    expect(contextProblems(fake, newCase)).toEqual([]);
+    expect(contextProblems(fake, update)).toEqual([]);
+  });
+
+  test("names a source, a related asset or an extended lesson that is not the library's", () => {
+    expect(contextProblems(fake, { ...newCase, input: { ...newCase.input, source: "other" } })[0]).toContain("`source`");
+    const related = [{ ref: newCase.input.related![0]!.ref, content: "edited" }];
+    expect(contextProblems(fake, { ...newCase, input: { ...newCase.input, related } })[0]).toContain("is not that file");
+    expect(contextProblems(fake, { ...update, input: { ...update.input, extending: "another rule" } })[0]).toContain("`extending`");
+    expect(contextProblems(fake, { ...newCase, memory: "memories/none" })[0]).toContain("not in the library");
+  });
+});
+
 // These tests run akm's own distill code, so they need a checkout of akm with its dependencies installed: AKM_CHECKOUT=DIR bun test.
 const checkout = process.env.AKM_CHECKOUT;
 
@@ -71,7 +90,7 @@ describe.skipIf(!checkout)("every case is an input akm's distill sends", () => {
     const akm = await loadAkm(checkout as string);
     for (const folder of [join(import.meta.dir, "..", "assets"), join(import.meta.dir, "..", "assets", "held-out")]) {
       const cases = parseCases(readFileSync(join(folder, "cases.jsonl"), "utf8"));
-      expect(cases.map((c) => ({ id: c.id, why: problems(akm, c) })).filter((c) => c.why.length > 0)).toEqual([]);
+      expect(cases.map((c) => ({ id: c.id, why: [...problems(akm, c), ...contextProblems(akm, c)] })).filter((c) => c.why.length > 0)).toEqual([]);
     }
   });
 

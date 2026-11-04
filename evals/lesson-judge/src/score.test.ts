@@ -132,3 +132,20 @@ describe("the metrics", () => {
     expect(empty.criteria.update.good.reusable).toEqual({ n: 0, mean: null });
   });
 });
+
+describe("by_origin", () => {
+  test("keeps real and hand-written cases apart, so a rate is not carried by the hand-written ones", () => {
+    const rows = [
+      rowFromVerdict({ ...newBad, id: "r", origin: "real" }, REJECT, 1),
+      rowFromVerdict({ ...newBad, id: "h1", origin: "hand-written" }, PASS, 1),
+      rowFromVerdict({ ...newBad, id: "h2", origin: "hand-written" }, REJECT, 1),
+      rowFromVerdict({ ...upGood, id: "u", origin: "real" }, PASS, 1),
+    ];
+    const m = metrics(rows);
+    expect(m.bad.new).toEqual({ n: 3, passed: 1, rate: 0.3333 });
+    expect(m.by_origin.real.bad.new).toEqual({ n: 1, passed: 0, rate: 0 });
+    expect(m.by_origin["hand-written"].bad.new).toEqual({ n: 2, passed: 1, rate: 0.5 });
+    expect(m.by_origin.real.good.update).toEqual({ n: 1, passed: 1, rate: 1 });
+    expect(m.by_origin["hand-written"].good.update).toEqual({ n: 0, passed: 0, rate: null });
+  });
+});

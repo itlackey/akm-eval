@@ -43,6 +43,7 @@ function printSummary(s: Summary & Own): void {
     line(`${mode}: bad passed`, cell(m.bad[mode]));
     for (const [k, r] of Object.entries(m.bad_by_kind).filter(([k]) => k.startsWith(`${mode}/`))) line(`  ${k.slice(mode.length + 1)}`, cell(r));
     line(`${mode}: good passed`, cell(m.good[mode]));
+    for (const origin of ["real", "hand-written"] as const) line(`  ${origin} bad/good`, `${cell(m.by_origin[origin].bad[mode])}, ${cell(m.by_origin[origin].good[mode])}`);
     line(`${mode}: good rejected`, cell(m.good_rejected[mode]));
   }
   line("review share (new)", cell(m.review_share));

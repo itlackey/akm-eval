@@ -28,8 +28,8 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   caseId: (c) => c.id,
   // What goes to `akm judge distill.lesson` on stdin: the lesson, the source memory, the feedback lines, the related assets and, for an update, the lesson it extends.
   input: judgeInput,
-  // Everything makeRow reads of the case: its mode, label and kind. The reason for the label is for readers.
-  labels: (c) => ({ mode: c.mode, label: c.label, kind: c.kind ?? null }),
+  // Everything makeRow reads of the case: its mode, label, kind and origin. The reason for the label is for readers.
+  labels: (c) => ({ mode: c.mode, label: c.label, kind: c.kind ?? null, origin: c.origin }),
   rawOf,
   score: makeRow,
   errored,
