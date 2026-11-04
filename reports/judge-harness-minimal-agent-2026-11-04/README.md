@@ -1,14 +1,21 @@
 # Judge-gate on the OpenCode harness with a minimal agent (#189)
 
 `fast/qwen3.6-35b-a3b` (lab), thinking off, temperature 0, public corpus (188 cases), `--repeat 3`, one run at a time. akm origin/main
-`88ec7f1b6` (`0.10.261105`) for both sides. Harness head `6b4e6be` plus the change of this PR. The #188 connection runs are no longer on disk, so a
-connection set was run again on the same akm.
+`88ec7f1b6` (`0.10.261105`) for both sides. Harness head `6b4e6be` with the experiment's change to `opencodeConfig` in `lib/judge.ts` (below; not kept in the eval). The #188 connection runs
+are no longer on disk, so a connection set was run again on the same akm. The run folders were not kept: the agreement figures, kappa and
+flipped cases are `scripts/compare` output from the time (`compare-connection-vs-harness.md`), and the summaries hold the pass counts.
 
 ## What changed
 
 OpenCode 1.18.25 builds its system prompt from the agent's `prompt` when it has one, and from the provider default otherwise
-(`LLMRequestPrep.prepare` in the binary: `[...agent.prompt ? [agent.prompt] : provider(model), ...system, ...user.system]`). The eval's opencode
-config now gives the agent akm runs a one-line prompt and turns the title request off. Verified with a logging proxy on the same cases:
+(`LLMRequestPrep.prepare` in the binary: `[...agent.prompt ? [agent.prompt] : provider(model), ...system, ...user.system]`). The experiment gave
+the agent akm runs (opencode 1's default, `build`) a one-line prompt and turned the title request off:
+
+```ts
+agent: { build: { temperature: 0, prompt: "Do the task in the message. Reply with exactly what it asks for." }, title: { disable: true } },
+```
+
+Verified with a logging proxy on the same cases:
 
 | Request seen by the model server | Before | After |
 |---|---|---|
@@ -35,8 +42,10 @@ Harness (minimal agent) against connection, majority outcome of three runs: 165 
 ## Conclusion
 
 The pass counts now match the connection's (good passed 85 against 84, bad passed 10 against 8), so the stricter judging of the harness came from
-opencode's prompt and title request. Tokens a call fall by more than half and are below the connection's; time a call is still about 1.7 times the
+opencode's prompt and title request. Tokens a call fall by more than half (the 2.6k is a 24-case sample, not the connection's 188 cases, so it does not show the harness below the connection); time a call is still about 1.7 times the
 connection's (opencode's session), and the harness is less steady between repeats than the connection. The gap that remains is agreement of 87.8%
 (kappa 0.794) and a lab server that is not deterministic. Per the issue's Decision, the gap closed and tokens dropped, so this is the akm fix for
-improve model work through OpenCode: akm's `akm-model-work` agent has no `prompt`, and on 1.18.25 the agent that actually runs is `build` (a prompt set on
-`agents."akm-model-work"` changed nothing; one set on `agent.build` did). Follow-up to file on itlackey/akm.
+improve model work through OpenCode. On opencode 1, akm's model work runs `opencode run` with no `--agent` and no inline config, so opencode's
+default agent `build` runs with the coding prompt and the title request (`agents."akm-model-work"` is opencode 2's key and is never selected on
+1.18.25). On opencode 2, akm selects its `akm-model-work` agent, which has no `system` prompt, so opencode's default prompt is sent there too.
+Follow-up to file on itlackey/akm. The eval keeps opencode's prompt so that it measures akm as it ships.
