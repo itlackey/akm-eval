@@ -119,13 +119,14 @@ export const harnessModel = (model: string): string => `${HARNESS_PROVIDER}/${mo
 /**
  * The config of the opencode a harness judge runs: the model under test as the only provider, at the run's endpoint with temperature 0 and no
  * reasoning, as the connection runner has them, and no tool. Nothing else: opencode reads no config but this one (see isolateHome in lib/akm/akm.ts).
+ * The temperature is set on both agents akm can run model work as on opencode 1: `build`, the default, and `akm-model-work`, the one akm selects from #1426 on.
  * A tool would let the judge read any file of the machine by its path, and the akm plugin that gives it `akm_show` is not in the sandbox.
  */
 export function opencodeConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
   return {
     $schema: "https://opencode.ai/config.json",
     provider: { [HARNESS_PROVIDER]: { npm: "@ai-sdk/openai-compatible", name: HARNESS_PROVIDER, options: { baseURL: baseUrl, ...(hasKey ? { apiKey: "{env:MODEL_API_KEY}" } : {}) }, models: { [model]: { name: model, temperature: true /* opencode's capability flag: the model takes a temperature; the value 0 is the agent's below */, options: { reasoningEffort: "none" } } } } },
-    agent: { build: { temperature: 0 } },
+    agent: { build: { temperature: 0 }, "akm-model-work": { temperature: 0 } },
     permission: { "*": "deny" },
   };
 }
