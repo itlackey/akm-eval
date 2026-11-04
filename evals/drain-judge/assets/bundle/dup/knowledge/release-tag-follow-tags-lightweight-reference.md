@@ -1,0 +1,5 @@
+---
+description: "Explains why the v2.4.0 CI pipeline failed due to using a lightweight tag instead of an annotated one during the push operation."
+---
+
+The continuous integration process for version 2.4.0 remained inactive because the associated reference was not transmitted to the remote repository. Initially, the tag was generated locally using `git tag v2.4.0`, which creates a lightweight reference. When executing `git push origin main --follow-tags`, only annotated tags are included in the transfer, leaving the lightweight tag behind on the developer's machine. Since the workflow is configured to trigger exclusively upon receiving a tag push event, the system waited for two hours without detecting any new activity. To resolve this, the tag must be recreated as an annotated object by running `git tag -a v2.4.0 -m "Release v2.4.0"`. After pushing this corrected tag, the pipeline successfully initiated. Consequently, the official release documentation has been updated to mandate the use of the `-a` flag for all future tag creations to prevent similar delays.

@@ -1,0 +1,5 @@
+---
+description: "Enforce indirect color application via utility wrappers to respect terminal capabilities."
+---
+
+Direct invocation of the chalk library within harborlight command handlers is strictly prohibited. Instead, developers must utilize the `paint` function exported from `src/util/tty.ts`. This utility accepts a styling function and a message string, applying formatting only when appropriate. The module also exposes `useColor()` for checking terminal support. By routing all visual output through this abstraction layer, the application automatically handles color stripping during pipe operations or when the `NO_COLOR` environment variable is active. This approach guarantees adherence to TTY-aware output standards. Import the helper directly from the specified path and replace any raw chalk calls with `paint(chalk.fn, msg)` to ensure consistent behavior across different execution environments. This prevents broken terminal displays and respects user preferences regarding color usage.

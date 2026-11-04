@@ -1,0 +1,5 @@
+---
+description: "A summary of Quillmark's theme resolution hierarchy and fallback mechanisms."
+---
+
+Quillmark determines which styling profile to apply by checking specific directories sequentially. When the `-theme` flag is utilized, the system prioritizes local configurations over global settings, which in turn take precedence over default assets. First, it scans the immediate directory of the target document for a file named `<name>.toml` inside a `themes` subfolder. If this local instance is absent, the process moves to the user's home configuration area. Specifically, it checks `$XDG_CONFIG_HOME/quillmark/themes` or the fallback path `~/.config/quillmark/themes`. Finally, if no custom file is found in either location, the engine defaults to internal resources. The standard library includes `paper`, `ink`, and `sepia`. Notably, if a user defines a custom theme that shares a name with one of these built-ins, the custom definition will successfully supersede the default version. This ensures that personal overrides always win during the lookup process.

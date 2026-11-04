@@ -63,3 +63,10 @@ test('judge gate exposes useful acceptance separately from approval precision', 
   expect(result.find(score => score.label === 'Approved lessons that were good')).toMatchObject({ value: 1, numerator: 15, denominator: 15 });
   expect(result.find(score => score.label === 'Good proposals approved')).toMatchObject({ value: .375, numerator: 15, denominator: 40 });
 });
+
+test('drain-judge reports the harm number next to the good ones accepted', () => {
+  const result = scores({ eval: 'drain-judge', metrics: { precision: { value: .8, accepted_good: 8, accepted: 10 }, good_accepted: { rate: .4, count: 8, n: 20 }, bad_accepted: { rate: .1, count: 6, n: 60 }, good_rejected: { rate: .05, count: 1, n: 20 } } });
+  expect(result.find(score => score.label === 'Bad promotions accepted')).toMatchObject({ value: .1, numerator: 6, denominator: 60, lower_is_better: true });
+  expect(result.find(score => score.label === 'Good promotions accepted')).toMatchObject({ value: .4, numerator: 8, denominator: 20 });
+  expect(result.find(score => score.label === 'Accepted promotions that were good')).toMatchObject({ value: .8, numerator: 8, denominator: 10 });
+});

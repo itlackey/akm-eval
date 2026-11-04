@@ -1,0 +1,5 @@
+---
+description: "Style guidelines for the harborlight documentation directory."
+---
+
+Developers contributing to the `harborlight` repository must follow specific formatting rules for all files located within the `docs/` folder. These standards were established to maintain consistency with existing guides, such as `docs/guide/status.md`. First, utilize British English conventions for all text, including terms like `colour` and `licence`. Second, apply sentence case to all section titles, ensuring only the initial word is capitalized. Third, avoid using filler terms such as `simply`, `just`, `easy`, or `easily` in any content. Fourth, always speak directly to the audience using the second-person pronoun `you`. Finally, distinguish between code and text: preserve the exact spelling of command-line flags found in the source code (even if they are Americanized, like `--color`), but switch to British spelling for all explanatory prose surrounding those commands. Adhering to these constraints ensures uniformity across the project's technical writing.

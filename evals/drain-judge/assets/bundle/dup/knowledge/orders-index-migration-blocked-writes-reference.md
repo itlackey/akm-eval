@@ -1,0 +1,5 @@
+---
+description: "Documenting the switch to concurrent index creation to prevent checkout downtime during schema changes."
+---
+
+Previously, adding a new column index to the massive `orders` table caused significant service disruption. Specifically, the standard `CREATE INDEX` command acquired an exclusive lock, halting all write operations for approximately nine minutes. This outage affected checkout functionality because the database held the lock until the build finished on the 80 million row dataset. To resolve this, the team adopted the `CONCURRENTLY` flag. While this approach extends the build time to roughly 25 minutes, it allows concurrent read and write access, ensuring uninterrupted user experience. A critical constraint of this method is that it cannot execute within an active transaction block. Consequently, the migration script was updated to disable the automatic transaction wrapper for this specific step, ensuring the command runs in autocommit mode. This change prevents the deadlock scenario and maintains system availability during heavy schema modifications.

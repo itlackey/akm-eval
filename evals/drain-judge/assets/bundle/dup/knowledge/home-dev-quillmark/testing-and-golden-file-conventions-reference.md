@@ -1,0 +1,5 @@
+---
+description: "Enforces table-driven testing and automated golden file regeneration to maintain output integrity."
+---
+
+The repository requires all test suites to utilize a table-driven approach. Each exported function must have a corresponding test function named with the `Test` prefix. Within these functions, developers must define a slice of test cases and iterate through them using `t.Run` to execute individual scenarios. Manual modifications to expected output files, known as golden files, are strictly forbidden. Instead, updates must be handled programmatically. To facilitate this, add a boolean flag named `update` to your test code, configuring it to rewrite files located in the `testdata` directory. Execute the command `go test -update` to trigger this regeneration process. Before committing any changes, you must inspect the differences using `git diff` to ensure that only intended modifications are included. This workflow prevents accidental drift in expected outputs and guarantees that all changes to test expectations are deliberate and verified.

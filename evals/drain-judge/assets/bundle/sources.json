@@ -1,0 +1,1192 @@
+{
+  "apprise-matrix-room-hash-encoding-legacy.md": {
+    "origin": "constructed",
+    "from": "apprise-matrix-room-hash-encoding.md",
+    "kind": "stale"
+  },
+  "apprise-matrix-room-hash-encoding-status.md": {
+    "origin": "constructed",
+    "from": "apprise-matrix-room-hash-encoding.md",
+    "kind": "ephemeral"
+  },
+  "apprise-matrix-room-hash-encoding.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-06/memories/apprise-matrix-room-hash-encoding.md",
+    "kind": "good"
+  },
+  "back-cover-barcode-scaled-to-70-legacy.md": {
+    "origin": "constructed",
+    "from": "back-cover-barcode-scaled-to-70.md",
+    "kind": "stale"
+  },
+  "back-cover-barcode-scaled-to-70-status.md": {
+    "origin": "constructed",
+    "from": "back-cover-barcode-scaled-to-70.md",
+    "kind": "ephemeral"
+  },
+  "back-cover-barcode-scaled-to-70.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-16/memories/back-cover-barcode-scaled-to-70.md",
+    "kind": "good"
+  },
+  "ci-template-migration-progress.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-02/memories/ci-template-migration-progress.md",
+    "kind": "ephemeral"
+  },
+  "ci-updated-snapshots-and-passed-legacy.md": {
+    "origin": "constructed",
+    "from": "ci-updated-snapshots-and-passed.md",
+    "kind": "stale"
+  },
+  "ci-updated-snapshots-and-passed-status.md": {
+    "origin": "constructed",
+    "from": "ci-updated-snapshots-and-passed.md",
+    "kind": "ephemeral"
+  },
+  "ci-updated-snapshots-and-passed.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-23/memories/ci-updated-snapshots-and-passed.md",
+    "kind": "good"
+  },
+  "cover-pdf-rgb-black-rejected-legacy.md": {
+    "origin": "constructed",
+    "from": "cover-pdf-rgb-black-rejected.md",
+    "kind": "stale"
+  },
+  "cover-pdf-rgb-black-rejected-status.md": {
+    "origin": "constructed",
+    "from": "cover-pdf-rgb-black-rejected.md",
+    "kind": "ephemeral"
+  },
+  "cover-pdf-rgb-black-rejected.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-03/memories/cover-pdf-rgb-black-rejected.md",
+    "kind": "good"
+  },
+  "cron-backup-restic-not-found-legacy.md": {
+    "origin": "constructed",
+    "from": "cron-backup-restic-not-found.md",
+    "kind": "stale"
+  },
+  "cron-backup-restic-not-found-status.md": {
+    "origin": "constructed",
+    "from": "cron-backup-restic-not-found.md",
+    "kind": "ephemeral"
+  },
+  "cron-backup-restic-not-found.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-10/memories/cron-backup-restic-not-found.md",
+    "kind": "good"
+  },
+  "delegated-json-wrapped-in-fences-legacy.md": {
+    "origin": "constructed",
+    "from": "delegated-json-wrapped-in-fences.md",
+    "kind": "stale"
+  },
+  "delegated-json-wrapped-in-fences-status.md": {
+    "origin": "constructed",
+    "from": "delegated-json-wrapped-in-fences.md",
+    "kind": "ephemeral"
+  },
+  "delegated-json-wrapped-in-fences.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-20/memories/delegated-json-wrapped-in-fences.md",
+    "kind": "good"
+  },
+  "docker-build-reinstalls-deps-on-every-change-legacy.md": {
+    "origin": "constructed",
+    "from": "docker-build-reinstalls-deps-on-every-change.md",
+    "kind": "stale"
+  },
+  "docker-build-reinstalls-deps-on-every-change-status.md": {
+    "origin": "constructed",
+    "from": "docker-build-reinstalls-deps-on-every-change.md",
+    "kind": "ephemeral"
+  },
+  "docker-build-reinstalls-deps-on-every-change.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-12/memories/docker-build-reinstalls-deps-on-every-change.md",
+    "kind": "good"
+  },
+  "due-date-test-fails-in-utc-ci-legacy.md": {
+    "origin": "constructed",
+    "from": "due-date-test-fails-in-utc-ci.md",
+    "kind": "stale"
+  },
+  "due-date-test-fails-in-utc-ci-status.md": {
+    "origin": "constructed",
+    "from": "due-date-test-fails-in-utc-ci.md",
+    "kind": "ephemeral"
+  },
+  "due-date-test-fails-in-utc-ci.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-14/memories/due-date-test-fails-in-utc-ci.md",
+    "kind": "good"
+  },
+  "dup/knowledge/apprise-matrix-room-hash-encoding-reference.md": {
+    "origin": "constructed",
+    "from": "apprise-matrix-room-hash-encoding.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/back-cover-barcode-scaled-to-70-reference.md": {
+    "origin": "constructed",
+    "from": "back-cover-barcode-scaled-to-70.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/ci-updated-snapshots-and-passed-reference.md": {
+    "origin": "constructed",
+    "from": "ci-updated-snapshots-and-passed.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/cover-pdf-rgb-black-rejected-reference.md": {
+    "origin": "constructed",
+    "from": "cover-pdf-rgb-black-rejected.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/cron-backup-restic-not-found-reference.md": {
+    "origin": "constructed",
+    "from": "cron-backup-restic-not-found.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/delegated-json-wrapped-in-fences-reference.md": {
+    "origin": "constructed",
+    "from": "delegated-json-wrapped-in-fences.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/docker-build-reinstalls-deps-on-every-change-reference.md": {
+    "origin": "constructed",
+    "from": "docker-build-reinstalls-deps-on-every-change.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/due-date-test-fails-in-utc-ci-reference.md": {
+    "origin": "constructed",
+    "from": "due-date-test-fails-in-utc-ci.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/exporter-removal-string-dispatch-reference.md": {
+    "origin": "constructed",
+    "from": "exporter-removal-string-dispatch.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/gh-issue-list-default-limit-reference.md": {
+    "origin": "constructed",
+    "from": "gh-issue-list-default-limit.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/gws-service-account-shared-drive-member-reference.md": {
+    "origin": "constructed",
+    "from": "gws-service-account-shared-drive-member.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/harrow-coffee-rota-reference.md": {
+    "origin": "constructed",
+    "from": "harrow-coffee-rota.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/cli-color-handling-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/cli-color-handling.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/cli-error-formatting-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/cli-error-formatting.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/commit-convention-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/commit-convention.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/docs-style-guide-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/docs-style-guide.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/pr-review-convention-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/pr-review-convention.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/retry-after-unit-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/retry-after-unit.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/crm-plan-normalization-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/crm-plan-normalization.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/crm-region-field-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/crm-region-field.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/disk-full-du-df-discrepancy-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/disk-full-du-df-discrepancy.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/ledgerline-export-memory-limit-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/ledgerline-export-memory-limit.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/reporting-timezone-europe-berlin-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/reporting-timezone-europe-berlin.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/terraform-workflow-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/terraform-workflow.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/vendor-export-unit-change-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/vendor-export-unit-change.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/quillmark-pdf-box-defaults-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/quillmark-pdf-box-defaults.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/quillmark-theme-search-path-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/quillmark-theme-search-path.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/registry-structure-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/registry-structure.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/test-failure-reporting-convention-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/test-failure-reporting-convention.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/testing-and-golden-file-conventions-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/testing-and-golden-file-conventions.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/theme-resolution-behavior-reference.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/theme-resolution-behavior.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/ivybridge-bike-store-reference.md": {
+    "origin": "constructed",
+    "from": "ivybridge-bike-store.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/juniper-translation-glossary-reference.md": {
+    "origin": "constructed",
+    "from": "juniper-translation-glossary.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/kestrel-drone-battery-care-reference.md": {
+    "origin": "constructed",
+    "from": "kestrel-drone-battery-care.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/lindenhall-parking-rules-reference.md": {
+    "origin": "constructed",
+    "from": "lindenhall-parking-rules.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/litellm-key-rpm-shared-across-models-reference.md": {
+    "origin": "constructed",
+    "from": "litellm-key-rpm-shared-across-models.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/moorfield-onboarding-quiz-reference.md": {
+    "origin": "constructed",
+    "from": "moorfield-onboarding-quiz.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/newsletter-merge-field-header-mismatch-reference.md": {
+    "origin": "constructed",
+    "from": "newsletter-merge-field-header-mismatch.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/northgate-invoice-archive-reference.md": {
+    "origin": "constructed",
+    "from": "northgate-invoice-archive.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/oldcastle-ferry-timetable-reference.md": {
+    "origin": "constructed",
+    "from": "oldcastle-ferry-timetable.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/orders-index-migration-blocked-writes-reference.md": {
+    "origin": "constructed",
+    "from": "orders-index-migration-blocked-writes.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/pinewood-label-printer-reference.md": {
+    "origin": "constructed",
+    "from": "pinewood-label-printer.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/playwright-networkidle-chat-widget-reference.md": {
+    "origin": "constructed",
+    "from": "playwright-networkidle-chat-widget.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/quarry-hill-sampling-plan-reference.md": {
+    "origin": "constructed",
+    "from": "quarry-hill-sampling-plan.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/ravenscar-podcast-gear-reference.md": {
+    "origin": "constructed",
+    "from": "ravenscar-podcast-gear.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/release-tag-follow-tags-lightweight-reference.md": {
+    "origin": "constructed",
+    "from": "release-tag-follow-tags-lightweight.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/renewed-cert-not-served-until-reload-reference.md": {
+    "origin": "constructed",
+    "from": "renewed-cert-not-served-until-reload.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/reset-emails-spam-missing-spf-include-reference.md": {
+    "origin": "constructed",
+    "from": "reset-emails-spam-missing-spf-include.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/rsync-backup-nested-site-folder-reference.md": {
+    "origin": "constructed",
+    "from": "rsync-backup-nested-site-folder.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/search-pod-liveness-restart-loop-reference.md": {
+    "origin": "constructed",
+    "from": "search-pod-liveness-restart-loop.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/sheets-append-raw-dates-as-text-reference.md": {
+    "origin": "constructed",
+    "from": "sheets-append-raw-dates-as-text.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/stanmore-library-loans-reference.md": {
+    "origin": "constructed",
+    "from": "stanmore-library-loans.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/supplier-csv-bom-keyerror-reference.md": {
+    "origin": "constructed",
+    "from": "supplier-csv-bom-keyerror.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/thornley-fire-drill-reference.md": {
+    "origin": "constructed",
+    "from": "thornley-fire-drill.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/ulverston-wiki-style-reference.md": {
+    "origin": "constructed",
+    "from": "ulverston-wiki-style.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/wetherby-courier-contract-reference.md": {
+    "origin": "constructed",
+    "from": "wetherby-courier-contract.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/windows-agent-crlf-shell-scripts-reference.md": {
+    "origin": "constructed",
+    "from": "windows-agent-crlf-shell-scripts.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/yewdale-trail-closures-reference.md": {
+    "origin": "constructed",
+    "from": "yewdale-trail-closures.md",
+    "kind": "reference"
+  },
+  "exporter-removal-string-dispatch-legacy.md": {
+    "origin": "constructed",
+    "from": "exporter-removal-string-dispatch.md",
+    "kind": "stale"
+  },
+  "exporter-removal-string-dispatch-status.md": {
+    "origin": "constructed",
+    "from": "exporter-removal-string-dispatch.md",
+    "kind": "ephemeral"
+  },
+  "exporter-removal-string-dispatch.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-07/memories/exporter-removal-string-dispatch.md",
+    "kind": "good"
+  },
+  "gh-issue-list-default-limit-legacy.md": {
+    "origin": "constructed",
+    "from": "gh-issue-list-default-limit.md",
+    "kind": "stale"
+  },
+  "gh-issue-list-default-limit-status.md": {
+    "origin": "constructed",
+    "from": "gh-issue-list-default-limit.md",
+    "kind": "ephemeral"
+  },
+  "gh-issue-list-default-limit.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-02/memories/gh-issue-list-default-limit.md",
+    "kind": "good"
+  },
+  "gws-service-account-shared-drive-member-legacy.md": {
+    "origin": "constructed",
+    "from": "gws-service-account-shared-drive-member.md",
+    "kind": "stale"
+  },
+  "gws-service-account-shared-drive-member-status.md": {
+    "origin": "constructed",
+    "from": "gws-service-account-shared-drive-member.md",
+    "kind": "ephemeral"
+  },
+  "gws-service-account-shared-drive-member.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-05/memories/gws-service-account-shared-drive-member.md",
+    "kind": "good"
+  },
+  "harrow-coffee-rota-legacy.md": {
+    "origin": "constructed",
+    "from": "harrow-coffee-rota.md",
+    "kind": "stale"
+  },
+  "harrow-coffee-rota-status.md": {
+    "origin": "constructed",
+    "from": "harrow-coffee-rota.md",
+    "kind": "ephemeral"
+  },
+  "harrow-coffee-rota.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/harrow-coffee-rota.md",
+    "kind": "good"
+  },
+  "home-dev-harborlight/cli-color-handling-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/cli-color-handling.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/cli-color-handling-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/cli-color-handling.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/cli-color-handling.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-11 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/cli-error-formatting-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/cli-error-formatting.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/cli-error-formatting-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/cli-error-formatting.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/cli-error-formatting.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-11 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/commit-convention-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/commit-convention.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/commit-convention-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/commit-convention.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/commit-convention.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-01 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/docs-style-guide-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/docs-style-guide.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/docs-style-guide-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/docs-style-guide.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/docs-style-guide.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-05 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/pr-review-convention-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/pr-review-convention.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/pr-review-convention-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/pr-review-convention.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/pr-review-convention.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-08 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/retry-after-unit-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/retry-after-unit.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/retry-after-unit-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-harborlight/retry-after-unit.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/retry-after-unit.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: insight-04 (insight)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/crm-plan-normalization-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/crm-plan-normalization.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/crm-plan-normalization-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/crm-plan-normalization.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/crm-plan-normalization.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: buried-07 (buried)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/crm-region-field-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/crm-region-field.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/crm-region-field-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/crm-region-field.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/crm-region-field.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: buried-07 (buried)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/disk-full-du-df-discrepancy-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/disk-full-du-df-discrepancy.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/disk-full-du-df-discrepancy-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/disk-full-du-df-discrepancy.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/disk-full-du-df-discrepancy.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: insight-07 (insight)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/ledgerline-export-memory-limit-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/ledgerline-export-memory-limit.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/ledgerline-export-memory-limit-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/ledgerline-export-memory-limit.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/ledgerline-export-memory-limit.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: insight-01 (insight)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/reporting-timezone-europe-berlin-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/reporting-timezone-europe-berlin.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/reporting-timezone-europe-berlin-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/reporting-timezone-europe-berlin.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/reporting-timezone-europe-berlin.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-10 (preference)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/terraform-workflow-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/terraform-workflow.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/terraform-workflow-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/terraform-workflow.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/terraform-workflow.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-04 (preference)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/vendor-export-unit-change-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/vendor-export-unit-change.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/vendor-export-unit-change-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-ledgerline/vendor-export-unit-change.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/vendor-export-unit-change.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: buried-02 (buried)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/quillmark-pdf-box-defaults-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/quillmark-pdf-box-defaults.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/quillmark-pdf-box-defaults-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/quillmark-pdf-box-defaults.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/quillmark-pdf-box-defaults.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: insight-17 (insight)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/quillmark-theme-search-path-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/quillmark-theme-search-path.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/quillmark-theme-search-path-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/quillmark-theme-search-path.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/quillmark-theme-search-path.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: buried-08 (buried)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/registry-structure-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/registry-structure.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/registry-structure-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/registry-structure.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/registry-structure.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-06 (preference)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/test-failure-reporting-convention-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/test-failure-reporting-convention.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/test-failure-reporting-convention-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/test-failure-reporting-convention.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/test-failure-reporting-convention.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-03 (preference)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/testing-and-golden-file-conventions-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/testing-and-golden-file-conventions.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/testing-and-golden-file-conventions-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/testing-and-golden-file-conventions.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/testing-and-golden-file-conventions.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-09 (preference)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/theme-resolution-behavior-legacy.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/theme-resolution-behavior.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/theme-resolution-behavior-status.md": {
+    "origin": "constructed",
+    "from": "home-dev-quillmark/theme-resolution-behavior.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/theme-resolution-behavior.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-03 (preference)",
+    "kind": "good"
+  },
+  "ivybridge-bike-store-legacy.md": {
+    "origin": "constructed",
+    "from": "ivybridge-bike-store.md",
+    "kind": "stale"
+  },
+  "ivybridge-bike-store-status.md": {
+    "origin": "constructed",
+    "from": "ivybridge-bike-store.md",
+    "kind": "ephemeral"
+  },
+  "ivybridge-bike-store.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/ivybridge-bike-store.md",
+    "kind": "good"
+  },
+  "juniper-translation-glossary-legacy.md": {
+    "origin": "constructed",
+    "from": "juniper-translation-glossary.md",
+    "kind": "stale"
+  },
+  "juniper-translation-glossary-status.md": {
+    "origin": "constructed",
+    "from": "juniper-translation-glossary.md",
+    "kind": "ephemeral"
+  },
+  "juniper-translation-glossary.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/juniper-translation-glossary.md",
+    "kind": "good"
+  },
+  "kestrel-drone-battery-care-legacy.md": {
+    "origin": "constructed",
+    "from": "kestrel-drone-battery-care.md",
+    "kind": "stale"
+  },
+  "kestrel-drone-battery-care-status.md": {
+    "origin": "constructed",
+    "from": "kestrel-drone-battery-care.md",
+    "kind": "ephemeral"
+  },
+  "kestrel-drone-battery-care.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/kestrel-drone-battery-care.md",
+    "kind": "good"
+  },
+  "lindenhall-parking-rules-legacy.md": {
+    "origin": "constructed",
+    "from": "lindenhall-parking-rules.md",
+    "kind": "stale"
+  },
+  "lindenhall-parking-rules-status.md": {
+    "origin": "constructed",
+    "from": "lindenhall-parking-rules.md",
+    "kind": "ephemeral"
+  },
+  "lindenhall-parking-rules.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/lindenhall-parking-rules.md",
+    "kind": "good"
+  },
+  "litellm-key-rpm-shared-across-models-legacy.md": {
+    "origin": "constructed",
+    "from": "litellm-key-rpm-shared-across-models.md",
+    "kind": "stale"
+  },
+  "litellm-key-rpm-shared-across-models-status.md": {
+    "origin": "constructed",
+    "from": "litellm-key-rpm-shared-across-models.md",
+    "kind": "ephemeral"
+  },
+  "litellm-key-rpm-shared-across-models.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-04/memories/litellm-key-rpm-shared-across-models.md",
+    "kind": "good"
+  },
+  "moorfield-onboarding-quiz-legacy.md": {
+    "origin": "constructed",
+    "from": "moorfield-onboarding-quiz.md",
+    "kind": "stale"
+  },
+  "moorfield-onboarding-quiz-status.md": {
+    "origin": "constructed",
+    "from": "moorfield-onboarding-quiz.md",
+    "kind": "ephemeral"
+  },
+  "moorfield-onboarding-quiz.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/moorfield-onboarding-quiz.md",
+    "kind": "good"
+  },
+  "newsletter-merge-field-header-mismatch-legacy.md": {
+    "origin": "constructed",
+    "from": "newsletter-merge-field-header-mismatch.md",
+    "kind": "stale"
+  },
+  "newsletter-merge-field-header-mismatch-status.md": {
+    "origin": "constructed",
+    "from": "newsletter-merge-field-header-mismatch.md",
+    "kind": "ephemeral"
+  },
+  "newsletter-merge-field-header-mismatch.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-15/memories/newsletter-merge-field-header-mismatch.md",
+    "kind": "good"
+  },
+  "nightly-e2e-run-2026-09-18.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-03/memories/nightly-e2e-run-2026-09-18.md",
+    "kind": "ephemeral"
+  },
+  "node-18-support-decision-pending.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-06/memories/node-18-support-decision-pending.md",
+    "kind": "ephemeral"
+  },
+  "northgate-invoice-archive-legacy.md": {
+    "origin": "constructed",
+    "from": "northgate-invoice-archive.md",
+    "kind": "stale"
+  },
+  "northgate-invoice-archive-status.md": {
+    "origin": "constructed",
+    "from": "northgate-invoice-archive.md",
+    "kind": "ephemeral"
+  },
+  "northgate-invoice-archive.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/northgate-invoice-archive.md",
+    "kind": "good"
+  },
+  "oldcastle-ferry-timetable-legacy.md": {
+    "origin": "constructed",
+    "from": "oldcastle-ferry-timetable.md",
+    "kind": "stale"
+  },
+  "oldcastle-ferry-timetable-status.md": {
+    "origin": "constructed",
+    "from": "oldcastle-ferry-timetable.md",
+    "kind": "ephemeral"
+  },
+  "oldcastle-ferry-timetable.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/oldcastle-ferry-timetable.md",
+    "kind": "good"
+  },
+  "orders-index-migration-blocked-writes-legacy.md": {
+    "origin": "constructed",
+    "from": "orders-index-migration-blocked-writes.md",
+    "kind": "stale"
+  },
+  "orders-index-migration-blocked-writes-status.md": {
+    "origin": "constructed",
+    "from": "orders-index-migration-blocked-writes.md",
+    "kind": "ephemeral"
+  },
+  "orders-index-migration-blocked-writes.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-13/memories/orders-index-migration-blocked-writes.md",
+    "kind": "good"
+  },
+  "pinewood-label-printer-legacy.md": {
+    "origin": "constructed",
+    "from": "pinewood-label-printer.md",
+    "kind": "stale"
+  },
+  "pinewood-label-printer-status.md": {
+    "origin": "constructed",
+    "from": "pinewood-label-printer.md",
+    "kind": "ephemeral"
+  },
+  "pinewood-label-printer.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/pinewood-label-printer.md",
+    "kind": "good"
+  },
+  "playwright-networkidle-chat-widget-legacy.md": {
+    "origin": "constructed",
+    "from": "playwright-networkidle-chat-widget.md",
+    "kind": "stale"
+  },
+  "playwright-networkidle-chat-widget-status.md": {
+    "origin": "constructed",
+    "from": "playwright-networkidle-chat-widget.md",
+    "kind": "ephemeral"
+  },
+  "playwright-networkidle-chat-widget.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-01/memories/playwright-networkidle-chat-widget.md",
+    "kind": "good"
+  },
+  "preview-server-upgrade-2026-09-03.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-04/memories/preview-server-upgrade-2026-09-03.md",
+    "kind": "ephemeral"
+  },
+  "print-pipeline-release-blocked.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-01/memories/print-pipeline-release-blocked.md",
+    "kind": "ephemeral"
+  },
+  "quarry-hill-sampling-plan-legacy.md": {
+    "origin": "constructed",
+    "from": "quarry-hill-sampling-plan.md",
+    "kind": "stale"
+  },
+  "quarry-hill-sampling-plan-status.md": {
+    "origin": "constructed",
+    "from": "quarry-hill-sampling-plan.md",
+    "kind": "ephemeral"
+  },
+  "quarry-hill-sampling-plan.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/quarry-hill-sampling-plan.md",
+    "kind": "good"
+  },
+  "ravenscar-podcast-gear-legacy.md": {
+    "origin": "constructed",
+    "from": "ravenscar-podcast-gear.md",
+    "kind": "stale"
+  },
+  "ravenscar-podcast-gear-status.md": {
+    "origin": "constructed",
+    "from": "ravenscar-podcast-gear.md",
+    "kind": "ephemeral"
+  },
+  "ravenscar-podcast-gear.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/ravenscar-podcast-gear.md",
+    "kind": "good"
+  },
+  "release-tag-follow-tags-lightweight-legacy.md": {
+    "origin": "constructed",
+    "from": "release-tag-follow-tags-lightweight.md",
+    "kind": "stale"
+  },
+  "release-tag-follow-tags-lightweight-status.md": {
+    "origin": "constructed",
+    "from": "release-tag-follow-tags-lightweight.md",
+    "kind": "ephemeral"
+  },
+  "release-tag-follow-tags-lightweight.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-08/memories/release-tag-follow-tags-lightweight.md",
+    "kind": "good"
+  },
+  "renewed-cert-not-served-until-reload-legacy.md": {
+    "origin": "constructed",
+    "from": "renewed-cert-not-served-until-reload.md",
+    "kind": "stale"
+  },
+  "renewed-cert-not-served-until-reload-status.md": {
+    "origin": "constructed",
+    "from": "renewed-cert-not-served-until-reload.md",
+    "kind": "ephemeral"
+  },
+  "renewed-cert-not-served-until-reload.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-11/memories/renewed-cert-not-served-until-reload.md",
+    "kind": "good"
+  },
+  "reset-emails-spam-missing-spf-include-legacy.md": {
+    "origin": "constructed",
+    "from": "reset-emails-spam-missing-spf-include.md",
+    "kind": "stale"
+  },
+  "reset-emails-spam-missing-spf-include-status.md": {
+    "origin": "constructed",
+    "from": "reset-emails-spam-missing-spf-include.md",
+    "kind": "ephemeral"
+  },
+  "reset-emails-spam-missing-spf-include.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-19/memories/reset-emails-spam-missing-spf-include.md",
+    "kind": "good"
+  },
+  "rsync-backup-nested-site-folder-legacy.md": {
+    "origin": "constructed",
+    "from": "rsync-backup-nested-site-folder.md",
+    "kind": "stale"
+  },
+  "rsync-backup-nested-site-folder-status.md": {
+    "origin": "constructed",
+    "from": "rsync-backup-nested-site-folder.md",
+    "kind": "ephemeral"
+  },
+  "rsync-backup-nested-site-folder.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-22/memories/rsync-backup-nested-site-folder.md",
+    "kind": "good"
+  },
+  "search-pod-liveness-restart-loop-legacy.md": {
+    "origin": "constructed",
+    "from": "search-pod-liveness-restart-loop.md",
+    "kind": "stale"
+  },
+  "search-pod-liveness-restart-loop-status.md": {
+    "origin": "constructed",
+    "from": "search-pod-liveness-restart-loop.md",
+    "kind": "ephemeral"
+  },
+  "search-pod-liveness-restart-loop.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-17/memories/search-pod-liveness-restart-loop.md",
+    "kind": "good"
+  },
+  "sheets-append-raw-dates-as-text-legacy.md": {
+    "origin": "constructed",
+    "from": "sheets-append-raw-dates-as-text.md",
+    "kind": "stale"
+  },
+  "sheets-append-raw-dates-as-text-status.md": {
+    "origin": "constructed",
+    "from": "sheets-append-raw-dates-as-text.md",
+    "kind": "ephemeral"
+  },
+  "sheets-append-raw-dates-as-text.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-18/memories/sheets-append-raw-dates-as-text.md",
+    "kind": "good"
+  },
+  "sprint-41-retro-notes.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-05/memories/sprint-41-retro-notes.md",
+    "kind": "ephemeral"
+  },
+  "stanmore-library-loans-legacy.md": {
+    "origin": "constructed",
+    "from": "stanmore-library-loans.md",
+    "kind": "stale"
+  },
+  "stanmore-library-loans-status.md": {
+    "origin": "constructed",
+    "from": "stanmore-library-loans.md",
+    "kind": "ephemeral"
+  },
+  "stanmore-library-loans.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/stanmore-library-loans.md",
+    "kind": "good"
+  },
+  "supplier-csv-bom-keyerror-legacy.md": {
+    "origin": "constructed",
+    "from": "supplier-csv-bom-keyerror.md",
+    "kind": "stale"
+  },
+  "supplier-csv-bom-keyerror-status.md": {
+    "origin": "constructed",
+    "from": "supplier-csv-bom-keyerror.md",
+    "kind": "ephemeral"
+  },
+  "supplier-csv-bom-keyerror.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-09/memories/supplier-csv-bom-keyerror.md",
+    "kind": "good"
+  },
+  "thornley-fire-drill-legacy.md": {
+    "origin": "constructed",
+    "from": "thornley-fire-drill.md",
+    "kind": "stale"
+  },
+  "thornley-fire-drill-status.md": {
+    "origin": "constructed",
+    "from": "thornley-fire-drill.md",
+    "kind": "ephemeral"
+  },
+  "thornley-fire-drill.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/thornley-fire-drill.md",
+    "kind": "good"
+  },
+  "ulverston-wiki-style-legacy.md": {
+    "origin": "constructed",
+    "from": "ulverston-wiki-style.md",
+    "kind": "stale"
+  },
+  "ulverston-wiki-style-status.md": {
+    "origin": "constructed",
+    "from": "ulverston-wiki-style.md",
+    "kind": "ephemeral"
+  },
+  "ulverston-wiki-style.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/ulverston-wiki-style.md",
+    "kind": "good"
+  },
+  "wetherby-courier-contract-legacy.md": {
+    "origin": "constructed",
+    "from": "wetherby-courier-contract.md",
+    "kind": "stale"
+  },
+  "wetherby-courier-contract-status.md": {
+    "origin": "constructed",
+    "from": "wetherby-courier-contract.md",
+    "kind": "ephemeral"
+  },
+  "wetherby-courier-contract.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/wetherby-courier-contract.md",
+    "kind": "good"
+  },
+  "windows-agent-crlf-shell-scripts-legacy.md": {
+    "origin": "constructed",
+    "from": "windows-agent-crlf-shell-scripts.md",
+    "kind": "stale"
+  },
+  "windows-agent-crlf-shell-scripts-status.md": {
+    "origin": "constructed",
+    "from": "windows-agent-crlf-shell-scripts.md",
+    "kind": "ephemeral"
+  },
+  "windows-agent-crlf-shell-scripts.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-21/memories/windows-agent-crlf-shell-scripts.md",
+    "kind": "good"
+  },
+  "yewdale-trail-closures-legacy.md": {
+    "origin": "constructed",
+    "from": "yewdale-trail-closures.md",
+    "kind": "stale"
+  },
+  "yewdale-trail-closures-status.md": {
+    "origin": "constructed",
+    "from": "yewdale-trail-closures.md",
+    "kind": "ephemeral"
+  },
+  "yewdale-trail-closures.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/yewdale-trail-closures.md",
+    "kind": "good"
+  }
+}

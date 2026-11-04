@@ -1,0 +1,5 @@
+---
+description: "Resolving JSON parsing failures in the tagging pipeline by enforcing strict response formats."
+---
+
+The automated tagging system previously encountered a significant error rate where approximately 12.5% of model outputs were invalid. Specifically, the local model returned text enclosed within triple backticks and labeled with the identifier "json". This formatting caused the standard `json.loads` function to crash, resulting in those specific articles remaining untagged. Initial attempts to mitigate this issue by modifying the prompt instructions to request raw JSON data proved ineffective, as the failure rate remained unchanged. However, leveraging the API endpoint's native capability to enforce structure resolved the problem entirely. By configuring the request parameter `response_format` to `json_object`, the system successfully processed a subsequent batch of 400 items without any parsing errors. This configuration ensures that all returned data conforms to valid JSON syntax, eliminating the need for manual cleanup or retry logic for malformed responses.

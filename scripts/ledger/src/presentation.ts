@@ -20,6 +20,7 @@ const tests: Record<string, [string, string]> = {
   promotion: ["Proposal selection", "Can AKM accept useful promotion proposals and reject duplicates, stale content and temporary facts?"],
   bakeoff: ["Core model tasks", "Can the model produce correct memories, metadata repairs, session summaries and consolidation plans?"],
   "judge-gate": ["Lesson approval", "Can AKM's judge approve useful lessons while catching harmful or unnecessary ones?"],
+  "drain-judge": ["Promotion judgment", "Can the drain's judgment accept useful promotions and reject duplicates, stale content and temporary facts, one proposal at a time?"],
   distill: ["Lesson creation", "Can AKM turn useful memories into accurate lessons, update existing lessons and avoid unnecessary ones?"],
   retrieval: ["Library search", "How well does AKM rank relevant assets for queries with human relevance judgments?"],
   skillret: ["Skill search", "How well does keyword or semantic search rank relevant skills across the SkillRet benchmark?"],
@@ -94,6 +95,12 @@ export function scores(summary: Record<string, unknown>): Score[] {
       ratio("Good proposals approved", "good.rate", "good.passed", "good.n", "Useful proposals approved out of all labelled good proposals. Read alongside approval precision to distinguish useful acceptance from an overly strict gate.");
       ratio("Bad lessons approved", "bad.rate", "bad.passed", "bad.n", "Harmful or unnecessary lessons incorrectly approved.", true);
       ratio("Harmful lessons approved", "bad_harmful.rate", "bad_harmful.passed", "bad_harmful.n", "Harmful lessons incorrectly approved; zero is the target.", true);
+      break;
+    case "drain-judge":
+      ratio("Accepted promotions that were good", "precision.value", "precision.accepted_good", "precision.accepted", "Good promotions out of all promotions the judgment accepted.");
+      ratio("Good promotions accepted", "good_accepted.rate", "good_accepted.count", "good_accepted.n", "Useful promotions accepted out of all labelled good promotions.");
+      ratio("Bad promotions accepted", "bad_accepted.rate", "bad_accepted.count", "bad_accepted.n", "Ephemeral, duplicate or stale promotions the judgment accepted: they would be written with no one looking; zero is the target.", true);
+      ratio("Good promotions rejected", "good_rejected.rate", "good_rejected.count", "good_rejected.n", "Useful promotions the judgment rejected outright: work lost.", true);
       break;
     case "distill":
       ratio("Good lessons created", "good_lessons.rate", "good_lessons.good", "good_lessons.n", "Lesson-worthy cases whose new lesson passed every check.");

@@ -1,0 +1,5 @@
+---
+description: "Summary of the protocol for concise test failure reporting."
+---
+
+The established standard mandates that output regarding failed tests must strictly adhere to a minimal format. Specifically, one should identify the specific test case that did not pass and provide only the initial assertion error associated with it. Immediately following this information, the command that was executed must be listed on the final line. It is imperative to exclude any explanatory text, decorative emojis, section headings, or additional commentary. This approach ensures that the output remains concise and machine-readable, aligning with the project's workflow and avoiding unnecessary verbosity. The user explicitly corrected the agent's verbose test failure reporting style during this session, reinforcing the need for this strict adherence to the convention. By omitting all extra text, the output becomes more efficient and easier to parse, which is crucial for maintaining clarity and consistency in the project's documentation and reporting processes.

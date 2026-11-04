@@ -1,0 +1,5 @@
+---
+description: "A case study on how case-sensitive column matching in a mailing tool caused placeholder leakage for a subset of subscribers."
+---
+
+The Larkspur reading club’s October email campaign exposed a technical flaw where 312 recipients received the literal string `Hello {{first_name}}` instead of their actual names. This error occurred because the mailing platform performs exact string comparisons for merge fields. The primary data source utilized the lowercase key `first_name`, which aligned correctly with the template variable. However, the secondary spreadsheet, containing the problematic 312 entries, used the title `First Name` with an uppercase 'N'. Since the tool does not ignore case differences, the system failed to map the variable, leaving the raw placeholder visible. To resolve this, the secondary file’s header was changed to `first_name` and re-imported, correcting the November issue. Note that the platform’s preview feature only renders the first contact in the list; because that initial entry came from the correct source, the preview appeared functional despite the widespread error affecting the rest of the batch.
