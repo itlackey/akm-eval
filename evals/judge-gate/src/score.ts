@@ -5,6 +5,8 @@
 //
 // A fix here applies to stored runs too: scripts/rescore scores them again from their raw outputs.
 
+import { type Route, routeOf } from "../../../lib/judge.ts";
+
 /**
  * What a bad revision does to the asset. `harmful`: a fact is invented, reversed or dropped (or a dated note is offered for current work).
  * `churn`: every fact survives and nothing false is added, but no changed field fixes a real problem (a sound field reworded). `other`: not
@@ -38,7 +40,7 @@ export interface Case {
 export type Lane = "negative" | "maintenance";
 export const laneOf = (feedback: string): Lane => (feedback.split("\n").some((l) => l.startsWith("[negative]")) ? "negative" : "maintenance");
 
-export type Outcome = "pass" | "review" | "reject" | "error";
+export type Outcome = Route | "error";
 
 export interface Row {
   id: string;
@@ -67,7 +69,7 @@ export interface Row {
  */
 export interface Raw {
   /**
-   * What `akm judge reflect.quality --format json` printed, as verdictOf reads it: `pass`, `score`, `reviewNeeded`, `reason`, `criteria` and `engine`, with the model
+   * What `akm judge reflect.quality --format json` printed, as verdictOf reads it: `pass`, `score`, `reviewNeeded`, `reason`, `criteria`, `engine` and `schemaVersion`, with the model
    * endpoint written as <MODEL_BASE_URL> in the reason. Absent when akm gave none: it failed, or was killed at the time limit. Anything that is
    * not an object with a `pass` and a `score` is a reply with no verdict.
    */
@@ -85,20 +87,7 @@ type Scored = Pick<Case, "id" | "set" | "label" | "severity" | "feedback">;
 const identity = (c: Scored, seconds: number) => ({ id: c.id, set: c.set, label: c.label, lane: laneOf(c.feedback), seconds, ...(c.severity ? { severity: c.severity } : {}) });
 
 /**
- * DELETE WHEN akm#1418 (PR #1419) HAS SHIPPED, AS A MEASUREMENT BUMP. Reflect sends a revision to a person only when its mean is 3.5 or more;
- * the judge's own `reviewNeeded` is the wider band from 2.5 (the same for every judge). #1418 moves the 3.5 into the reflect judge's verdict,
- * so `reviewNeeded` is then the route reflect takes. A build before it is routed from the stored score here; a build with it is unchanged
- * (its `reviewNeeded` is already 3.5 or more).
- *
- * Deleting this constant changes what a stored run means: the non-passes with `reviewNeeded` and a score from 2.5 to 3.49 (about a third of
- * all rows) move from reject to review, so `review_share` and `good_rejected` change. So deleting it bumps `MEASUREMENT.version`, and a run
- * on an akm before #1418 must not be rescored after it: scripts/rescore would score it as if the judge had the new band. The baseline
- * is run again on an akm that has #1418 (MEASUREMENT_CHANGELOG.md).
- */
-const REFLECT_REVIEW_MIN_SCORE = 3.5;
-
-/**
- * the verdict of `akm judge reflect.quality`, as printed with --format json (the envelope's `verdict`, or the no-verdict reading of an `error` or `unparseable` outcome).
+ * The route of the verdict of `akm judge reflect.quality`, as printed with --format json (the envelope's `verdict`, or the no-verdict reading of an `error` or `unparseable` outcome).
  *
  * A score of -1 is akm saying the judge gave no verdict, and `reviewNeeded` is akm routing the proposal to a person: it did not
  * pass. That covers a reply akm could not read, even after its one retry, and a judge call that timed out or failed inside akm, and the
@@ -119,8 +108,7 @@ export function rowFromVerdict(c: Scored, verdict: unknown, seconds: number): Ro
     if (v.reviewNeeded) return { ...base, outcome: "review", score: null, criteria, reason, engine };
     return { ...base, outcome: "error", score: null, criteria, reason, engine, error: reason || "no verdict" };
   }
-  const outcome: Outcome = v.pass ? "pass" : v.reviewNeeded && v.score >= REFLECT_REVIEW_MIN_SCORE ? "review" : "reject";
-  return { ...base, outcome, score: v.score, criteria, reason, engine };
+  return { ...base, outcome: routeOf(v), score: v.score, criteria, reason, engine };
 }
 
 /** Did akm give a verdict on the case? An errored row did not, and neither did a review that akm routed there with a score of -1. */
@@ -145,7 +133,12 @@ export function makeRow(c: Scored, raw: Raw): Row {
 export function rawOf(row: Record<string, any>): { raw: Raw } | { missing: string[] } {
   const missing: string[] = [];
   if (typeof row.seconds !== "number") missing.push("seconds");
-  if (Object.hasOwn(row, "verdict")) return missing.length > 0 ? { missing } : { raw: { verdict: row.verdict, seconds: row.seconds } };
+  if (Object.hasOwn(row, "verdict")) {
+    // A verdict without the judge's schemaVersion is from before reviewNeeded was reflect's own route (schema 2, akm#1418): its non-passes from a mean of 2.5 to 3.49 say review that reflect would reject. Scored by the route above they would change meaning, so they are not scored again.
+    const v = row.verdict;
+    if (typeof v === "object" && v !== null && !Array.isArray(v) && typeof v.schemaVersion !== "number") missing.push("verdict.schemaVersion");
+    return missing.length > 0 ? { missing } : { raw: { verdict: row.verdict, seconds: row.seconds } };
+  }
   if (row.outcome !== "error") missing.push("verdict");
   else if (typeof row.error !== "string") missing.push("error");
   if (missing.length > 0) return { missing };

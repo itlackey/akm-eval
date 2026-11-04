@@ -41,6 +41,10 @@ below describe the original grading work, not a new agreement study.
 `fast/qwen3.6-35b-a3b` (prompt `umbrela-akm-v1`, temperature 0). The library has 2,033 rows (2,001 query/asset identities), 604 of them relevant identities.
 Every column of every published library run is 100% judged. One of them, q012's `agents/print/qa-coordinator`, was then corrected from 3 to 1 in review (`claude-review`). Retrieval scoring 0.5.
 
+## code/
+
+A set of your own in this format, committed: 30 code-shaped lookups (flags, identifiers, config keys, environment variables, error strings, snippets) whose answers sit inside fenced code of `corpus/library`, graded by the judge endpoint `fast/qwen3.6-35b-a3b`. Run it with `--cases evals/retrieval/assets/code`; `code/library` is a link to the public library. It is not a collection of a default run, and `./generate-assets` does not touch it. See [`code/README.md`](code/README.md).
+
 ## queries.jsonl
 
 One JSON object per line.

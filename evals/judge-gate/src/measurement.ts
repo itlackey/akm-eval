@@ -27,7 +27,7 @@ function assetsOf(root: string, summary: Record<string, any>): string {
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.4",
+  version: "0.5",
   loadCases: (root, summary) => {
     const file = join(assetsOf(root, summary), CASES);
     return parseCases(readFileSync(file, "utf8"), file);

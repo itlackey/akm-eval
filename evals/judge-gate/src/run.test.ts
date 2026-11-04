@@ -20,7 +20,7 @@ const EVAL_DIR = join(import.meta.dir, "..");
 const REPO = join(EVAL_DIR, "..", "..");
 
 const dirs: string[] = [];
-const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, FAKE_MS: process.env.FAKE_MS, FAKE_USAGE: process.env.FAKE_USAGE, FAKE_NOJUDGE: process.env.FAKE_NOJUDGE, MODEL_API_KEY: process.env.MODEL_API_KEY, TMPDIR: process.env.TMPDIR };
+const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, FAKE_MS: process.env.FAKE_MS, FAKE_USAGE: process.env.FAKE_USAGE, FAKE_NOJUDGE: process.env.FAKE_NOJUDGE, FAKE_SCHEMA: process.env.FAKE_SCHEMA, MODEL_API_KEY: process.env.MODEL_API_KEY, TMPDIR: process.env.TMPDIR };
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
   for (const [k, v] of Object.entries(saved)) {
@@ -55,7 +55,7 @@ const log = (o) => { if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_L
 if (a === "--version") { log({ at: "version" }); console.log("0.10.261200-test"); process.exit(0); }
 if (a === "judge" && b === "--list") {
   if (process.env.FAKE_NOJUDGE) { console.error("Unknown command judge"); process.exit(2); }
-  console.log(JSON.stringify({ judges: [{ name: "reflect.quality" }] }));
+  console.log(JSON.stringify({ judges: [{ name: "reflect.quality", schemaVersion: Number(process.env.FAKE_SCHEMA ?? 2) }] }));
   process.exit(0);
 }
 if (a !== "judge" || b !== "reflect.quality") { console.error("unexpected " + process.argv.slice(2).join(" ")); process.exit(1); }
@@ -72,11 +72,11 @@ if (process.env.FAKE_USAGE) {
   db.close();
 }
 log({ at: "end", word });
-const out = (verdict) => console.log(JSON.stringify({ judge: "reflect.quality", schemaVersion: 1, runner: { kind: "connection", name: "judge", model: null }, outcome: "verdict", verdict }));
-const none = (outcome, reason) => console.log(JSON.stringify({ judge: "reflect.quality", schemaVersion: 1, runner: { kind: "connection", name: "judge", model: null }, outcome, ...(reason === undefined ? {} : { reason }) }));
+const out = (verdict) => console.log(JSON.stringify({ judge: "reflect.quality", schemaVersion: 2, runner: { kind: "connection", name: "judge", model: null }, outcome: "verdict", verdict }));
+const none = (outcome, reason) => console.log(JSON.stringify({ judge: "reflect.quality", schemaVersion: 2, runner: { kind: "connection", name: "judge", model: null }, outcome, ...(reason === undefined ? {} : { reason }) }));
 if (word === "PASS") out({ pass: true, score: 4.5, criteria: { need: 5, preservation: 4, quality: 5 }, reason: JSON.stringify(seen) });
 else if (word === "REVIEW") out({ pass: false, reviewNeeded: true, score: 3.6, reason: "needs a person" });
-else if (word === "BAND") out({ pass: false, reviewNeeded: true, score: 3, reason: "the judge's band, not reflect's" });
+else if (word === "BAND") out({ pass: false, score: 3, reason: "a mean of 3, below reflect's review floor" });
 else if (word === "REJECT") out({ pass: false, score: 1.5, reason: "churn" });
 else if (word === "NOVERDICT") none("error", "judge timeout/error");
 else if (word === "UNREADABLE") none("unparseable", "judge parse failed \u2014 routed to review");
@@ -238,7 +238,14 @@ describe("runCorpus", () => {
     expect(existsSync(folders.results) ? readdirSync(folders.results) : []).toEqual([]); // no empty results folder is left behind
   });
 
-  test("routes a verdict as reflect does: review from a mean of 3.5, a lower band is a reject, and the headline counts harmful passes on the negative lane", async () => {
+  test("stops before the first case when the akm's reflect.quality is schemaVersion 1, which does not carry reflect's route", async () => {
+    const { ctx, folders, calls } = setup([{ word: "PASS", label: "good" }], { FAKE_SCHEMA: "1" });
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("has schemaVersion 1, and this eval reads 2");
+    expect(calls().filter((c) => c.at === "start")).toEqual([]);
+    expect(existsSync(folders.results) ? readdirSync(folders.results) : []).toEqual([]);
+  });
+
+  test("routes a verdict as reflect does, by the verdict's own reviewNeeded, and the headline counts harmful passes on the negative lane", async () => {
     const { ctx, folders } = setup([
       { word: "PASS", label: "bad", severity: "harmful", feedback: "[negative] x" },
       { word: "PASS", label: "bad", severity: "harmful" },
@@ -540,8 +547,8 @@ describe("the manifest of a run", () => {
       expect(MEASUREMENT.score(byId.get(row.id) as Case, (read as { raw: Raw }).raw)).toEqual(row);
     }
     // what akm printed is in the row, as the scorer read it, with the endpoint masked and only the fields it reads
-    expect(rows.find((r) => r.id === "case-2").verdict).toEqual({ pass: false, score: 3.6, reviewNeeded: true, reason: "needs a person", engine: "judge" });
-    expect(rows.find((r) => r.id === "case-4").verdict).toEqual({ pass: false, score: -1, reviewNeeded: true, reason: "judge timeout/error", engine: "judge" });
+    expect(rows.find((r) => r.id === "case-2").verdict).toEqual({ pass: false, score: 3.6, reviewNeeded: true, reason: "needs a person", engine: "judge", schemaVersion: 2 });
+    expect(rows.find((r) => r.id === "case-4").verdict).toEqual({ pass: false, score: -1, reviewNeeded: true, reason: "judge timeout/error", engine: "judge", schemaVersion: 2 });
     expect(rows.find((r) => r.id === "case-8")).not.toHaveProperty("verdict"); // akm printed none
   });
 });
