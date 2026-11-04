@@ -71,3 +71,11 @@ test('lesson judge reports new lessons and updates apart, with the bad ones as a
   expect(result.find(score => score.label === 'Bad new lessons passed')).toMatchObject({ value: .25, numerator: 5, denominator: 20, lower_is_better: true });
   expect(result.find(score => score.label === 'Bad lesson updates passed')).toMatchObject({ value: .1, numerator: 1, denominator: 10, lower_is_better: true });
 });
+
+test("pair judge headlines unsafe retirements next to the safe ones it finds", () => {
+  const result = scores({ eval: "pair-judge", metrics: { unsafe: { n: 88, count: 2, rate: .0227 }, found: { n: 65, count: 60, rate: .9231 }, precision: { value: .9677, safe: 60, retired: 62 }, relation: { n: 110, count: 90, rate: .8182 }, claims: { labelled: 160, found: 140, found_rate: .875 }, failed: { n: 112, count: 2, rate: .0179 } } });
+  expect(result.find(score => score.label === "Unsafe retirements")).toMatchObject({ value: .0227, numerator: 2, denominator: 88, lower_is_better: true });
+  expect(result.find(score => score.label === "Safe retirements found")).toMatchObject({ value: .9231, numerator: 60, denominator: 65 });
+  expect(result.find(score => score.label === "Claims found")).toMatchObject({ value: .875, numerator: 140, denominator: 160 });
+  expect(testInfo("pair-judge").name).toBe("Pair comparison");
+});

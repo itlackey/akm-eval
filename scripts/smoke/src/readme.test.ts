@@ -27,7 +27,7 @@ const helpTest = (folder: string) => (needsUv(folder) && !HAS_UV ? test.skip : t
  * The evals that run on the shared driver, lib/run.ts, which writes their summary.json. What the README says under its table that they all
  * record is written there, except the counts and the metrics, which the driver takes from the `summarize` of each eval.
  */
-const DRIVER_EVALS = ["evals/judge-gate", "evals/lesson-judge", "evals/reflect", "evals/distill", "evals/consolidate", "evals/extract", "evals/nightly", "evals/promotion", "evals/bakeoff"];
+const DRIVER_EVALS = ["evals/judge-gate", "evals/lesson-judge", "evals/pair-judge", "evals/reflect", "evals/distill", "evals/consolidate", "evals/extract", "evals/nightly", "evals/promotion", "evals/bakeoff"];
 const DRIVER_RECORDED = ["model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "timeout_ms", "concurrency", "model_calls", "manifest"];
 const FROM_SUMMARIZE = ["n_errored", "metrics"];
 

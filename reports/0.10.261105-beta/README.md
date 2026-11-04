@@ -60,7 +60,7 @@ requests can return different text at temperature 0. One run per side is one obs
 ## Headline table
 
 The first column is the published [0.10.261022 round](../0.10.261022/) (bakeoff and retrieval books in their `-rescored` folders:
-bakeoff scoring 0.5, retrieval scoring 0.4, as in akm-eval#171 and #173). The second is `akm-cli@0.10.261022` run again on
+bakeoff scoring 0.5, retrieval books scoring 0.4 and library scoring 0.5, as in akm-eval#171, #173 and #150). The second is `akm-cli@0.10.261022` run again on
 `bf07f14`, where the table below says the harness change can reach the eval; a dash is an eval that was not run again. The third
 is this round.
 
@@ -78,7 +78,7 @@ is this round.
 | promotion | accepted proposals that were good | 36/42 | 35/40 | 35/40 |
 | nightly | items handled right (harm) | 31/35 (0) | 31/35 (0) | 30/35 (1) |
 | retrieval, books | semantic / keyword nDCG@10 | 0.9103 / 0.8308 | 0.9103 / 0.8308 | 0.9103 / 0.8308 |
-| retrieval, library | semantic / keyword nDCG@10 | 0.8306 / 0.7752 | 0.8306 / 0.7752 | 0.8312 / 0.7752 |
+| retrieval, library | semantic / keyword nDCG@10 | 0.8240 / 0.7689 | 0.8240 / 0.7689 | 0.8245 / 0.7689 |
 | skillret | keyword / semantic NDCG@10 | 50.48 / 57.79 | - | 50.49 / 57.79 |
 | agent-ab | pass rate, akm / control | 8/18 / 1/18 | - | **12/18** / 2/18 |
 
@@ -117,6 +117,7 @@ differ only in harness head and time.
 | The collector writes akm's `connections` config for akm >= 0.10.261014-beta (the `engines` form before), and the summary gains `config_form` (#172) | every eval that makes model calls: reflect, distill, extract, judge-gate, bakeoff, consolidate, `--pool`, promotion, nightly | Collection. The model, endpoint and parameters are the same, the file akm reads is not; the published stable summaries were written in the `engines` form | each re-run on `akm-cli@0.10.261022` at `bf07f14` |
 | Bakeoff scoring 0.5: the protected-memory check is dropped from two cases, `consolidate-memory-pool` is not strict, one session-summary term is dropped (#171) | bakeoff | Labels only | the published stable bakeoff column is its `-rescored` folder (43/55, already in 0.10.261022's README); the re-run and the beta are scored at 0.5 by the run |
 | Retrieval books labels and scoring 0.4: 52 more books pairs graded (#173); the asset listing passes `--belief all` | retrieval | Books: labels only; the listing is a collection change with no model | the published stable books column is its `-books-rescored` folder; retrieval re-run on 0.10.261022 (books and library) |
+| Retrieval library labels and scoring 0.5: 157 more library pairs graded (#150), `judged_10` 1.0 on every published library run | retrieval | Library: labels only; every published library run is scored again in a `-rescored` folder | the library columns here are the `-rescored` folders (scoring 0.5): nDCG@10 reads 0.001 to 0.014 lower than at 0.4 on every run, older ones included (the 12-case 0.10.261005-beta timing run: 0.027 keyword, 0.034 semantic) |
 | `--pool` measures search and curate before and after retirements are accepted, and runs `proposal drain --promote --yes` after the proposal list (#170) | consolidate `--pool` | Collection (more steps, the existing metrics are read before them) | `--pool` re-run on 0.10.261022 |
 | Dated query set with a sentinel guard (#167), memory-utility (#152, #158, #168), ledger and site changes | none of the 13 | Not run (optional set, new eval) | nothing |
 | none | SkillRet, agent-ab | No collector, scorer or config-writing change reaches them (neither makes model calls through the akm config) | not run again; the published 0.10.261022 figures are used |
