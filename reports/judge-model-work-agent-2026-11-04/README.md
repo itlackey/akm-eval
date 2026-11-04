@@ -13,7 +13,10 @@ This is the measurement the issue asks for, on `fast/qwen3.6-35b-a3b` (lab), thi
 
 akm ran from each checkout (`bun src/cli.ts`, `--akm`); judge-gate needs no embedding. The eval head is `fda9867` plus one change in
 `lib/judge.ts`: the harness judge's opencode config sets `temperature: 0` on `akm-model-work` as well as on `build`. Without it the new agent
-would run at opencode's default for the model (0.55 for Qwen models), and the runs would differ by sampling and not by the prompt. A logging proxy
+would run with no temperature in the request (opencode 1.18.25 sends none for this model unless an agent sets one; checked with a stub endpoint),
+so at the server's default, and the runs would differ by sampling and not by the prompt. akm itself sends no temperature through a harness, on main
+and with akm#1426 alike (the judge's per-call temperature 0 reaches only a connection), so pinning 0 in the eval's own opencode config on both agents
+holds temperature equal across the three arms; it is the eval's setting, as `build`'s was before, not a change to akm. A logging proxy
 between the runs and the lab gateway (`proxy/proxy.mjs`, forwarding unchanged) recorded every request; `proxy/seg.mjs` splits its log by system
 prompt (`proxy/proxy-stats.txt`). The proxy logged all three runs in one file because the first proxy outlived its run (a wrapper pid was killed,
 not node); the three kinds of request are told apart by their system prompt, so nothing is mixed.
@@ -70,6 +73,9 @@ Per run (good / bad / harmful auto-accepted): main harness 79/5/1, 75/5/2, 72/4/
 Not run: opencode 2 through the judge-gate eval (the eval's harness config is opencode 1 only, `lib/judge.ts`; its note in `private/ISSUES.md`).
 One thing the issue did not say: on opencode 1 the environment block is followed, on a machine with Claude Code skills in `~/.claude`, by opencode's
 `skill` listing (about 17k characters here), because the unrestricted agent keeps the `skill` tool. The eval turns Claude Code files off, so it does not show in these runs; it does in a user's real model work.
+The akm PR now denies the `skill` tool on its opencode 1 agent, as opencode 2's agent already does (stub endpoint on 1.18.25: system prompt
+18,417 to 396 characters with one sandbox skill, the `skill` tool gone). The eval's requests do not change with it: the eval's opencode config
+denies every tool (`permission: {"*": "deny"}`) and hides Claude Code files, so these runs already had no tool and no listing (proxy: 0 tools).
 
 ## Files
 
