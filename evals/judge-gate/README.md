@@ -23,11 +23,17 @@ The model must return one JSON object when asked. A case is up to about 7k token
 
 ### On a harness
 
-`--harness opencode` puts the judge on your opencode (`akm judge reflect.quality --harness opencode --model eval/<model>`) in place of the default connection, with the model under test. The judge must not read your own setup, or it would differ from machine to machine, so the run gives akm a HOME and a cache folder inside its sandbox and an opencode config that holds the model under test as its only provider (temperature 0, reasoning off), and nothing else. Your `~/.claude` and its `CLAUDE.md` and skills, your MCP servers and your opencode config cannot reach the model (`lib/akm/isolation.test.ts` plants each in a HOME and shows it does not). That is a sandbox HOME and not a container, as agent-ab uses, because the judge is one model call that needs no tools and no files, not an agent working in a task folder.
+`--harness opencode` puts the judge on your opencode (`akm judge reflect.quality --harness opencode --model eval/<model>`) in place of the default connection, with the model under test. The judge must not read your own setup, or it would differ from machine to machine, so the run:
 
-The summary records `harness` (`name`, the `version` that `opencode --version` printed in the sandbox, `isolated_home`) and the manifest's `eval_settings` the same, so `scripts/compare` shows a harness run as a changed setting. What a harness run is not the same as:
+- gives akm a HOME and a cache folder inside its sandbox, and an opencode config that holds the model under test as its only provider (temperature 0, reasoning off, no tool);
+- tells opencode to read no project config and no Claude Code files (`OPENCODE_DISABLE_PROJECT_CONFIG`, `OPENCODE_DISABLE_CLAUDE_CODE`), because opencode also looks in every folder above its working folder, and a sandbox in a TMPDIR under your HOME has your own `~/.claude`, `AGENTS.md` and skills above it.
 
-- opencode sends its own system prompt and tools with the judge's prompt (about 12k prompt tokens a call on opencode 1.x against about 3k on a connection), and a second small request that titles the session. The model does not call any tool: the sandbox has no akm plugin, so the `akm_show` the judge's prompt offers is not there.
+Your `~/.claude` with its `CLAUDE.md` and skills, an `AGENTS.md` above the sandbox, your MCP servers and your opencode config cannot reach the model, and it has no tool to read a file by its path (`lib/akm/isolation.test.ts` plants each, with the sandbox inside the planted HOME, and shows the model's request holds none of them). That is a sandbox HOME and not a container, as agent-ab uses, because the judge is one model call that needs no tools and no files, not an agent working in a task folder. A first run that left the tools on found `~/.claude/skills` of the machine in the system prompt and the model reading it in 16 of 173 cases.
+
+The summary records `harness` (`name`, the `version` that `opencode --version` printed in the sandbox, `isolated_home`) and the manifest's `eval_settings` the same, so `scripts/compare` shows a harness run as a changed setting. A harness run is not the same call as a connection run:
+
+- opencode sends its own system prompt with the judge's prompt (about 4.3k prompt tokens a call on opencode 1.18, against about 3.2k on a connection), and a second small request that titles the session. akm reports no tokens for a harness call, so `model_calls` has the calls and the seconds and null tokens.
+- The judge gets no tool. The tool rules in its prompt offer `akm_show`, which needs the akm plugin, and the sandbox has none; the source and the candidate are in the prompt either way.
 - opencode 1 cannot be restricted to reading tools (akm reports it), and runs in akm's scratch folder.
 - Only opencode is wired. `claude` would need a login in an empty HOME, and the run does not set one up.
 - The first opencode command in a sandbox makes its database, and two at once fail with "database is locked", so the run makes it once before the first case.
