@@ -5,8 +5,8 @@ import { measuredEvals, REPO_ROOT } from "../../../lib/manifest.ts";
 import { SUPPORTED, comparePair } from "./lib.ts";
 import { manifested } from "./fixtures/make.ts";
 
-test("all 14 evals and benchmarks retain runners and comparison support", () => {
-  expect(SUPPORTED.length).toBe(14);
+test("all 15 evals and benchmarks retain runners and comparison support", () => {
+  expect(SUPPORTED.length).toBe(15);
   expect([...SUPPORTED].sort()).toEqual(measuredEvals());
   for (const name of SUPPORTED) expect(["evals", "benchmarks"].some(base => existsSync(join(REPO_ROOT, base, name, "run")))).toBe(true);
 });
