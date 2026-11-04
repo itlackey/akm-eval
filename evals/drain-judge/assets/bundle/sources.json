@@ -1,0 +1,1193 @@
+{
+  "apprise-matrix-room-hash-encoding.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-06/memories/apprise-matrix-room-hash-encoding.md",
+    "kind": "good"
+  },
+  "article-tagging-run-articles.md": {
+    "origin": "hand-written",
+    "from": "delegated-json-wrapped-in-fences.md",
+    "kind": "ephemeral"
+  },
+  "back-cover-barcode-scaled-to-70.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-16/memories/back-cover-barcode-scaled-to-70.md",
+    "kind": "good"
+  },
+  "backlog-audit-counted-issues.md": {
+    "origin": "hand-written",
+    "from": "gh-issue-list-default-limit.md",
+    "kind": "stale"
+  },
+  "batch-called-provider-directly.md": {
+    "origin": "hand-written",
+    "from": "litellm-key-rpm-shared-across-models.md",
+    "kind": "stale"
+  },
+  "brindle-site-backed-up.md": {
+    "origin": "hand-written",
+    "from": "rsync-backup-nested-site-folder.md",
+    "kind": "stale"
+  },
+  "brindle-site-backup-restore.md": {
+    "origin": "hand-written",
+    "from": "rsync-backup-nested-site-folder.md",
+    "kind": "ephemeral"
+  },
+  "chartered-boat-took-staff.md": {
+    "origin": "hand-written",
+    "from": "oldcastle-ferry-timetable.md",
+    "kind": "stale"
+  },
+  "checkout-outage-nine-minutes.md": {
+    "origin": "hand-written",
+    "from": "orders-index-migration-blocked-writes.md",
+    "kind": "ephemeral"
+  },
+  "ci-template-migration-progress.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-02/memories/ci-template-migration-progress.md",
+    "kind": "ephemeral"
+  },
+  "ci-updated-snapshots-and-passed.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-23/memories/ci-updated-snapshots-and-passed.md",
+    "kind": "good"
+  },
+  "cobble-lane-bookings-copied.md": {
+    "origin": "hand-written",
+    "from": "sheets-append-raw-dates-as-text.md",
+    "kind": "stale"
+  },
+  "cobble-lane-bookings-sheet.md": {
+    "origin": "hand-written",
+    "from": "sheets-append-raw-dates-as-text.md",
+    "kind": "ephemeral"
+  },
+  "corbel-wiki-backed-up.md": {
+    "origin": "hand-written",
+    "from": "cron-backup-restic-not-found.md",
+    "kind": "stale"
+  },
+  "corbel-wiki-backup-last.md": {
+    "origin": "hand-written",
+    "from": "cron-backup-restic-not-found.md",
+    "kind": "ephemeral"
+  },
+  "cover-pdf-rgb-black-rejected.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-03/memories/cover-pdf-rgb-black-rejected.md",
+    "kind": "good"
+  },
+  "cron-backup-restic-not-found.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-10/memories/cron-backup-restic-not-found.md",
+    "kind": "good"
+  },
+  "delegated-json-wrapped-in-fences.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-20/memories/delegated-json-wrapped-in-fences.md",
+    "kind": "good"
+  },
+  "docker-build-reinstalls-deps-on-every-change.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-12/memories/docker-build-reinstalls-deps-on-every-change.md",
+    "kind": "good"
+  },
+  "due-date-test-fails-in-utc-ci.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-14/memories/due-date-test-fails-in-utc-ci.md",
+    "kind": "good"
+  },
+  "due-dates-formatted-moment.md": {
+    "origin": "hand-written",
+    "from": "due-date-test-fails-in-utc-ci.md",
+    "kind": "stale"
+  },
+  "dup/knowledge/annotated-tags-for-follow-tags.md": {
+    "origin": "hand-written",
+    "from": "release-tag-follow-tags-lightweight.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/chromium-pdf-rgb-black-ghostscript.md": {
+    "origin": "hand-written",
+    "from": "cover-pdf-rgb-black-rejected.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/create-index-concurrently-large-tables.md": {
+    "origin": "hand-written",
+    "from": "orders-index-migration-blocked-writes.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/cron-path-usr-local-bin.md": {
+    "origin": "hand-written",
+    "from": "cron-backup-restic-not-found.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/dockerfile-copy-lockfile-before-npm-ci.md": {
+    "origin": "hand-written",
+    "from": "docker-build-reinstalls-deps-on-every-change.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/ean13-minimum-80-percent.md": {
+    "origin": "hand-written",
+    "from": "back-cover-barcode-scaled-to-70.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/gh-list-default-30.md": {
+    "origin": "hand-written",
+    "from": "gh-issue-list-default-limit.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/gitattributes-eol-lf-shell.md": {
+    "origin": "hand-written",
+    "from": "windows-agent-crlf-shell-scripts.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/harrow-kitchen-coffee.md": {
+    "origin": "hand-written",
+    "from": "harrow-coffee-rota.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/conventional-commits-harborlight.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/commit-convention.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/harbor-stderr-and-exit-codes.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/cli-error-formatting.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/harborlight-docs-writing-rules.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/docs-style-guide.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/pelican-retry-after-milliseconds.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/retry-after-unit.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/pr-review-format.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/pr-review-convention.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-harborlight/tty-aware-colour-output.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/cli-color-handling.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/berlin-time-for-business-dates.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/reporting-timezone-europe-berlin.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/crm-plan-values.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/crm-plan-normalization.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/df-du-gap-deleted-open-files.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/disk-full-du-df-discrepancy.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/ledgerline-export-512mb-oom.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/ledgerline-export-memory-limit.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/legacy-payments-cents-cutoff.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/vendor-export-unit-change.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/region-source-billing-country.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/crm-region-field.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-ledgerline/terraform-plan-only.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/terraform-workflow.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/go-tests-and-golden-files.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/testing-and-golden-file-conventions.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/quillmark-font-registry.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/registry-structure.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/quillmark-theme-lookup-order.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/quillmark-theme-search-path.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/reporting-failing-tests.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/test-failure-reporting-convention.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/resolvetheme-missing-name.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/theme-resolution-behavior.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/home-dev-quillmark/set-trimbox-bleedbox-for-print.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/quillmark-pdf-box-defaults.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/ivybridge-cycle-parking.md": {
+    "origin": "hand-written",
+    "from": "ivybridge-bike-store.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/jest-ci-not-update.md": {
+    "origin": "hand-written",
+    "from": "ci-updated-snapshots-and-passed.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/json-object-response-format.md": {
+    "origin": "hand-written",
+    "from": "delegated-json-wrapped-in-fences.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/juniper-product-terms.md": {
+    "origin": "hand-written",
+    "from": "juniper-translation-glossary.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/kestrel-battery-handling.md": {
+    "origin": "hand-written",
+    "from": "kestrel-drone-battery-care.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/lindenhall-car-park.md": {
+    "origin": "hand-written",
+    "from": "lindenhall-parking-rules.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/litellm-rpm-limit-per-key.md": {
+    "origin": "hand-written",
+    "from": "litellm-key-rpm-shared-across-models.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/matrix-room-alias-escape-hash.md": {
+    "origin": "hand-written",
+    "from": "apprise-matrix-room-hash-encoding.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/merge-field-exact-column-name.md": {
+    "origin": "hand-written",
+    "from": "newsletter-merge-field-header-mismatch.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/moorfield-workshop-safety-test.md": {
+    "origin": "hand-written",
+    "from": "moorfield-onboarding-quiz.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/networkidle-never-settles-with-polling.md": {
+    "origin": "hand-written",
+    "from": "playwright-networkidle-chat-widget.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/northgate-old-supplier-invoices.md": {
+    "origin": "hand-written",
+    "from": "northgate-invoice-archive.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/oldcastle-island-ferry.md": {
+    "origin": "hand-written",
+    "from": "oldcastle-ferry-timetable.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/pinewood-thermal-labels.md": {
+    "origin": "hand-written",
+    "from": "pinewood-label-printer.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/quarry-hill-water-samples.md": {
+    "origin": "hand-written",
+    "from": "quarry-hill-sampling-plan.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/ravenscar-recording-kit.md": {
+    "origin": "hand-written",
+    "from": "ravenscar-podcast-gear.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/reload-nginx-after-cert-renewal.md": {
+    "origin": "hand-written",
+    "from": "renewed-cert-not-served-until-reload.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/rsync-trailing-slash-source.md": {
+    "origin": "hand-written",
+    "from": "rsync-backup-nested-site-folder.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/search-name-prefix-and-config-before-removing.md": {
+    "origin": "hand-written",
+    "from": "exporter-removal-string-dispatch.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/service-account-shared-drive-membership.md": {
+    "origin": "hand-written",
+    "from": "gws-service-account-shared-drive-member.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/sheets-append-user-entered.md": {
+    "origin": "hand-written",
+    "from": "sheets-append-raw-dates-as-text.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/spf-include-for-new-sender.md": {
+    "origin": "hand-written",
+    "from": "reset-emails-spam-missing-spf-include.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/stanmore-staff-library-rules.md": {
+    "origin": "hand-written",
+    "from": "stanmore-library-loans.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/startup-probe-for-slow-index-load.md": {
+    "origin": "hand-written",
+    "from": "search-pod-liveness-restart-loop.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/thornley-evacuation-drill.md": {
+    "origin": "hand-written",
+    "from": "thornley-fire-drill.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/tz-utc-for-date-tests.md": {
+    "origin": "hand-written",
+    "from": "due-date-test-fails-in-utc-ci.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/ulverston-wiki-page-rules.md": {
+    "origin": "hand-written",
+    "from": "ulverston-wiki-style.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/utf8-sig-for-bom-csv.md": {
+    "origin": "hand-written",
+    "from": "supplier-csv-bom-keyerror.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/wetherby-parcel-shipping.md": {
+    "origin": "hand-written",
+    "from": "wetherby-courier-contract.md",
+    "kind": "reference"
+  },
+  "dup/knowledge/yewdale-trail-access.md": {
+    "origin": "hand-written",
+    "from": "yewdale-trail-closures.md",
+    "kind": "reference"
+  },
+  "exporter-removal-string-dispatch.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-07/memories/exporter-removal-string-dispatch.md",
+    "kind": "good"
+  },
+  "exports-dispatched-if-elif.md": {
+    "origin": "hand-written",
+    "from": "exporter-removal-string-dispatch.md",
+    "kind": "stale"
+  },
+  "ferrow-status-site-bought.md": {
+    "origin": "hand-written",
+    "from": "renewed-cert-not-served-until-reload.md",
+    "kind": "stale"
+  },
+  "ferrow-status-site-expired.md": {
+    "origin": "hand-written",
+    "from": "renewed-cert-not-served-until-reload.md",
+    "kind": "ephemeral"
+  },
+  "formatduedate-test-fails-ci.md": {
+    "origin": "hand-written",
+    "from": "due-date-test-fails-in-utc-ci.md",
+    "kind": "ephemeral"
+  },
+  "gh-issue-list-default-limit.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-02/memories/gh-issue-list-default-limit.md",
+    "kind": "good"
+  },
+  "gws-service-account-shared-drive-member.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-05/memories/gws-service-account-shared-drive-member.md",
+    "kind": "good"
+  },
+  "harrow-coffee-machine-refilled.md": {
+    "origin": "hand-written",
+    "from": "harrow-coffee-rota.md",
+    "kind": "stale"
+  },
+  "harrow-coffee-machine-week.md": {
+    "origin": "hand-written",
+    "from": "harrow-coffee-rota.md",
+    "kind": "ephemeral"
+  },
+  "harrow-coffee-rota.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/harrow-coffee-rota.md",
+    "kind": "good"
+  },
+  "harrowby-atlas-files-back.md": {
+    "origin": "hand-written",
+    "from": "back-cover-barcode-scaled-to-70.md",
+    "kind": "ephemeral"
+  },
+  "harrowby-atlas-left-barcode.md": {
+    "origin": "hand-written",
+    "from": "back-cover-barcode-scaled-to-70.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/cli-color-handling.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-11 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/cli-error-formatting.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-11 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/commit-clean-up-harborlight.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/commit-convention.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/commit-convention.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-01 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/docs-spelling-pass-harborlight.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/docs-style-guide.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/docs-style-guide.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-05 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/harborlight-colour-switch.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/cli-color-handling.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/harborlight-docs-first-written.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/docs-style-guide.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/harborlight-error-format-work.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/cli-error-formatting.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/harborlight-former-commit.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/commit-convention.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/harborlight-paint-migration-commands.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/cli-color-handling.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/harborlight-pr-review-template.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/pr-review-convention.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/harborlight-print-errors-console.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/cli-error-formatting.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/pelican-sync-fixed-second.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/retry-after-unit.md",
+    "kind": "stale"
+  },
+  "home-dev-harborlight/pelican-sync-rate-limit.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/retry-after-unit.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-harborlight/pr-review-convention.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-08 (preference)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/retry-after-unit.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: insight-04 (insight)",
+    "kind": "good"
+  },
+  "home-dev-harborlight/review-harborlight-pr-blockers.md": {
+    "origin": "hand-written",
+    "from": "home-dev-harborlight/pr-review-convention.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/crm-plan-clean-up.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/crm-plan-normalization.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/crm-plan-normalization.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: buried-07 (buried)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/crm-region-field.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: buried-07 (buried)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/disk-alert-ledger-db.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/disk-full-du-df-discrepancy.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/disk-full-du-df-discrepancy.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: insight-07 (insight)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/disk-full-runbook-ledger.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/disk-full-du-df-discrepancy.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/ledger-infra-applied-ci.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/terraform-workflow.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/ledgerline-export-memory-limit.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: insight-01 (insight)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/ledgerline-export-oom-kills.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/ledgerline-export-memory-limit.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/ledgerline-export-ran-user.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/ledgerline-export-memory-limit.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/ledgerline-fixed-vendor.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/vendor-export-unit-change.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/ledgerline-kept-hand-edited.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/crm-plan-normalization.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/ledgerline-payment-validation-cents.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/vendor-export-unit-change.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/ledgerline-region-fix.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/crm-region-field.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/ledgerline-region-report-billing.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/crm-region-field.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/ledgerline-reports-took-day.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/reporting-timezone-europe-berlin.md",
+    "kind": "stale"
+  },
+  "home-dev-ledgerline/moving-ledgerline-report-queries.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/reporting-timezone-europe-berlin.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/reporting-timezone-europe-berlin.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-10 (preference)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/terraform-change-ledger-vpc.md": {
+    "origin": "hand-written",
+    "from": "home-dev-ledgerline/terraform-workflow.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-ledgerline/terraform-workflow.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-04 (preference)",
+    "kind": "good"
+  },
+  "home-dev-ledgerline/vendor-export-unit-change.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: buried-02 (buried)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/golden-file-refresh-quillmark.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/testing-and-golden-file-conventions.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/quillmark-added-bleed-post.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/quillmark-pdf-box-defaults.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/quillmark-font-handling.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/registry-structure.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/quillmark-font-registry-registry.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/registry-structure.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/quillmark-kept-expected-test.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/testing-and-golden-file-conventions.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/quillmark-pdf-box-defaults.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: insight-17 (insight)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/quillmark-print-pdf-trimbox.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/quillmark-pdf-box-defaults.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/quillmark-read-custom-themes.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/quillmark-theme-search-path.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/quillmark-resolvetheme-panicked.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/theme-resolution-behavior.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/quillmark-test-failures-reported.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/test-failure-reporting-convention.md",
+    "kind": "stale"
+  },
+  "home-dev-quillmark/quillmark-test-run-failing.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/test-failure-reporting-convention.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/quillmark-theme-loading-macos.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/quillmark-theme-search-path.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/quillmark-theme-search-path.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: buried-08 (buried)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/registry-structure.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-06 (preference)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/resolvetheme-fallback-fix-patch.md": {
+    "origin": "hand-written",
+    "from": "home-dev-quillmark/theme-resolution-behavior.md",
+    "kind": "ephemeral"
+  },
+  "home-dev-quillmark/test-failure-reporting-convention.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-03 (preference)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/testing-and-golden-file-conventions.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-09 (preference)",
+    "kind": "good"
+  },
+  "home-dev-quillmark/theme-resolution-behavior.md": {
+    "origin": "real",
+    "from": "evals/extract/assets/sessions: preference-03 (preference)",
+    "kind": "ephemeral",
+    "reason": "Reports a state of the code that the session changed: ResolveTheme \"lacks a fallback\" and \"the fix is\" to return the default, and the evidence is \"Agent's fix\". Once fixed, the note describes code that no longer exists; no general lesson is drawn."
+  },
+  "ivybridge-bike-store-padlock.md": {
+    "origin": "hand-written",
+    "from": "ivybridge-bike-store.md",
+    "kind": "stale"
+  },
+  "ivybridge-bike-store.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/ivybridge-bike-store.md",
+    "kind": "good"
+  },
+  "ivybridge-upper-rack-closed.md": {
+    "origin": "hand-written",
+    "from": "ivybridge-bike-store.md",
+    "kind": "ephemeral"
+  },
+  "juniper-glossary-review-october.md": {
+    "origin": "hand-written",
+    "from": "juniper-translation-glossary.md",
+    "kind": "ephemeral"
+  },
+  "juniper-shared-spreadsheet.md": {
+    "origin": "hand-written",
+    "from": "juniper-translation-glossary.md",
+    "kind": "stale"
+  },
+  "juniper-translation-glossary.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/juniper-translation-glossary.md",
+    "kind": "good"
+  },
+  "kestrel-api-build-times.md": {
+    "origin": "hand-written",
+    "from": "docker-build-reinstalls-deps-on-every-change.md",
+    "kind": "ephemeral"
+  },
+  "kestrel-api-image-built.md": {
+    "origin": "hand-written",
+    "from": "docker-build-reinstalls-deps-on-every-change.md",
+    "kind": "stale"
+  },
+  "kestrel-drone-batteries-kept.md": {
+    "origin": "hand-written",
+    "from": "kestrel-drone-battery-care.md",
+    "kind": "stale"
+  },
+  "kestrel-drone-batteries-october.md": {
+    "origin": "hand-written",
+    "from": "kestrel-drone-battery-care.md",
+    "kind": "ephemeral"
+  },
+  "kestrel-drone-battery-care.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/kestrel-drone-battery-care.md",
+    "kind": "good"
+  },
+  "larkspur-newsletter-sent-spreadsheet.md": {
+    "origin": "hand-written",
+    "from": "newsletter-merge-field-header-mismatch.md",
+    "kind": "stale"
+  },
+  "larkspur-october-newsletter-readers.md": {
+    "origin": "hand-written",
+    "from": "newsletter-merge-field-header-mismatch.md",
+    "kind": "ephemeral"
+  },
+  "lindenhall-car-park-october.md": {
+    "origin": "hand-written",
+    "from": "lindenhall-parking-rules.md",
+    "kind": "ephemeral"
+  },
+  "lindenhall-paper-parking.md": {
+    "origin": "hand-written",
+    "from": "lindenhall-parking-rules.md",
+    "kind": "stale"
+  },
+  "lindenhall-parking-rules.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/lindenhall-parking-rules.md",
+    "kind": "good"
+  },
+  "litellm-key-rpm-shared-across-models.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-04/memories/litellm-key-rpm-shared-across-models.md",
+    "kind": "good"
+  },
+  "marrowgate-print-pdfs-exported.md": {
+    "origin": "hand-written",
+    "from": "cover-pdf-rgb-black-rejected.md",
+    "kind": "stale"
+  },
+  "marrowgate-rulebook-cover-rejected.md": {
+    "origin": "hand-written",
+    "from": "cover-pdf-rgb-black-rejected.md",
+    "kind": "ephemeral"
+  },
+  "moorfield-onboarding-quiz.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/moorfield-onboarding-quiz.md",
+    "kind": "good"
+  },
+  "moorfield-safety-quiz-october.md": {
+    "origin": "hand-written",
+    "from": "moorfield-onboarding-quiz.md",
+    "kind": "ephemeral"
+  },
+  "moorfield-workshop-induction.md": {
+    "origin": "hand-written",
+    "from": "moorfield-onboarding-quiz.md",
+    "kind": "stale"
+  },
+  "newsletter-merge-field-header-mismatch.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-15/memories/newsletter-merge-field-header-mismatch.md",
+    "kind": "good"
+  },
+  "nightly-e2e-run-2026-09-18.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-03/memories/nightly-e2e-run-2026-09-18.md",
+    "kind": "ephemeral"
+  },
+  "nightly-export-job-failing.md": {
+    "origin": "hand-written",
+    "from": "exporter-removal-string-dispatch.md",
+    "kind": "ephemeral"
+  },
+  "node-18-support-decision-pending.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-06/memories/node-18-support-decision-pending.md",
+    "kind": "ephemeral"
+  },
+  "northgate-2023-invoices-move.md": {
+    "origin": "hand-written",
+    "from": "northgate-invoice-archive.md",
+    "kind": "ephemeral"
+  },
+  "northgate-invoice-archive.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/northgate-invoice-archive.md",
+    "kind": "good"
+  },
+  "northgate-paper-invoice.md": {
+    "origin": "hand-written",
+    "from": "northgate-invoice-archive.md",
+    "kind": "stale"
+  },
+  "oldcastle-ferry-timetable.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/oldcastle-ferry-timetable.md",
+    "kind": "good"
+  },
+  "oldcastle-staff-ferry-week.md": {
+    "origin": "hand-written",
+    "from": "oldcastle-ferry-timetable.md",
+    "kind": "ephemeral"
+  },
+  "ops-alerts-go-matrix.md": {
+    "origin": "hand-written",
+    "from": "apprise-matrix-room-hash-encoding.md",
+    "kind": "stale"
+  },
+  "ops-matrix-alerts-deploy.md": {
+    "origin": "hand-written",
+    "from": "apprise-matrix-room-hash-encoding.md",
+    "kind": "ephemeral"
+  },
+  "orders-index-migration-blocked-writes.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-13/memories/orders-index-migration-blocked-writes.md",
+    "kind": "good"
+  },
+  "overnight-batch-429s-litellm.md": {
+    "origin": "hand-written",
+    "from": "litellm-key-rpm-shared-across-models.md",
+    "kind": "ephemeral"
+  },
+  "packaging-job-failing-windows.md": {
+    "origin": "hand-written",
+    "from": "windows-agent-crlf-shell-scripts.md",
+    "kind": "ephemeral"
+  },
+  "packaging-ran-dedicated-linux.md": {
+    "origin": "hand-written",
+    "from": "windows-agent-crlf-shell-scripts.md",
+    "kind": "stale"
+  },
+  "pinewood-label-printer.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/pinewood-label-printer.md",
+    "kind": "good"
+  },
+  "pinewood-misprints-after-roll-change.md": {
+    "origin": "hand-written",
+    "from": "pinewood-label-printer.md",
+    "kind": "ephemeral"
+  },
+  "pinewood-printed-labels-a4.md": {
+    "origin": "hand-written",
+    "from": "pinewood-label-printer.md",
+    "kind": "stale"
+  },
+  "playwright-networkidle-chat-widget.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-01/memories/playwright-networkidle-chat-widget.md",
+    "kind": "good"
+  },
+  "preview-server-upgrade-2026-09-03.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-04/memories/preview-server-upgrade-2026-09-03.md",
+    "kind": "ephemeral"
+  },
+  "print-pipeline-release-blocked.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-01/memories/print-pipeline-release-blocked.md",
+    "kind": "ephemeral"
+  },
+  "quarry-hill-sampling-plan.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/quarry-hill-sampling-plan.md",
+    "kind": "good"
+  },
+  "quarry-hill-sampling-week.md": {
+    "origin": "hand-written",
+    "from": "quarry-hill-sampling-plan.md",
+    "kind": "ephemeral"
+  },
+  "quarry-hill-water-sampled.md": {
+    "origin": "hand-written",
+    "from": "quarry-hill-sampling-plan.md",
+    "kind": "stale"
+  },
+  "quarry-reset-emails-landing.md": {
+    "origin": "hand-written",
+    "from": "reset-emails-spam-missing-spf-include.md",
+    "kind": "ephemeral"
+  },
+  "quarry-sent-mail-through.md": {
+    "origin": "hand-written",
+    "from": "reset-emails-spam-missing-spf-include.md",
+    "kind": "stale"
+  },
+  "quillfeather-press-backlog-audit.md": {
+    "origin": "hand-written",
+    "from": "gh-issue-list-default-limit.md",
+    "kind": "ephemeral"
+  },
+  "ravenscar-podcast-first.md": {
+    "origin": "hand-written",
+    "from": "ravenscar-podcast-gear.md",
+    "kind": "stale"
+  },
+  "ravenscar-podcast-gear.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/ravenscar-podcast-gear.md",
+    "kind": "good"
+  },
+  "ravenscar-podcast-kit-october.md": {
+    "origin": "hand-written",
+    "from": "ravenscar-podcast-gear.md",
+    "kind": "ephemeral"
+  },
+  "release-commit-pushed-but.md": {
+    "origin": "hand-written",
+    "from": "release-tag-follow-tags-lightweight.md",
+    "kind": "ephemeral"
+  },
+  "release-tag-follow-tags-lightweight.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-08/memories/release-tag-follow-tags-lightweight.md",
+    "kind": "good"
+  },
+  "releases-published-hand-through.md": {
+    "origin": "hand-written",
+    "from": "release-tag-follow-tags-lightweight.md",
+    "kind": "stale"
+  },
+  "renewed-cert-not-served-until-reload.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-11/memories/renewed-cert-not-served-until-reload.md",
+    "kind": "good"
+  },
+  "reporting-exports-ledger-archive.md": {
+    "origin": "hand-written",
+    "from": "gws-service-account-shared-drive-member.md",
+    "kind": "ephemeral"
+  },
+  "reporting-exports-ran-under.md": {
+    "origin": "hand-written",
+    "from": "gws-service-account-shared-drive-member.md",
+    "kind": "stale"
+  },
+  "reset-emails-spam-missing-spf-include.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-19/memories/reset-emails-spam-missing-spf-include.md",
+    "kind": "good"
+  },
+  "rsync-backup-nested-site-folder.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-22/memories/rsync-backup-nested-site-folder.md",
+    "kind": "good"
+  },
+  "schema-changes-orders-database.md": {
+    "origin": "hand-written",
+    "from": "orders-index-migration-blocked-writes.md",
+    "kind": "stale"
+  },
+  "search-pod-liveness-restart-loop.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-17/memories/search-pod-liveness-restart-loop.md",
+    "kind": "good"
+  },
+  "search-service-pods-restart.md": {
+    "origin": "hand-written",
+    "from": "search-pod-liveness-restart-loop.md",
+    "kind": "ephemeral"
+  },
+  "search-service-ran-single.md": {
+    "origin": "hand-written",
+    "from": "search-pod-liveness-restart-loop.md",
+    "kind": "stale"
+  },
+  "sheets-append-raw-dates-as-text.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-18/memories/sheets-append-raw-dates-as-text.md",
+    "kind": "good"
+  },
+  "sprint-41-retro-notes.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/status-05/memories/sprint-41-retro-notes.md",
+    "kind": "ephemeral"
+  },
+  "stanmore-honesty-shelf.md": {
+    "origin": "hand-written",
+    "from": "stanmore-library-loans.md",
+    "kind": "stale"
+  },
+  "stanmore-library-loans.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/stanmore-library-loans.md",
+    "kind": "good"
+  },
+  "stanmore-staff-library-october.md": {
+    "origin": "hand-written",
+    "from": "stanmore-library-loans.md",
+    "kind": "ephemeral"
+  },
+  "storefront-ci-order-history.md": {
+    "origin": "hand-written",
+    "from": "playwright-networkidle-chat-widget.md",
+    "kind": "ephemeral"
+  },
+  "storefront-tests-waited-fixed.md": {
+    "origin": "hand-written",
+    "from": "playwright-networkidle-chat-widget.md",
+    "kind": "stale"
+  },
+  "supplier-csv-bom-keyerror.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-09/memories/supplier-csv-bom-keyerror.md",
+    "kind": "good"
+  },
+  "supplier-stock-files-came.md": {
+    "origin": "hand-written",
+    "from": "supplier-csv-bom-keyerror.md",
+    "kind": "stale"
+  },
+  "tagging-job-pulled-tags.md": {
+    "origin": "hand-written",
+    "from": "delegated-json-wrapped-in-fences.md",
+    "kind": "stale"
+  },
+  "thornley-drill-roll-call-time.md": {
+    "origin": "hand-written",
+    "from": "thornley-fire-drill.md",
+    "kind": "ephemeral"
+  },
+  "thornley-fire-drill.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/thornley-fire-drill.md",
+    "kind": "good"
+  },
+  "thornley-weekly-alarm.md": {
+    "origin": "hand-written",
+    "from": "thornley-fire-drill.md",
+    "kind": "stale"
+  },
+  "ulverston-wiki-clean-up.md": {
+    "origin": "hand-written",
+    "from": "ulverston-wiki-style.md",
+    "kind": "ephemeral"
+  },
+  "ulverston-wiki-confluence.md": {
+    "origin": "hand-written",
+    "from": "ulverston-wiki-style.md",
+    "kind": "stale"
+  },
+  "ulverston-wiki-style.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/ulverston-wiki-style.md",
+    "kind": "good"
+  },
+  "web-client-nightly.md": {
+    "origin": "hand-written",
+    "from": "ci-updated-snapshots-and-passed.md",
+    "kind": "stale"
+  },
+  "web-client-snapshot-tests.md": {
+    "origin": "hand-written",
+    "from": "ci-updated-snapshots-and-passed.md",
+    "kind": "ephemeral"
+  },
+  "weekly-stock-import-failing.md": {
+    "origin": "hand-written",
+    "from": "supplier-csv-bom-keyerror.md",
+    "kind": "ephemeral"
+  },
+  "wetherby-courier-contract.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/wetherby-courier-contract.md",
+    "kind": "good"
+  },
+  "wetherby-courier-october-two.md": {
+    "origin": "hand-written",
+    "from": "wetherby-courier-contract.md",
+    "kind": "ephemeral"
+  },
+  "wetherby-took-parcels-post.md": {
+    "origin": "hand-written",
+    "from": "wetherby-courier-contract.md",
+    "kind": "stale"
+  },
+  "windows-agent-crlf-shell-scripts.md": {
+    "origin": "corpus",
+    "from": "evals/distill/assets/bundles/lesson-21/memories/windows-agent-crlf-shell-scripts.md",
+    "kind": "good"
+  },
+  "yewdale-trail-closures.md": {
+    "origin": "corpus",
+    "from": "evals/consolidate/assets/pool/memories/yewdale-trail-closures.md",
+    "kind": "good"
+  },
+  "yewdale-trails-closed-warden.md": {
+    "origin": "hand-written",
+    "from": "yewdale-trail-closures.md",
+    "kind": "stale"
+  },
+  "yewdale-trails-october-ridge.md": {
+    "origin": "hand-written",
+    "from": "yewdale-trail-closures.md",
+    "kind": "ephemeral"
+  }
+}

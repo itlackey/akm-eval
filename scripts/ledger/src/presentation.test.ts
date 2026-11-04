@@ -64,6 +64,15 @@ test('judge gate exposes useful acceptance separately from approval precision', 
   expect(result.find(score => score.label === 'Good proposals approved')).toMatchObject({ value: .375, numerator: 15, denominator: 40 });
 });
 
+test('drain-judge reports the harm number next to the good ones accepted', () => {
+  const result = scores({ eval: 'drain-judge', metrics: { precision: { value: .8, accepted_good: 8, accepted: 10 }, good_accepted: { rate: .4, count: 8, n: 20 }, bad_accepted: { rate: .1, count: 6, n: 60 }, good_rejected: { rate: .05, count: 1, n: 20 }, bad_by_origin: { real: { rate: 0, count: 0, n: 1 }, corpus: { rate: .25, count: 1, n: 4 }, 'hand-written': { rate: .0909, count: 5, n: 55 } } } });
+  expect(result.find(score => score.label === 'Bad hand-written promotions accepted')).toMatchObject({ value: .0909, numerator: 5, denominator: 55, lower_is_better: true });
+  expect(result.find(score => score.label === 'Bad corpus promotions accepted')).toMatchObject({ value: .25, numerator: 1, denominator: 4, lower_is_better: true });
+  expect(result.find(score => score.label === 'Bad promotions accepted')).toMatchObject({ value: .1, numerator: 6, denominator: 60, lower_is_better: true });
+  expect(result.find(score => score.label === 'Good promotions accepted')).toMatchObject({ value: .4, numerator: 8, denominator: 20 });
+  expect(result.find(score => score.label === 'Accepted promotions that were good')).toMatchObject({ value: .8, numerator: 8, denominator: 10 });
+});
+
 test('lesson judge reports new lessons and updates apart, with the bad ones as a lower-is-better score', () => {
   const metrics = { good: { new: { rate: .5, passed: 10, n: 20 }, update: { rate: .8, passed: 8, n: 10 } }, bad: { new: { rate: .25, passed: 5, n: 20 }, update: { rate: .1, passed: 1, n: 10 } } };
   const result = scores({ eval: 'lesson-judge', metrics });

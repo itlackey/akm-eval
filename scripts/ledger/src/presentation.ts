@@ -21,6 +21,7 @@ const tests: Record<string, [string, string]> = {
   bakeoff: ["Core model tasks", "Can the model produce correct memories, metadata repairs, session summaries and consolidation plans?"],
   "pair-judge": ["Pair comparison", "Can AKM's consolidate judge list what each note holds alone, so that it retires a note only when the other keeps every claim?"],
   "judge-gate": ["Lesson approval", "Can AKM's judge approve useful lessons while catching harmful or unnecessary ones?"],
+  "drain-judge": ["Promotion judgment", "Can the drain's judgment accept useful promotions and reject duplicates, stale content and temporary facts, one proposal at a time?"],
   "lesson-judge": ["Lesson review", "Can AKM's lesson judge pass useful new lessons and updates while catching status notes, restated rules and claims the source does not make?"],
   distill: ["Lesson creation", "Can AKM turn useful memories into accurate lessons, update existing lessons and avoid unnecessary ones?"],
   retrieval: ["Library search", "How well does AKM rank relevant assets for queries with human relevance judgments?"],
@@ -96,6 +97,14 @@ export function scores(summary: Record<string, unknown>): Score[] {
       ratio("Good proposals approved", "good.rate", "good.passed", "good.n", "Useful proposals approved out of all labelled good proposals. Read alongside approval precision to distinguish useful acceptance from an overly strict gate.");
       ratio("Bad lessons approved", "bad.rate", "bad.passed", "bad.n", "Harmful or unnecessary lessons incorrectly approved.", true);
       ratio("Harmful lessons approved", "bad_harmful.rate", "bad_harmful.passed", "bad_harmful.n", "Harmful lessons incorrectly approved; zero is the target.", true);
+      break;
+    case "drain-judge":
+      ratio("Accepted promotions that were good", "precision.value", "precision.accepted_good", "precision.accepted", "Good promotions out of all promotions the judgment accepted.");
+      ratio("Good promotions accepted", "good_accepted.rate", "good_accepted.count", "good_accepted.n", "Useful promotions accepted out of all labelled good promotions.");
+      ratio("Bad promotions accepted", "bad_accepted.rate", "bad_accepted.count", "bad_accepted.n", "Ephemeral, duplicate or stale promotions the judgment accepted: they would be written with no one looking; zero is the target.", true);
+      ratio("Good promotions rejected", "good_rejected.rate", "good_rejected.count", "good_rejected.n", "Useful promotions the judgment rejected outright: work lost.", true);
+      ratio("Bad corpus promotions accepted", "bad_by_origin.corpus.rate", "bad_by_origin.corpus.count", "bad_by_origin.corpus.n", "Bad promotions from another eval's corpus that the judgment accepted.", true);
+      ratio("Bad hand-written promotions accepted", "bad_by_origin.hand-written.rate", "bad_by_origin.hand-written.count", "bad_by_origin.hand-written.n", "Bad promotions written for this eval that the judgment accepted; most of the bad cases are these.", true);
       break;
     case "lesson-judge":
       ratio("Good new lessons passed", "good.new.rate", "good.new.passed", "good.new.n", "Useful new lessons the judge passed to a person, out of all labelled good new lessons.");
