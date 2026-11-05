@@ -84,7 +84,7 @@ A candidate wins at about equal tokens when, against the no-selection and hard-f
 4. `out_tokens` and `load_tokens_k` stay within 5% of the baseline's; a candidate that wins by returning fewer results or more fails;
 5. between ties, the option with less machinery wins.
 
-Keys are stand-ins until akm#1412: a team is `scope_channel` (selected as `channel`), a project `scope_agent` (selected as `agent`). Several values of one key need an akm with #1448 (a match is either); before it a repeated key keeps its last value, so the `both` and `multi-value` queries are meaningful only there.
+Keys are the frontmatter keys `team` and `project`, selected as `team` and `project` (needs an akm with #1453). Several values of one key need an akm with #1448 (a match is either); before it a repeated key keeps its last value, so the `both` and `multi-value` queries are meaningful only there.
 
 ## Refs
 

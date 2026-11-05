@@ -17,7 +17,7 @@ import { type Qrel, type Query, gradesByQuery, isTask, parseQrels, parseQueries 
 import { RELEVANT } from "./score.ts";
 
 export interface SplitConfig {
-  /** The selection key akm takes on the command line (`channel`) and the frontmatter key that carries it (`scope_channel`), for a team and a project. Until akm#1412 these are the scope keys akm filters on; then they become `team` and `project`. */
+  /** The selection key akm takes on the command line and the frontmatter key that carries it, for a team and a project (both `team` and `project`: akm selects on any frontmatter key, akm#1453). */
   keys: { team: { select: string; frontmatter: string }; project: { select: string; frontmatter: string } };
   /** A folder name in a path to the team that owns its assets (print: publishing). */
   teams: Record<string, string>;

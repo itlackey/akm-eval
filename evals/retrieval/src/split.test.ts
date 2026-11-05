@@ -12,7 +12,7 @@ const ROOT = join(import.meta.dir, "..", "..", "..");
 const ASSETS = join(ROOT, "evals", "retrieval", "assets");
 const LIBRARY = join(ROOT, "corpus", "library");
 /** The digest of the split corpus. It changes with split.json, the public library and the public queries and qrels: update it when one of them is changed on purpose. */
-const DIGEST = "b518f1e0575767e2bc322ecca5c531bbdff0919786b7101dc2f4c080929d40af";
+const DIGEST = "8942057228d7ba1fa884c44412cd5bc9a5f1e5e6fcb118b29bceb45cce9dc388";
 
 const dirs: string[] = [];
 const made = (): string => {
@@ -43,10 +43,10 @@ describe("the split corpus", () => {
     expect(split.tagged).toEqual({ team: 38, project: 18, conflict: 6 });
     const meta = parseMetadata(readFileSync(join(out, "metadata.jsonl"), "utf8"));
     expect(Object.keys(meta)).toHaveLength(38 + 6);
-    expect(Object.values(meta).filter((k) => k.channel === "publishing" || k.channel === "qa")).toHaveLength(38);
-    expect(Object.entries(meta).filter(([, k]) => k.channel === "platform").every(([ref]) => ref.startsWith("general//skills/ai-skills/"))).toBe(true);
+    expect(Object.values(meta).filter((k) => k.team === "publishing" || k.team === "qa")).toHaveLength(38);
+    expect(Object.entries(meta).filter(([, k]) => k.team === "platform").every(([ref]) => ref.startsWith("general//skills/ai-skills/"))).toBe(true);
     const tagged = readFileSync(join(out, "library", "team", "skills", "print", "pagedjs", "SKILL.md"), "utf8");
-    expect(tagged.startsWith("---\nscope_channel: publishing\n")).toBe(true);
+    expect(tagged.startsWith("---\nteam: publishing\n")).toBe(true);
   });
 
   test("writes each judged task query once for each selection, with the refs of its bundle", () => {
@@ -54,8 +54,8 @@ describe("the split corpus", () => {
     const qrels = parseQrels(readFileSync(join(out, "qrels.jsonl"), "utf8"));
     expect(queries).toHaveLength(101 * 5);
     expect(queries.filter((q) => q.kind === "none").every((q) => q.selection === undefined)).toBe(true);
-    expect(queries.find((q) => q.id === "q001@absent")).toMatchObject({ selection: { channel: config.absent }, same_as: "q001@none" });
-    expect(queries.find((q) => q.id === "q001@both")?.selection).toEqual({ channel: ["publishing", "qa"] });
+    expect(queries.find((q) => q.id === "q001@absent")).toMatchObject({ selection: { team: config.absent }, same_as: "q001@none" });
+    expect(queries.find((q) => q.id === "q001@both")?.selection).toEqual({ team: ["publishing", "qa"] });
     expect(qrels.every((r) => /^(team|general)\/\//.test(r.ref))).toBe(true);
     expect(qrels.find((r) => r.ref === "team//skills/print/pagedjs")).toBeDefined();
   });
@@ -76,7 +76,7 @@ describe.skipIf(process.env.AKM_EVAL_REAL_AKM !== "1")("the split against a real
     cpSync(out, untagged, { recursive: true });
     for (const file of filesUnder(join(untagged, "library"))) {
       const text = readFileSync(file, "utf8");
-      const bare = text.replace(/^---\n(?:scope_(?:channel|agent): .*\n)+/, "---\n");
+      const bare = text.replace(/^---\n(?:(?:team|project): .*\n)+/, "---\n");
       if (bare !== text) writeFileSync(file, bare);
     }
     const tagged = await listsOf(out);
@@ -114,7 +114,7 @@ describe("the hand-built selection set", () => {
   test("has the kinds of cases its README lists", () => {
     expect(counts).toEqual({ "team-first": 4, "general-only": 3, partial: 3, "missing-vs-conflict": 2, "multi-value": 2, control: 1, "no-match": 2, duplicate: 1, "untagged-team": 1, leak: 1 });
     expect(queries.filter((q) => q.same_as).every((q) => q.same_as === "s13")).toBe(true);
-    expect(queries.some((q) => Array.isArray(q.selection?.channel))).toBe(true);
+    expect(queries.some((q) => Array.isArray(q.selection?.team))).toBe(true);
   });
 
   test("grades every note for every task query, and has no grades for the leak query", () => {
@@ -128,12 +128,12 @@ describe("the hand-built selection set", () => {
       const [bundle, rest] = ref.split("//") as [string, string];
       const file = join(dir, "library", bundle, `${rest}.md`);
       const text = readFileSync(file, "utf8");
-      for (const [k, v] of Object.entries(keys)) expect(text).toContain(`scope_${k}: ${v}\n`);
+      for (const [k, v] of Object.entries(keys)) expect(text).toContain(`${k}: ${v}\n`);
     }
   });
 
   test("the codename of the leak query is in no text, only in metadata", () => {
-    const hits = [...new Bun.Glob("**/*").scanSync({ cwd: join(dir, "library"), onlyFiles: true })].filter((f) => !/scope_agent: orchidfalcon/.test(readFileSync(join(dir, "library", f), "utf8")) && readFileSync(join(dir, "library", f), "utf8").includes("orchidfalcon"));
+    const hits = [...new Bun.Glob("**/*").scanSync({ cwd: join(dir, "library"), onlyFiles: true })].filter((f) => !/project: orchidfalcon/.test(readFileSync(join(dir, "library", f), "utf8")) && readFileSync(join(dir, "library", f), "utf8").includes("orchidfalcon"));
     expect(hits).toEqual([]);
   });
 });

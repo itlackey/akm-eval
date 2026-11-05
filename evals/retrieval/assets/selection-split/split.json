@@ -1,7 +1,7 @@
 {
   "keys": {
-    "team": { "select": "channel", "frontmatter": "scope_channel" },
-    "project": { "select": "agent", "frontmatter": "scope_agent" }
+    "team": { "select": "team", "frontmatter": "team" },
+    "project": { "select": "project", "frontmatter": "project" }
   },
   "teams": { "print": "publishing", "e2e-testing": "qa" },
   "project": { "team": "publishing", "value": "gutterpress", "contains": "gutterpress" },
