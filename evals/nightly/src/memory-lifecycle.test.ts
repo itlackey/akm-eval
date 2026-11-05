@@ -263,7 +263,8 @@ describe.skipIf(!REAL)("real AKM memory lifecycle (AKM_EVAL_REAL_AKM=1; AKM_BIN 
         expect(pending).toHaveLength(0);
         for (const [name, user] of [["vela-a", "alice"], ["vela-b", "bob"]]) {
           contains("separate scoped content", readFileSync(pathFor(s, name), "utf8"), [CLAIM, `scope_user: ${user}`, "scope_agent: loom"]);
-          contains("scoped show", (await cli(["show", refFor(s, name), "--filter", `user=${user}`, "--detail", "full"])).value.content, [CLAIM]);
+          const other = refFor(s, name === "vela-a" ? "vela-b" : "vela-a");
+          selected("scoped search", refsOf((await cli(["search", "Vela", "--type", "memory", "--filter", `user=${user}`])).value), refFor(s, name), [other]);
         }
       } else {
         expect(pending).toHaveLength(1);
@@ -290,7 +291,7 @@ describe.skipIf(!REAL)("real AKM memory lifecycle (AKM_EVAL_REAL_AKM=1; AKM_BIN 
       selected(`${command} current`, refsOf(normal), currentRef, [oldRef]);
       const history = (await cli([command, "Vela", "--type", "memory", "--filter", "user=alice", "--belief", "historical"])).value;
       selected(`${command} historical`, refsOf(history), oldRef, [currentRef]);
-      contains("historical source", (await cli(["show", oldRef, "--filter", "user=alice", "--detail", "full"])).value.content, [old]);
+      contains("historical source", (await cli(["show", oldRef, "--detail", "full"])).value.content, [old]);
       contains("current source", (await cli(["show", currentRef, "--detail", "full"])).value.content, [current]);
     });
   }, 120_000);
