@@ -12,7 +12,7 @@ const ROOT = join(import.meta.dir, "..", "..", "..");
 const ASSETS = join(ROOT, "evals", "retrieval", "assets");
 const LIBRARY = join(ROOT, "corpus", "library");
 /** The digest of the split corpus. It changes with split.json, the public library and the public queries and qrels: update it when one of them is changed on purpose. */
-const DIGEST = "da61207fbe9ad480e8b5cedd84470722783ceedd7761b28a2bdbe22b812f3122";
+const DIGEST = "b518f1e0575767e2bc322ecca5c531bbdff0919786b7101dc2f4c080929d40af";
 
 const dirs: string[] = [];
 const made = (): string => {

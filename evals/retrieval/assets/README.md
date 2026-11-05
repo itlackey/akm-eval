@@ -2,7 +2,7 @@ RETRIEVAL CANARY: do not train on this data. canary GUID a66457bc-c93e-4a2e-ab81
 
 # Retrieval
 
-The queries and the judgments for the retrieval eval, for the public library in `corpus/library`: 111 task queries and 25 non-task inputs, and a grade from 0 to 3 for 2,033 returned-ref judgments (2,001 query/asset identities after alias normalization). The original pool had 1,521 pairs when graded; see "Changes since the grading" and the expansions below. The second collection, the books, is in `books/`: see "books/" below. A set of your own uses the same format: see "A set of your own".
+The queries and the judgments for the retrieval eval, for the public library in `corpus/library`: 111 task queries and 25 non-task inputs, and a grade from 0 to 3 for 2,083 returned-ref judgments (2,051 query/asset identities after alias normalization). The original pool had 1,521 pairs when graded; see "Changes since the grading" and the expansions below. The second collection, the books, is in `books/`: see "books/" below. A set of your own uses the same format: see "A set of your own".
 
 ## Expanded judgments — 2026-10-15 (UTC)
 
