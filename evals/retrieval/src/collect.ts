@@ -119,13 +119,13 @@ export async function openIndexes(i: IndexInput): Promise<Indexes> {
  * Asks akm for the first results of one query in every column of the run, and returns the row the scorer makes of them. `modes` is how akm
  * said it searched, for each call that said, for the summary. A call that fails is an answer with an error and no results (see akm.ask).
  */
-export async function collectQuery(boxes: Indexes["boxes"], c: Case, systems: readonly System[], timeoutMs?: number): Promise<{ row: Row; modes: [Mode, string][] }> {
+export async function collectQuery(boxes: Indexes["boxes"], c: Case, systems: readonly System[], timeoutMs?: number, selectionFlag: string = akm.SELECTION_FLAG): Promise<{ row: Row; modes: [Mode, string][] }> {
   const raw: Partial<Record<System, RawAnswer>> = {};
   const modes: [Mode, string][] = [];
   for (const sys of systems) {
-    const a = await akm.ask(boxes[modeOf(sys)] as Sandbox, commandOf(sys), c.query, akm.LIMIT, modeOf(sys), timeoutMs, c.searchArgs);
+    const a = await akm.ask(boxes[modeOf(sys)] as Sandbox, commandOf(sys), c.query, akm.LIMIT, modeOf(sys), timeoutMs, c.searchArgs, akm.selectionArgs(selectionFlag, c.selection));
     if (a.mode) modes.push([modeOf(sys), a.mode]);
-    raw[sys] = { refs: a.refs, seconds: a.seconds, ...(a.error ? { error: a.error } : {}), ...(a.timedOut ? { timedOut: true } : {}) };
+    raw[sys] = { refs: a.refs, seconds: a.seconds, ...(a.error ? { error: a.error } : {}), ...(a.timedOut ? { timedOut: true } : {}), ...(a.outChars !== undefined ? { outChars: a.outChars } : {}), ...(a.tokens ? { tokens: a.tokens } : {}) };
   }
   return { row: makeRow(c, raw as Raw), modes };
 }

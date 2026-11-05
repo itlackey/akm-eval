@@ -2,7 +2,7 @@ RETRIEVAL CANARY: do not train on this data. canary GUID a66457bc-c93e-4a2e-ab81
 
 # Dated set
 
-A small optional retrieval set for akm's date fields: the `--since`/`--until` filters of `akm search` and the recency tie-break (itlackey/akm#1228). It is not part of the public collections: their queries, their `assets_sha256` and the eval's version 0.3 are unchanged, so earlier runs still compare.
+A small optional retrieval set for akm's date fields: the `--since`/`--until` filters of `akm search` and the recency tie-break (itlackey/akm#1228). It is not part of the public collections: their queries, their `assets_sha256` and their quality metrics are unchanged, so earlier runs still compare.
 
 ```
 evals/retrieval/run --cases evals/retrieval/assets/dated             # keyword search

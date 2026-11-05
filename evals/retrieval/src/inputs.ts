@@ -1,7 +1,7 @@
 // What a retrieval run records of its inputs: the digest of what a run read (the library it indexed, the bundle mappings, the queries and
 // the qrels), the seed, and the name of the generated.json that generate writes beside the private assets. run.ts, generate.ts and the tests use them.
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 
@@ -31,23 +31,26 @@ export interface AssetsDigests {
   bundles_sha256: string | null;
   queries_sha256: string;
   qrels_sha256: string;
+  /** The selection keys of the set's assets (metadata.jsonl). Only a set that has the file records it, so every other set's digests are as they were. */
+  metadata_sha256?: string;
 }
 
 /**
  * The digests of what a run was made from: the library akm indexed, the bundle mappings, and the set's queries and qrels. They hold the
  * content of each file and no path outside the library, so they are the same on another machine and in another checkout.
  */
-export function assetsDigests(library: { files: Record<string, string>; adapters?: Record<string, string> }, queriesFile: string, qrelsFile: string): AssetsDigests {
+export function assetsDigests(library: { files: Record<string, string>; adapters?: Record<string, string> }, queriesFile: string, qrelsFile: string, metadataFile?: string): AssetsDigests {
   return {
     library_sha256: manifestSha256(library.files),
     bundles_sha256: library.adapters ? sha256Text(JSON.stringify(Object.entries(library.adapters).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))) : null,
     queries_sha256: sha256File(queriesFile),
     qrels_sha256: sha256File(qrelsFile),
+    ...(metadataFile && existsSync(metadataFile) ? { metadata_sha256: sha256File(metadataFile) } : {}),
   };
 }
 
-/** assets_sha256 of summary.json: one digest over the four digests of `assets`, in the order they are listed, one to a line (`none` for no bundle mapping). */
-export const assetsSha256 = (d: AssetsDigests): string => sha256Text([d.library_sha256, d.bundles_sha256 ?? "none", d.queries_sha256, d.qrels_sha256].join("\n"));
+/** assets_sha256 of summary.json: one digest over the digests of `assets`, in the order they are listed, one to a line (`none` for no bundle mapping; the metadata digest only for a set that has one). */
+export const assetsSha256 = (d: AssetsDigests): string => sha256Text([d.library_sha256, d.bundles_sha256 ?? "none", d.queries_sha256, d.qrels_sha256, ...(d.metadata_sha256 ? [d.metadata_sha256] : [])].join("\n"));
 
 /** The seed in private/seed, or null when there is none. generate-assets makes the file. */
 export function readSeed(root: string): string | null {

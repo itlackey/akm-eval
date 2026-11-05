@@ -4,7 +4,7 @@
 // akm's built-in embedder, a small model that runs in the akm process. Without --semantic only keyword search is scored; with
 // it the semantic search is scored too, whatever --limit or corpus is given. See ../README.md.
 //
-//   evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic]
+//   evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic] [--selection-flag NAME]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -20,9 +20,10 @@ import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
 import { type IndexInput, INDEX_STATE, NAME, collectQuery, openIndexes, systemsFor } from "./collect.ts";
 import { type AssetsDigests, assetsDigests, assetsSha256 } from "./inputs.ts";
-import { type Qrel, type Query, casesOf, fixed, isTask, mixedJudgesWarning, parseQrels, parseQueries, pct, selectQueries } from "./lib.ts";
+import { type Qrel, type Query, casesOf, fixed, isTask, mixedJudgesWarning, parseQrels, parseQueries, pct, readMetadata, selectQueries } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { type Abstention, type Columns, DEPTH, RELEVANT, type Row, type System, type SystemMetrics, SYSTEMS, at, semanticFailure, summarizeRows } from "./score.ts";
+import { type Abstention, type CallStats, type Columns, DEPTH, MATCH_K, RELEVANT, type Row, type System, type SystemMetrics, SYSTEMS, at, semanticFailure, summarizeRows } from "./score.ts";
+import { isSelected } from "./guard.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -30,7 +31,7 @@ const labelOf = (sys: System): string => `${sys.startsWith("semantic_") ? "seman
 
 const OWN_HELP = `Your own set is a folder with queries.jsonl and qrels.jsonl in the format that evals/${NAME}/assets/README.md describes, and library/, the folder akm should index (a link to it works). A library of several bundles needs bundles.json too. Run it with: evals/${NAME}/run --cases DIR`;
 
-const USAGE = `Usage: evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic]
+const USAGE = `Usage: evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic] [--selection-flag NAME]
 
 For each collection of queries, indexes its library in a sandbox for keyword search and, with --semantic, in a second one for
 semantic search, asks akm search and akm curate of each for the first ${DEPTH} results of every query, and scores them against
@@ -48,6 +49,8 @@ scored. Needs akm on PATH, or in AKM_BIN.
   --limit   run N queries of each collection, in the task and non-task proportion of the whole set.
   --semantic  also score the semantic search, whatever --limit or corpus is given. Without it only keyword search is scored. The
             semantic index of a large library of your own embeds every asset: tens of minutes the first time.
+  --selection-flag  the akm flag a query's selection goes on, for search and curate: \`--<NAME> key=value\`. Default: filter, today's hard filter.
+            \`prefer\` or another name runs a candidate that has that flag. A set with selections is described in evals/retrieval/assets/selection/README.md.
   --repeat  run each collection N times, into <label>-r1-<collection> to <label>-rN-<collection>, and write the min, max and mean of each metric to
             <UTC date>-<label>-<collection>-repeat-summary.json beside them
 ${akmUsage}
@@ -79,6 +82,8 @@ interface Summary {
   semantic_index?: CachedIndex["state"];
   /** Which akm built the semantic index (the version, `akm_bin`, `akm_build` and when akm says it built it). For a kept index it is this run's akm, since the cache keeps an index for one build. */
   semantic_index_built_by?: BuiltBy;
+  /** The flag the selections of the queries went on (--selection-flag). null for a set with no selection. */
+  selection_flag: string | null;
   /** What --semantic said: `on` scores the semantic search too, `off` (no flag) is keyword search alone. A run from before --semantic was a plain flag can also say `auto`. */
   semantic_flag: "on" | "off";
   depth: number;
@@ -109,6 +114,8 @@ interface Summary {
   /** The seed of the rewrite, for a rewrite corpus: the seed in its corpus config. Null for the public corpus and an own one, which are not made from a seed. */
   seed: string | null;
   metrics: Columns<SystemMetrics>;
+  /** What a call costs in each column: results, seconds (p50, p95) and tokens. See score.ts CallStats. */
+  calls: Columns<CallStats>;
   /** The share of inputs where akm returned nothing: for non-task inputs, and for task queries with no relevant asset. */
   abstention: { non_task: Columns<Abstention>; no_answer: Columns<Abstention> };
   /** Only for a set with filter queries (sentinels in its qrels, see guard.ts): how many of its filter queries each column left out of the metrics because akm does not apply their flags. */
@@ -117,6 +124,10 @@ interface Summary {
   unsupported_reason?: string | null;
   /** Only for a set with filter queries: the metrics of each query kind, such as filter, tiebreak and control. */
   by_kind?: Record<string, Columns<SystemMetrics>>;
+  /** Only for a set with selections: the metrics by what the query wants (team, general, mixed: see intentOf in score.ts). */
+  by_intent?: Record<string, Columns<SystemMetrics>>;
+  /** Only for a set with selections: `unchanged`, the share of the queries with a `same_as` partner whose list equals the partner's, and `leaked`, how many leak queries returned anything in a keyword column (it has to be 0). */
+  checks?: { unchanged: Columns<number | null>; leaked: Columns<number | null> };
   /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
@@ -167,13 +178,43 @@ function printSummary(s: Summary): void {
   if (a.non_task.search.n > 0) console.log(`  returned nothing, non-task inputs        ${ab(a.non_task)}`);
   if (a.no_answer.search.n > 0) console.log(`  returned nothing, task without answer    ${ab(a.no_answer)}`);
   if (s.unsupported_reason) console.log(`  UNSUPPORTED: ${s.unsupported_reason}`);
+  const selectionRows = (indent: string, mm: Columns<SystemMetrics>) => {
+    const r = (label: string, f: (x: NonNullable<SystemMetrics["selection"]>) => string) => console.log(`${indent}${label.padEnd(18)}  ${systems.map((sys) => (at(mm, sys).selection ? f(at(mm, sys).selection as NonNullable<SystemMetrics["selection"]>) : "n/a").padEnd(COLUMN)).join("  ")}`.trimEnd());
+    r("nDCG@10", (x) => fixed(x.ndcg_10));
+    r("prefNDCG@10", (x) => fixed(x.pref_ndcg_10));
+    r(`match P@k (${MATCH_K.search}/${MATCH_K.curate})`, (x) => fixed(x.match_precision_k));
+    r("irrelevant match@k", (x) => fixed(x.irrelevant_match_k));
+    r("first match rank", (x) => (x.first_match_rank === null ? "n/a" : x.first_match_rank.toFixed(2)));
+    r("non-match recall", (x) => fixed(x.nonmatch_recall_10));
+    r("partial > none", (x) => pct(x.partial_above_none));
+    r("conflict > missing", (x) => pct(x.conflict_above_missing));
+  };
+  const selected = s.checks !== undefined;
+  if (selected) {
+    console.log(`  selection on --${s.selection_flag}, over the ${at(m, "search").selection?.n ?? 0} queries whose selection matches some asset`);
+    selectionRows("    ", m);
+  }
   for (const [kind, km] of Object.entries(s.by_kind ?? {})) {
     console.log(`  ${kind} queries (n ${at(km, "search").n} in search)`);
     const kindRow = (label: string, f: (x: SystemMetrics) => string) => console.log(`    ${label.padEnd(14)}  ${systems.map((sys) => f(at(km, sys)).padEnd(COLUMN)).join("  ")}`.trimEnd());
     kindRow("nDCG@10", (x) => fixed(x.ndcg_10));
     kindRow("Success@5", (x) => pct(x.success_5));
-    kindRow("banned > first", (x) => pct(x.banned_above_first));
+    if (!selected) kindRow("banned > first", (x) => pct(x.banned_above_first));
   }
+  for (const [intent, km] of Object.entries(s.by_intent ?? {})) {
+    console.log(`  ${intent}-intent queries (n ${at(km, "search").n} in search)`);
+    selectionRows("    ", km);
+  }
+  if (s.checks) {
+    const line = (label: string, g: Columns<number | null>, f: (x: number | null) => string) => console.log(`  ${label.padEnd(20)}  ${systems.map((sys) => f(at(g, sys)).padEnd(COLUMN)).join("  ")}`.trimEnd());
+    line("unchanged (same_as)", s.checks.unchanged, pct);
+    line("leaked (must be 0)", s.checks.leaked, (x) => (x === null ? "n/a" : String(x)));
+  }
+  const cost = (label: string, f: (x: CallStats) => string) => console.log(`  ${label.padEnd(20)}  ${systems.map((sys) => f(at(s.calls, sys)).padEnd(COLUMN)).join("  ")}`.trimEnd());
+  cost("results per call", (x) => (x.results === null ? "n/a" : x.results.toFixed(2)));
+  cost("seconds p50 / p95", (x) => (x.seconds_p50 === null ? "n/a" : `${x.seconds_p50} / ${x.seconds_p95}`));
+  cost("out tokens", (x) => (x.out_tokens === null ? "n/a" : x.out_tokens.toFixed(0)));
+  cost("load tokens (first 5)", (x) => (x.load_tokens_k === null ? "n/a" : x.load_tokens_k.toFixed(0)));
   if (systems.some((sys) => at(s.errored, sys) > 0)) console.log(`  errored calls: ${systems.map((sys) => `${labelOf(sys)} ${at(s.errored, sys)}`).join(", ")} (left out of the numbers)${s.timeouts > 0 ? `, ${s.timeouts} of the calls timed out` : ""}`);
   console.log(`  results      ${relative(ROOT, s.results_dir)}/`);
 }
@@ -237,7 +278,7 @@ const warnedQrels = new Set<string>();
 export async function runCollection(
   corpus: ResolvedCorpus,
   collection: string,
-  ctx: { label?: string; limit?: number; semantic: boolean; callTimeoutMs?: number; newSandbox?: () => Sandbox; cache?: IndexInput["cache"] },
+  ctx: { label?: string; limit?: number; semantic: boolean; selectionFlag?: string; callTimeoutMs?: number; newSandbox?: () => Sandbox; cache?: IndexInput["cache"] },
   folders: Folders,
 ): Promise<Summary> {
   let all: Query[];
@@ -252,13 +293,16 @@ export async function runCollection(
   }
   // What the run is made from, as it is now: label may append grades while the run is going. The library is read once, for the digest and for the semantic index kept between runs.
   const library = akm.libraryFiles(folders.library, folders.bundles);
-  const assets = assetsDigests(library, queriesFile, qrelsFile);
+  const metadataFile = join(folders.assets, "metadata.jsonl");
+  const assets = assetsDigests(library, queriesFile, qrelsFile, metadataFile);
   const mixed = mixedJudgesWarning(qrels, relative(ROOT, qrelsFile));
   if (mixed && !warnedQrels.has(qrelsFile)) {
     warnedQrels.add(qrelsFile);
     console.error(`${NAME}: warning: ${mixed}`);
   }
-  const cases = casesOf(selectQueries(all, ctx.limit), qrels);
+  const cases = casesOf(selectQueries(all, ctx.limit), qrels, readMetadata(folders.assets));
+  const selectionFlag = ctx.selectionFlag ?? akm.SELECTION_FLAG;
+  const selects = cases.some(isSelected);
   for (const c of cases) {
     if (isTask(c) && Object.keys(c.grades).length === 0) fail(`${c.id} has no grades in qrels.jsonl.${corpus.name === "public" && collection === "library" ? " Run evals/retrieval/label first." : ""}`);
   }
@@ -278,7 +322,7 @@ export async function runCollection(
     const rows: Row[] = [];
     const seen = { keyword: new Set<string>(), semantic: new Set<string>() };
     for (const c of cases) {
-      const { row, modes } = await collectQuery(indexes.boxes, c, systems, ctx.callTimeoutMs);
+      const { row, modes } = await collectQuery(indexes.boxes, c, systems, ctx.callTimeoutMs, selectionFlag);
       for (const [mode, said] of modes) seen[mode].add(said);
       rows.push(row);
       appendFileSync(samples, `${JSON.stringify(row)}\n`);
@@ -293,7 +337,7 @@ export async function runCollection(
       corpus: corpus.name,
       collection,
       // what each query presents to akm: its text, in the library the run indexed. A library with another file in it is another input for every query.
-      cases: caseDigests(MEASUREMENT, cases, () => ({ library_sha256: assets.library_sha256, bundles_sha256: assets.bundles_sha256 })),
+      cases: caseDigests(MEASUREMENT, cases, () => ({ library_sha256: assets.library_sha256, bundles_sha256: assets.bundles_sha256, ...(selects ? { selection_flag: selectionFlag } : {}) })),
       akm: { version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
       config: indexes.config,
       settings: { timeout_ms: ctx.callTimeoutMs ?? akm.CALL_TIMEOUT_MS, seed },
@@ -313,6 +357,7 @@ export async function runCollection(
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },
       ...(ctx.semantic ? { semantic_model: SEMANTIC_MODEL, semantic_index: indexes.semanticIndex, semantic_index_built_by: indexes.builtBy } : {}),
       semantic_flag: ctx.semantic ? "on" : "off",
+      selection_flag: selects ? selectionFlag : null,
       depth: DEPTH,
       relevant_from_grade: RELEVANT,
       limit: ctx.limit ?? null,
@@ -337,9 +382,9 @@ export async function runCollection(
 }
 
 async function main(): Promise<void> {
-  let values: { akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; semantic?: boolean; help?: boolean };
+  let values: { akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; semantic?: boolean; "selection-flag"?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, semantic: { type: "boolean" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, semantic: { type: "boolean" }, "selection-flag": { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`retrieval: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -356,6 +401,8 @@ async function main(): Promise<void> {
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   if (values.label !== undefined && !/^[A-Za-z0-9._-]+$/.test(values.label)) fail("--label may use letters, digits, dot, dash and underscore");
   const semantic = values.semantic === true;
+  const selectionFlag = values["selection-flag"];
+  if (selectionFlag !== undefined && (!/^[a-z][a-z-]*$/.test(selectionFlag) || ["limit", "format", "detail"].includes(selectionFlag))) fail("--selection-flag is the name of an akm flag, such as filter or prefer (not limit, format or detail)");
 
   const sets = corpora.flatMap((c) => collectionsFor(c).map((s) => ({ corpus: c, ...s })));
   for (const { corpus: c, folders: f } of sets) {
@@ -373,7 +420,7 @@ async function main(): Promise<void> {
     }
   }
   for (const s of sets) {
-    const run = (runLabel: string | undefined) => runCollection(s.corpus, s.name, { label: runLabel, limit, semantic }, s.folders);
+    const run = (runLabel: string | undefined) => runCollection(s.corpus, s.name, { label: runLabel, limit, semantic, selectionFlag }, s.folders);
     // A run's folder is <label>-rN-<collection>, so the repeat summary is named <label>-<collection>, and the collections' do not collide.
     if (repeat === undefined) summaries.push(...await repeatRuns(undefined, label ?? "", () => run(label)));
     else summaries.push(...(await repeatRuns(repeat, `${label}-${s.name}`, (runLabel) => run(`${label}-r${runLabel.slice(runLabel.lastIndexOf("-r") + 2)}`))));

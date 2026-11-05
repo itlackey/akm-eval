@@ -1,0 +1,21 @@
+{
+  "keys": {
+    "team": { "select": "channel", "frontmatter": "scope_channel" },
+    "project": { "select": "agent", "frontmatter": "scope_agent" }
+  },
+  "teams": { "print": "publishing", "e2e-testing": "qa" },
+  "project": { "team": "publishing", "value": "gutterpress", "contains": "gutterpress" },
+  "conflict": {
+    "value": "platform",
+    "files": [
+      "skills/ai-skills/agent-cli-tools/SKILL.md",
+      "skills/ai-skills/litellm-skill/SKILL.md",
+      "skills/ai-skills/llm-delegation-tool/SKILL.md",
+      "skills/ai-skills/opencode-extensions/SKILL.md",
+      "skills/ai-skills/opencode-troubleshoot/SKILL.md",
+      "skills/ai-skills/openviking/SKILL.md"
+    ]
+  },
+  "absent": "zz-no-such-team",
+  "selections": ["publishing", "qa", "both", "none", "absent"]
+}
