@@ -87,7 +87,7 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
       error = said !== null ? `akm ${system} searched with ${said}, not ${mode}: ${warnings}` : `akm ${system} did not say how it searched (no searchMode), and a semantic answer has to say semantic: ${warnings}`;
       continue;
     }
-    const ranked = hits.map((hit) => (typeof hit.ref === "string" ? hit.ref.replace(/^skills\//, "") : ""));
+    const ranked = hits.map((hit) => (typeof hit.ref === "string" ? hit.ref.replace(/^skills\//, "").replace(/\/SKILL(\.md)?$/, "") : ""));
     const stray = hits.find((_, i) => !known.has(ranked[i]));
     if (stray) {
       error = `akm ${system} returned ${JSON.stringify(stray.ref)}, which is not one of the skills it was given`;

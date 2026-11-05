@@ -17,7 +17,7 @@ import { parseCases } from "./lib.ts";
 import type { Case } from "./score.ts";
 
 const DAY = 86_400_000;
-const nameOf = (ref: string): string => ref.replace(/^memories\//, "");
+const nameOf = (ref: string): string => ref.replace(/^memories\//, "").replace(/\.md$/, "");
 
 /** The notes of the cases as the check plants them: each once, by name, with the file time that keeps the gaps between `created` dates and puts the newest `now - 1 day`. */
 export function plantedNotes(cases: Case[], now = Date.now()): Note[] {

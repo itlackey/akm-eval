@@ -79,7 +79,7 @@ export interface Row {
 }
 
 /** `bundle//memories/some-name` is the memory `some-name`. */
-export const nameOfRef = (ref: string): string => ref.replace(/^.*\/\//, "").replace(/^memories\//, "");
+export const nameOfRef = (ref: string): string => ref.replace(/^.*\/\//, "").replace(/^memories\//, "").replace(/\.md$/, "");
 
 /**
  * The model names the endpoint reported for the run's calls, from akm's usage report, with the calls each answered. A gateway may

@@ -45,6 +45,10 @@ A separate, optional set for akm's date filters (`--since`, `--until` on `akm se
 
 A committed set of 30 code-shaped lookups (a flag, an identifier, a config key) whose answers sit inside fenced code of the public library; it measures akm#1272 (fenced-code identifiers in search): [its README](assets/code/README.md). The public collections and the eval's version are unchanged.
 
+## Refs
+
+The qrels name an asset by the ref akm printed before akm#1432: the type folder, then the name (`knowledge/skills/x/references/a` for a note inside a skill). Since #1432 a ref is the file's path (`skills/x/references/a`), and a later akm may keep the extension. The collector brings every ref akm prints to the qrels' spelling from the hit's type (`oldSpelling` in `src/akm.ts`), once, where the hit is read. `samples.jsonl` holds that spelling, so old and new runs, and the qrels, stay comparable.
+
 ## How a query is scored
 
 Each judgment grades an asset 0 to 3 for a query: 3 is exactly the asset to load, 2 relevant and useful, 1 same topic but no help, 0 unrelated. Grade 2 or 3 is relevant. A task query with no relevant asset is not scored, and is counted with the abstentions. A result naming a section (`ref#section`) counts as the asset.
