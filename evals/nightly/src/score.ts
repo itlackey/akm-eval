@@ -43,7 +43,7 @@ export interface Lane {
   refs: string[];
 }
 
-export const conceptId = (ref: string): string => (ref.includes("//") ? ref.slice(ref.indexOf("//") + 2) : ref);
+export const conceptId = (ref: string): string => (ref.includes("//") ? ref.slice(ref.indexOf("//") + 2) : ref).replace(/\.md$/, "");
 
 /**
  * The action akm reported for a ref and a process (`reflect` or `distill`), or undefined when the night did not get to it. An `error`

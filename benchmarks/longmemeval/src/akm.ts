@@ -82,7 +82,7 @@ export class Akm {
     const hits = found.hits ?? [];
     return hits.map((h) => {
       if (typeof h.ref !== "string") throw new Error("akm returned a hit with no ref");
-      return h.ref.split("/").pop() as string;
+      return (h.ref.split("/").pop() as string).replace(/\.md$/, "");
     });
   }
 }

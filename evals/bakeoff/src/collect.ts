@@ -177,7 +177,7 @@ const schemaRepair: Collect = async (c, sandbox, timeoutMs) => {
   const ref = file.replace(/\.md$/, "");
   const improve = await runAkmJson<Obj>(sandbox, ["improve", ref, "--strategy", STRATEGIES["schema-repair"], "--no-sync", "--require-engines", "--json-to-stdout"], opts);
   const served = servedBy(improve, "validation");
-  const repair = (improve.schemaRepairs as Obj[] | undefined)?.find((r) => r.ref === ref);
+  const repair = (improve.schemaRepairs as Obj[] | undefined)?.find((r) => typeof r.ref === "string" && r.ref.replace(/\.md$/, "") === ref);
   if (!repair) throw new Error("akm attempted no schema repair: it found nothing to repair in the lesson");
   if (repair.outcome === "queued") {
     const { proposals } = await runAkmJson<{ proposals: Obj[] }>(sandbox, ["proposal", "list", "--status", "pending", "--detail", "full"], opts);

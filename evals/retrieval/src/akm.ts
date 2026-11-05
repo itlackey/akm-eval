@@ -36,6 +36,30 @@ export function foldRefs(refs: string[]): string[] {
 
 const bundleOf = (sb: Sandbox): string => join(sb.dir, "bundle");
 
+/** The folder akm gives each type. */
+const TYPE_DIR: Record<string, string> = { skill: "skills", command: "commands", agent: "agents", knowledge: "knowledge", workflow: "workflows", script: "scripts", lesson: "lessons", fact: "facts", memory: "memories" };
+
+/**
+ * The spelling the qrels use for a ref akm printed. Before akm#1432 a ref was `<type folder>/<name>` whatever the folder the file sat in;
+ * now it is the file's path without the type suffix, so a note outside its type folder lost its type head (`knowledge/skills/x/references/a`
+ * is `skills/x/references/a`), and a later akm may keep the extension (`a.md`, `skills/x/SKILL.md`). The eval states a ref one way, the
+ * old one, and brings every printed ref to it here, from the hit's own type: drop a kept extension, then put the type folder in front
+ * unless the ref starts with it. Old builds' refs come out as they went in, so published runs and new runs score against the same
+ * qrels. A ref of a type this does not know (env, secret) or an unqualified `bundle//` prefix is left alone, the prefix kept.
+ */
+export function oldSpelling(printed: string, type: unknown): string {
+  const dir = typeof type === "string" ? TYPE_DIR[type] : undefined;
+  if (dir === undefined) return printed;
+  const [full, section] = printed.split(/#(.*)/s);
+  const cut = (full as string).indexOf("//");
+  const prefix = (full as string).slice(0, cut === -1 ? 0 : cut + 2);
+  let ref = (full as string).slice(prefix.length);
+  if (type === "skill") ref = ref.replace(/\/SKILL(\.md)?$/, "");
+  else if (type !== "script") ref = ref.replace(/\.md$/, "");
+  if (!ref.startsWith(`${dir}/`)) ref = `${dir}/${ref}`;
+  return `${prefix}${ref}${section === undefined ? "" : `#${section}`}`;
+}
+
 /** The folder of a bundle that bundles.json names. The name is relative to the library, and may leave it (a link, or `../shared/notes`). */
 const bundleFolder = (root: string, name: string): string => join(root, name);
 
@@ -102,7 +126,7 @@ export async function assets(sb: Sandbox, expected: number): Promise<Asset[]> {
     const { stdout, stderr, code } = await runAkm(sb, ["search", "", "--type", type, "--limit", "5000", "--belief", "all", ...(await agentDetailArgs(sb)), "--format", "json"]);
     if (code !== 0) throw new Error(`akm search --type ${type} failed (exit ${code}): ${stderr.trim().slice(-300)}`);
     for (const h of (JSON.parse(stdout) as { hits?: Record<string, string>[] }).hits ?? []) {
-      found.push({ ref: h.ref, type: h.type, name: h.name ?? h.ref, description: h.description ?? "", path: relative(bundleOf(sb), h.path) });
+      found.push({ ref: oldSpelling(h.ref, h.type), type: h.type, name: h.name ?? h.ref, description: h.description ?? "", path: relative(bundleOf(sb), h.path) });
     }
   }
   if (found.length !== expected) throw new Error(`akm indexed ${expected} assets, but listing the types ${TYPES.join(", ")} found ${found.length}. Add the missing type to TYPES in src/akm.ts.`);
@@ -157,8 +181,9 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
   const assets = new Map<string, Asset>();
   for (const h of results) {
     if (typeof h.ref !== "string") return failed(`akm ${system} returned a result with no ref`);
-    refs.push(h.ref);
-    const [ref] = foldRefs([h.ref]);
+    const printed = oldSpelling(h.ref, h.type);
+    refs.push(printed);
+    const [ref] = foldRefs([printed]);
     if (ref && !assets.has(ref)) assets.set(ref, { ref, type: String(h.type ?? ""), name: String(h.name ?? ref), description: String(h.description ?? ""), path: String(h.path ?? "") });
   }
   return { refs: foldRefs(refs), assets: [...assets.values()], mode: said, seconds: seconds() };
