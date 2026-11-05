@@ -63,10 +63,13 @@ export function matchOf(selection: Selection, keys: Record<string, string> | und
   return states.includes("conflict") ? "conflict" : "missing";
 }
 
-/** Which kind of query this is for the selection, from the qrels: `team` when most of its relevant assets match, `general` when none does, `mixed` otherwise. */
+/** Whether some asset of the set fully matches the selection. One that matches none (`@absent`, `no-match`) is a check that the list stays as it was (`unchanged`), not a preference to measure. */
+export const selectsAny = (c: Pick<Case, "selection" | "metadata">): boolean => c.selection !== undefined && Object.values(c.metadata ?? {}).some((keys) => matchOf(c.selection as Selection, keys) === "full");
+
+/** Which kind of query this is for the selection, from the qrels: `team` when most of its relevant assets match, `general` when none does, `mixed` otherwise. null for a selection that matches no asset (selectsAny). */
 export type Intent = "team" | "general" | "mixed";
 export function intentOf(c: Pick<Case, "grades" | "selection" | "metadata">): Intent | null {
-  if (!c.selection) return null;
+  if (!selectsAny(c)) return null;
   const relevant = Object.keys(c.grades).filter((r) => c.grades[r] >= RELEVANT);
   if (relevant.length === 0) return null;
   const full = relevant.filter((r) => matchOf(c.selection as Selection, c.metadata?.[r]) === "full").length;
@@ -99,7 +102,7 @@ export interface Scored {
   banned_above: boolean | null;
   /** A banned asset is among the first 10 and ranks above the first relevant asset. A relevant asset that is missing does not count here unless every one is. null when the query bans none. */
   banned_above_first: boolean | null;
-  /** Only for a query with a selection. */
+  /** Only for a query whose selection matches some asset (selectsAny). */
   selection?: SelectionScored;
 }
 
@@ -114,9 +117,9 @@ export interface SelectionScored {
   first_match_rank: number | null;
   /** The relevant assets that do not fully match (missing, conflict or partial) among the first 10, over the lesser of 10 and how many there are. null when there are none. */
   nonmatch_recall_10: number | null;
-  /** Diagnostic: a relevant partial match ranks above a relevant missing or conflicting asset. null unless the query has both. */
+  /** Diagnostic: a relevant partial match ranks above a relevant missing or conflicting asset. null unless the query has both and one of them is among the results. */
   partial_above_none: boolean | null;
-  /** Diagnostic: a relevant asset with a conflicting value ranks above a relevant one with the key missing. null unless the query has both. */
+  /** Diagnostic: a relevant asset with a conflicting value ranks above a relevant one with the key missing. null unless the query has both and one of them is among the results. */
   conflict_above_missing: boolean | null;
 }
 
@@ -139,7 +142,9 @@ export function scoreSelection(c: Case & { selection: Selection }, refs: string[
   const above = (a: Match[], b: Match[]): boolean | null => {
     const as = relevant.filter((r) => a.includes(status(r)));
     const bs = relevant.filter((r) => b.includes(status(r)));
-    return as.length > 0 && bs.length > 0 ? rank(as) < rank(bs) : null;
+    if (as.length === 0 || bs.length === 0) return null;
+    // Neither among the results: nothing ranks above the other.
+    return rank(as) === rank(bs) ? null : rank(as) < rank(bs);
   };
   const round = (x: number): number => Number(x.toFixed(4));
   return {
@@ -204,8 +209,10 @@ export interface SystemMetrics {
 }
 
 export interface SelectionMetrics {
-  /** How many queries with a selection the column scored. */
+  /** How many queries with a selection that matches some asset the column scored (selectsAny): the rows the guardrails are read on. */
   n: number;
+  /** nDCG@10 over those queries. */
+  ndcg_10: number | null;
   pref_ndcg_10: number | null;
   match_precision_k: number | null;
   irrelevant_match_k: number | null;
@@ -222,6 +229,7 @@ export interface SelectionMetrics {
 export function summarize(rows: Scored[]): SystemMetrics {
   const share = (f: (r: Scored) => boolean | null): number | null => mean(rows.flatMap((r) => (f(r) === null ? [] : [f(r) ? 1 : 0])));
   const sel = rows.flatMap((r) => (r.selection ? [r.selection] : []));
+  const selRows = rows.filter((r) => r.selection);
   const of = (f: (x: SelectionScored) => number | null): number | null => mean(sel.flatMap((x) => (f(x) === null ? [] : [f(x) as number])));
   const shareOf = (f: (x: SelectionScored) => boolean | null): number | null => of((x) => (f(x) === null ? null : f(x) ? 1 : 0));
   return {
@@ -240,6 +248,7 @@ export function summarize(rows: Scored[]): SystemMetrics {
       : {
           selection: {
             n: sel.length,
+            ndcg_10: mean(selRows.map((r) => r.ndcg_10)),
             pref_ndcg_10: of((x) => x.pref_ndcg_10),
             match_precision_k: of((x) => x.match_precision_k),
             irrelevant_match_k: of((x) => x.irrelevant_match_k),
@@ -345,10 +354,10 @@ export function makeRow(c: Case, raw: Raw): Row {
   return row as Row;
 }
 
-/** The scores of a query's results in one column: the usual ones, and the selection ones when the query has a selection. */
+/** The scores of a query's results in one column: the usual ones, and the selection ones when the query's selection matches some asset. */
 function scoredOf(c: Case, refs: string[], sys: System): Scored {
   const scores = scoreQuery(c.grades, refs, c.banned);
-  return c.selection ? { ...scores, selection: scoreSelection(c as Case & { selection: Selection }, refs, MATCH_K[commandOf(sys)]) } : scores;
+  return selectsAny(c) ? { ...scores, selection: scoreSelection(c as Case & { selection: Selection }, refs, MATCH_K[commandOf(sys)]) } : scores;
 }
 
 /**

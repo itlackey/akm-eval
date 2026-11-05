@@ -54,14 +54,14 @@ Two separate, optional sets for selecting on frontmatter (akm#1437, akm#1412): m
 - [`assets/selection-split`](assets/selection-split/README.md): the public library split into a team and a general bundle, its 101 judged queries once for each selection. `evals/retrieval/split` writes it from `split.json` at run time.
 
 ```
-evals/retrieval/split                                   # writes .cache/selection-split
-evals/retrieval/run --cases .cache/selection-split      # today's hard filter: --filter channel=publishing
-evals/retrieval/run --cases .cache/selection-split --selection-flag prefer --akm "bun ~/code/akm-wt/src/cli.ts"
+evals/retrieval/split /tmp/selection-split              # not in a gitignored folder: akm indexes no ignored file
+evals/retrieval/run --cases /tmp/selection-split        # today's hard filter: --filter channel=publishing
+evals/retrieval/run --cases /tmp/selection-split --selection-flag prefer --akm "bun ~/code/akm-wt/src/cli.ts"
 ```
 
 A query may carry `selection` (key to a value or a list of values) and `same_as` (see `assets/README.md`). The collector puts the selection on `akm search` and `akm curate` as `--<flag> key=value`, once for each value; `--selection-flag NAME` picks the flag (`filter` by default, `prefer` for a candidate). A build that refuses the flag (`UNKNOWN_FLAG`) leaves those queries out of the metrics (`unsupported`) and is not an error. `searchArgs` stays search-only. `metadata.jsonl` says which keys each asset carries; the scorer decides from it whether a returned asset matches the selection: `full`, `partial`, `conflict` (another value of a selected key) or `missing`. Qrels stay topical, so no pair is graded twice.
 
-Metrics, for each column and for `by_kind` and `by_intent` (`team`: most relevant assets match; `general`: none; `mixed`):
+Metrics, for each column and for `by_kind` and `by_intent` (`team`: most relevant assets match; `general`: none; `mixed`). The selection metrics, `by_intent` included, cover only the queries whose selection matches some asset: a selection that matches none (`@absent`, `no-match`) is the `unchanged` check, and would otherwise dilute every guardrail with rows a soft option leaves as they were. The column's plain metrics still average every row, the `@none` baseline rows too:
 
 | Metric | Meaning |
 |---|---|
@@ -69,10 +69,10 @@ Metrics, for each column and for `by_kind` and `by_intent` (`team`: most relevan
 | `match_precision_k`, `irrelevant_match_k` | the share of the first k places (search 5, curate 4) that hold a relevant full match; that hold a full match graded below 2 or not at all |
 | `first_match_rank` | the rank of the first relevant full match, 11 when it is not in the first 10; lower is better |
 | `nonmatch_recall_10` | relevant assets that do not fully match in the first 10, over the lesser of 10 and how many there are |
-| `partial_above_none`, `conflict_above_missing` | diagnostics only: the share of queries where a partial match outranks a non-match, and where another team's asset outranks one that lacks the key |
+| `partial_above_none`, `conflict_above_missing` | diagnostics only: the share of queries where a partial match outranks a non-match, and where another team's asset outranks one that lacks the key (a query where neither is in the first 10 is left out) |
 | `checks.unchanged` | the share of `same_as` queries whose list equals their partner's in the same run: a selection that matches nothing must change nothing (a hard filter returns nothing here, and the table shows it) |
-| `checks.leaked` | leak queries (a metadata value found in no text) that returned anything in a keyword column; must be 0 |
-| `calls` | per column: results per call, seconds p50 and p95, `out_tokens` (characters akm printed over 4, what the agent receives) and `load_tokens_k` (`estimatedTokens` of the first 5 search results, what loading them costs; curate prints none) |
+| `checks.leaked` | leak queries (a metadata value found in no text) that returned anything in a keyword column; must be 0. `null` for a set with no leak query (the split set: its proof is the real-akm test in `src/split.test.ts`, which CI skips) |
+| `calls` | per column: results per call, seconds p50 and p95, `out_tokens` (characters akm printed over 4, what the agent receives; they hold the paths akm prints, so compare them only between runs of the same case folder) and `load_tokens_k` (`estimatedTokens` of the first 5 search results, what loading them costs; curate prints none) |
 
 Conflicts and partial matches are diagnostics, never part of the headline. The qrels grade topical relevance, not "my team's version", so `pref_ndcg_10` encodes the preference by assumption; results a candidate brings up that no qrels row covers count as not relevant, and `judged_10` says how many (grade them with the `codex-review` protocol of the 2026-10-15 expansion, which calls no lab model).
 
@@ -80,7 +80,7 @@ A candidate wins at about equal tokens when, against the no-selection and hard-f
 
 1. the `@none` and `control` lists equal the baseline build's, the leak query returns nothing, `unchanged` is 1 and the number of results per call is the same;
 2. on team-intent queries `pref_ndcg_10` and `match_precision_k` rise and `first_match_rank` falls;
-3. overall `ndcg_10` drops by at most 0.02, and `nonmatch_recall_10` (overall and for general-intent queries) by at most 2% relative;
+3. `selection.ndcg_10` drops by at most 0.02, and `nonmatch_recall_10` (overall and for general-intent queries) by at most 2% relative;
 4. `out_tokens` and `load_tokens_k` stay within 5% of the baseline's; a candidate that wins by returning fewer results or more fails;
 5. between ties, the option with less machinery wins.
 

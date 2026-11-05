@@ -1,7 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { selectionArgs } from "./akm.ts";
 import { parseMetadata, parseQueries } from "./lib.ts";
 import { type Case, type Metadata, type Raw, makeRow, matchOf, rawOf, intentOf, scoreSelection, summarizeRows } from "./score.ts";
@@ -59,6 +56,7 @@ describe("scoreSelection", () => {
     expect(first.partial_above_none).toBe(true); // t//b (partial) before t//d (conflict)
     expect(last.partial_above_none).toBe(true);
     expect(first.conflict_above_missing).toBeNull(); // no relevant asset with the key missing
+    expect(scoreSelection(CASE as Case & { selection: typeof SEL }, ["t//e"], 4).partial_above_none).toBeNull(); // neither among the results
   });
   test("the rank of the first match is DEPTH + 1 when it is missing, and null when the query has none", () => {
     expect(scoreSelection(CASE as Case & { selection: typeof SEL }, ["t//b"], 4).first_match_rank).toBe(11);
@@ -70,6 +68,7 @@ describe("scoreSelection", () => {
     expect(intentOf({ ...CASE, grades: { "t//b": 3, "t//d": 3 } })).toBe("general");
     expect(intentOf({ ...CASE, grades: { "t//a": 3, "t//b": 3 } })).toBe("mixed");
     expect(intentOf({ ...CASE, selection: undefined })).toBeNull();
+    expect(intentOf({ ...CASE, selection: { channel: "zz" } })).toBeNull(); // matches no asset: the unchanged check
   });
 });
 
@@ -89,16 +88,17 @@ describe("rows of a set with selections", () => {
     ];
     const s = summarizeRows(rows);
     expect(s.checks).toEqual({ unchanged: { search: 1, curate: 1 }, leaked: { search: 0, curate: 0 } });
-    expect(s.metrics.search.selection?.n).toBe(2);
-    expect(Object.keys(s.by_intent ?? {}).sort()).toEqual(["general", "mixed"]);
+    // x@absent selects a value no asset has: it is the unchanged check, not a preference, so it has no intent and no selection scores.
+    expect(s.metrics.search.selection?.n).toBe(1);
+    expect(Object.keys(s.by_intent ?? {})).toEqual(["mixed"]);
     expect(s.calls.search).toMatchObject({ n: 4, results: 1.5, out_tokens: 100, load_tokens_k: 43.3333 });
     expect(s.calls.curate.load_tokens_k).toBeNull();
     expect(Object.keys(s.by_kind ?? {})).toContain("k");
   });
 
-  test("counts a leak query that returned anything, in a keyword column", () => {
-    const s = summarizeRows([makeRow(leak, raw(["t//a"]))]);
-    expect(s.checks?.leaked).toEqual({ search: 1, curate: 1 });
+  test("counts a leak query that returned anything, in a keyword column, and says nothing for a set with no leak query", () => {
+    expect(summarizeRows([makeRow(leak, raw(["t//a"]))]).checks?.leaked).toEqual({ search: 1, curate: 1 });
+    expect(summarizeRows([makeRow(CASE, raw(["t//a"]))]).checks?.leaked).toEqual({ search: null, curate: null });
   });
 
   test("a build that refuses the selection flag leaves the selected queries out, in both columns, and they are not errors", () => {
@@ -116,10 +116,4 @@ describe("rows of a set with selections", () => {
     expect("raw" in back && back.raw.search).toMatchObject({ outChars: 400, tokens: [7] });
     expect(makeRow(CASE, (back as { raw: Raw }).raw)).toEqual(row);
   });
-});
-
-test("writes a metadata file the parser reads back", () => {
-  const dir = mkdtempSync(join(tmpdir(), "meta-"));
-  writeFileSync(join(dir, "m.jsonl"), '{"ref":"a","keys":{"channel":"ops"}}\n');
-  expect(parseMetadata(require("node:fs").readFileSync(join(dir, "m.jsonl"), "utf8"))).toEqual({ a: { channel: "ops" } });
 });

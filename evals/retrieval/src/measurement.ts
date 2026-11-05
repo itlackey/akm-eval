@@ -44,10 +44,6 @@ export function setFolder(root: string, summary: Record<string, any>): string {
 /** Everything the case presents to akm: its query, in the library the run indexed. */
 const inputOf = (c: Case, library?: unknown): unknown => ({ query: c.query, library: library ?? null, ...(c.searchArgs ? { searchArgs: c.searchArgs } : {}), ...(c.selection ? { selection: c.selection } : {}) });
 
-/** The digest of a set's metadata, once for all its cases: they share one object. */
-const metadataDigests = new WeakMap<object, string>();
-const metadataSha256 = (metadata: object): string => metadataDigests.get(metadata) ?? (metadataDigests.set(metadata, sha256Json(metadata)), metadataDigests.get(metadata) as string);
-
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
@@ -62,7 +58,7 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   input: inputOf,
   rescoreContexts: (_root, summary, cases) => new Map(cases.map(c => [c.id, libraryOf(summary)])),
   // Everything score() reads of the case: whether it is a task, the grade of each asset judged for it and the assets it bans; for a query with a selection, the digest of the metadata that says which assets match it.
-  labels: (c) => ({ kind: c.kind, grades: c.grades, banned: [...c.banned].sort(), ...(c.aliases ? { aliases: c.aliases } : {}), ...(c.sentinels ? { sentinels: [...c.sentinels].sort() } : {}), ...(c.sameAs ? { same_as: c.sameAs } : {}), ...(c.selection && c.metadata ? { metadata_sha256: metadataSha256(c.metadata) } : {}) }),
+  labels: (c) => ({ kind: c.kind, grades: c.grades, banned: [...c.banned].sort(), ...(c.aliases ? { aliases: c.aliases } : {}), ...(c.sentinels ? { sentinels: [...c.sentinels].sort() } : {}), ...(c.sameAs ? { same_as: c.sameAs } : {}), ...(c.selection && c.metadata ? { metadata_sha256: sha256Json(c.metadata) } : {}) }),
   rawOf,
   score: makeRow,
   errored,

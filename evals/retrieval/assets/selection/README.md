@@ -26,7 +26,7 @@ It calls no model.
 | `no-match` | 2 | The selection value is in no note (`zz-nowhere`, on one key, then on the other). The list has to equal that of the same query without a selection (`same_as` the `control`) |
 | `duplicate` | 1 | The same note in both bundles. akm keeps one of two identical notes, and the metrics show which |
 | `untagged-team` | 1 | A team script, which cannot carry frontmatter. Only a per-bundle default could make it match |
-| `leak` | 1 | The query is a project codename (`orchidfalcon`) that is in no text, only in one note's metadata. It has to return nothing, with the selection and without; a result means metadata reached the ranked text |
+| `leak` | 1 | The query is a project codename (`orchidfalcon`) that is in no text, only in one note's metadata. It is asked with `agent=orchidfalcon` selected and has to return nothing: a result means metadata reached the ranked text |
 | `control` | 1 | No selection. Its ranking must not move |
 
 ## Keys

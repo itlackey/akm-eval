@@ -4,7 +4,9 @@
 // run time from assets/selection-split/split.json and the public library, queries and qrels, so there is no second copy of the library in the
 // repository. A test pins the digest of what it writes.
 //
-//   evals/retrieval/split [DIR]     default DIR: .cache/selection-split
+//   evals/retrieval/split DIR
+//
+// DIR must not be in a gitignored folder (such as this repository's .cache): akm skips ignored files, and the run would index no asset.
 
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -147,8 +149,8 @@ if (import.meta.main) {
   try {
     const root = resolve(import.meta.dir, "..", "..", "..");
     const assets = join(root, "evals", "retrieval", "assets", "selection-split");
-    const out = resolve(process.argv[2] ?? join(root, ".cache", "selection-split"));
-    if (process.argv.length > 3 || process.argv[2]?.startsWith("-")) fail("Usage: evals/retrieval/split [DIR]");
+    if (process.argv.length !== 3 || process.argv[2]?.startsWith("-")) fail("Usage: evals/retrieval/split DIR (outside any gitignored folder: akm indexes no ignored file)");
+    const out = resolve(process.argv[2] as string);
     let split: Split;
     try {
       split = generateSplit({ library: join(root, "corpus", "library"), assets: join(root, "evals", "retrieval", "assets"), config: readConfig(assets), out });

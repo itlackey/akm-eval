@@ -79,8 +79,11 @@ describe.skipIf(process.env.AKM_EVAL_REAL_AKM !== "1")("the split against a real
       const bare = text.replace(/^---\n(?:scope_(?:channel|agent): .*\n)+/, "---\n");
       if (bare !== text) writeFileSync(file, bare);
     }
-    expect(await listsOf(untagged)).toEqual(await listsOf(out));
-  }, 600_000);
+    const tagged = await listsOf(out);
+    // Two failed or empty calls would compare equal: every call must succeed and most return something.
+    expect(Object.values(tagged).filter((refs) => refs.length > 0).length).toBeGreaterThan(Object.keys(tagged).length * 0.9);
+    expect(await listsOf(untagged)).toEqual(tagged);
+  }, 900_000);
 });
 
 async function listsOf(root: string): Promise<Record<string, string[]>> {
@@ -88,7 +91,13 @@ async function listsOf(root: string): Promise<Record<string, string[]>> {
   try {
     await akm.load(sb, join(root, "library"), join(root, "bundles.json"));
     const lists: Record<string, string[]> = {};
-    for (const q of parseQueries(readFileSync(join(root, "queries.jsonl"), "utf8")).filter((x) => x.kind === "none")) lists[q.id] = (await akm.ask(sb, "search", q.query, 10)).refs;
+    for (const q of parseQueries(readFileSync(join(root, "queries.jsonl"), "utf8")).filter((x) => x.kind === "none")) {
+      for (const command of ["search", "curate"] as const) {
+        const answer = await akm.ask(sb, command, q.query, 10);
+        if (answer.error) throw new Error(`${q.id} ${command}: ${answer.error}`);
+        lists[`${q.id} ${command}`] = answer.refs;
+      }
+    }
     return lists;
   } finally {
     removeSandbox(sb);

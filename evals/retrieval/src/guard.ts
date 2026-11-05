@@ -52,11 +52,12 @@ export function unsupportedColumns(rows: Row[], systems: readonly System[]): Par
 export const LEAK_KIND = "leak";
 
 /**
- * How many leak queries returned anything in a column, or null where the check does not hold. Metadata that reaches the ranked text makes a
+ * How many leak queries returned anything in a column, or null where the check does not hold or the set has no leak query. Metadata that reaches the ranked text makes a
  * query for a metadata value find the assets that carry it, with the selection and without. A keyword column returns nothing for a word that is in
  * no text, so any result is a leak; a semantic column returns its nearest neighbours whatever the query is, so it is not checked.
  */
 export function leaked(rows: Row[], sys: System): number | null {
-  if (sys.startsWith("semantic_")) return null;
-  return rows.filter((r) => r.kind === LEAK_KIND && (r[sys]?.refs.length ?? 0) > 0).length;
+  const leaks = rows.filter((r) => r.kind === LEAK_KIND);
+  if (sys.startsWith("semantic_") || leaks.length === 0) return null;
+  return leaks.filter((r) => (r[sys]?.refs.length ?? 0) > 0).length;
 }

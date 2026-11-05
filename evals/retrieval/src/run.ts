@@ -180,6 +180,7 @@ function printSummary(s: Summary): void {
   if (s.unsupported_reason) console.log(`  UNSUPPORTED: ${s.unsupported_reason}`);
   const selectionRows = (indent: string, mm: Columns<SystemMetrics>) => {
     const r = (label: string, f: (x: NonNullable<SystemMetrics["selection"]>) => string) => console.log(`${indent}${label.padEnd(18)}  ${systems.map((sys) => (at(mm, sys).selection ? f(at(mm, sys).selection as NonNullable<SystemMetrics["selection"]>) : "n/a").padEnd(COLUMN)).join("  ")}`.trimEnd());
+    r("nDCG@10", (x) => fixed(x.ndcg_10));
     r("prefNDCG@10", (x) => fixed(x.pref_ndcg_10));
     r(`match P@k (${MATCH_K.search}/${MATCH_K.curate})`, (x) => fixed(x.match_precision_k));
     r("irrelevant match@k", (x) => fixed(x.irrelevant_match_k));
@@ -190,7 +191,7 @@ function printSummary(s: Summary): void {
   };
   const selected = s.checks !== undefined;
   if (selected) {
-    console.log(`  selection on --${s.selection_flag}, over the ${at(m, "search").selection?.n ?? 0} queries that have one`);
+    console.log(`  selection on --${s.selection_flag}, over the ${at(m, "search").selection?.n ?? 0} queries whose selection matches some asset`);
     selectionRows("    ", m);
   }
   for (const [kind, km] of Object.entries(s.by_kind ?? {})) {
@@ -202,7 +203,6 @@ function printSummary(s: Summary): void {
   }
   for (const [intent, km] of Object.entries(s.by_intent ?? {})) {
     console.log(`  ${intent}-intent queries (n ${at(km, "search").n} in search)`);
-    console.log(`    ${"nDCG@10".padEnd(18)}  ${systems.map((sys) => fixed(at(km, sys).ndcg_10).padEnd(COLUMN)).join("  ")}`.trimEnd());
     selectionRows("    ", km);
   }
   if (s.checks) {
