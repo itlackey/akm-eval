@@ -1,0 +1,16 @@
+{"ref":"team//knowledge/staging-cert-swap","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/consumer-bounce","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/edge-clear-after-release","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/service-account-lockout","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/shard-rebalance-atlas-ops","keys":{"channel":"ops","agent":"atlas"}}
+{"ref":"team//knowledge/shard-rebalance-ops","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/shard-rebalance-atlas","keys":{"agent":"atlas"}}
+{"ref":"team//knowledge/compaction-schedule-ops","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/compaction-schedule-atlas","keys":{"agent":"atlas"}}
+{"ref":"team//knowledge/vendor-invoice-approval-ops","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/vendor-invoice-approval-finance","keys":{"channel":"finance"}}
+{"ref":"team//knowledge/contractor-laptop-ops","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/contractor-laptop-finance","keys":{"channel":"finance"}}
+{"ref":"team//knowledge/build-cache-backup-ops","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/weekend-pager-rotation","keys":{"channel":"ops"}}
+{"ref":"team//knowledge/harbor-failover-runbook","keys":{"channel":"ops","agent":"orchidfalcon"}}

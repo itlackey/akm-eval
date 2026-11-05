@@ -10,7 +10,7 @@ Every folder below has a `run` script. Every `run` takes `--corpus`, `--limit` a
 
 | Folder | Question it answers | Flags |
 |---|---|---|
-| `evals/retrieval` | Does akm search put the assets an agent needs at the top? | `--cases` `--repeat` `--akm` `--semantic` |
+| `evals/retrieval` | Does akm search put the assets an agent needs at the top? | `--cases` `--repeat` `--akm` `--semantic` `--selection-flag` |
 | `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | `--cases` `--repeat` `--strategy` `--harness` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
 | `evals/pair-judge` | Does consolidate's pair judge list the claims each note holds alone, so that akm retires only a note whose every claim the other keeps? | `--cases` `--repeat` `--harness` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
 | `evals/lesson-judge` | Does the lesson judge pass useful new lessons and updates and refuse status notes, restated rules and claims the source does not make? | `--cases` `--repeat` `--strategy` `--harness` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |

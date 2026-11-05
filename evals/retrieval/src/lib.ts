@@ -4,9 +4,10 @@
 // The scorer is score.ts and the collector is collect.ts (see measurement.ts). This file re-exports the scorer, and akm.ts's `Asset` and
 // `foldRefs`, so the eval and its tests import from one place. DEPTH, from the scorer, is also how deep each system goes into the label pool.
 
+import { existsSync, readFileSync } from "node:fs";
 import { sha256Text } from "../../../lib/provenance.ts";
 import type { Asset } from "./akm.ts";
-import { type Case, isTask } from "./score.ts";
+import { type Case, type Metadata, type Selection, isTask } from "./score.ts";
 
 export * from "./score.ts";
 export { type Asset, foldRefs } from "./akm.ts";
@@ -19,6 +20,10 @@ export interface Query {
   expected?: string[];
   /** Existing search CLI flags, e.g. ["--filter", "user=alice"]. */
   searchArgs?: string[];
+  /** Frontmatter the session selects on, key to value or list of values. The collector puts it on search and curate as `--<selection flag> key=value` (--selection-flag, `filter` by default). */
+  selection?: Selection;
+  /** The id of the query whose result list this one's must equal in the same run: a selection that matches no asset changes nothing. */
+  same_as?: string;
 }
 
 export interface Qrel {
@@ -69,6 +74,13 @@ export function parseQueries(text: string, where = "queries"): Query[] {
     for (const key of ["id", "query", "kind"]) if (typeof r[key] !== "string" || !r[key]) return `has no string "${key}"`;
     if (r.expected !== undefined && !(Array.isArray(r.expected) && r.expected.every((x) => typeof x === "string" && x))) return 'has an "expected" that is not a list of refs';
     if (r.searchArgs !== undefined && !(Array.isArray(r.searchArgs) && r.searchArgs.every((x) => typeof x === "string"))) return 'has a "searchArgs" that is not a list of strings';
+    if (r.selection !== undefined) {
+      const sel = r.selection as Record<string, unknown>;
+      const keys = typeof sel === "object" && sel !== null && !Array.isArray(sel) ? Object.keys(sel) : [];
+      const values = (v: unknown): v is string[] => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && x);
+      if (keys.length === 0 || !keys.every((k) => /^[a-z][a-z0-9_-]*$/.test(k) && (typeof sel[k] === "string" ? sel[k] !== "" : values(sel[k])))) return 'has a "selection" that is not an object of keys to a value or a list of values';
+    }
+    if (r.same_as !== undefined && (typeof r.same_as !== "string" || !r.same_as || r.same_as === r.id)) return 'has a "same_as" that is not the id of another query';
     const owned = (r.searchArgs as string[] | undefined)?.find((x) => RUNNER_ARGS.some((flag) => x === flag || x.startsWith(`${flag}=`)));
     if (owned !== undefined) return `has a "searchArgs" with ${JSON.stringify(owned)}, which the runner sets itself (${RUNNER_ARGS.join(", ")} are not allowed)`;
     return null;
@@ -78,7 +90,30 @@ export function parseQueries(text: string, where = "queries"): Query[] {
     if (ids.has(q.id)) throw new Error(`${where} has the id ${q.id} twice`);
     ids.add(q.id);
   }
+  for (const q of queries) if (q.same_as !== undefined && !ids.has(q.same_as)) throw new Error(`${where} has the "same_as" ${q.same_as} on ${q.id}, and no query with that id`);
   return queries;
+}
+
+/** The selection keys of the assets that carry any: one JSON object per line, `{"ref": "team//knowledge/a", "keys": {"channel": "alpha"}}`. A ref once. */
+export function parseMetadata(text: string, where = "metadata"): Metadata {
+  const rows = parseLines<{ ref: string; keys: Record<string, string> }>(text, where, (r) => {
+    if (typeof r.ref !== "string" || !r.ref) return 'has no string "ref"';
+    const keys = r.keys as Record<string, unknown> | null;
+    if (typeof keys !== "object" || keys === null || Array.isArray(keys) || Object.keys(keys).length === 0 || !Object.values(keys).every((v) => typeof v === "string" && v)) return 'has "keys" that is not an object of keys to a string';
+    return null;
+  });
+  const out: Metadata = {};
+  for (const r of rows) {
+    if (Object.hasOwn(out, r.ref)) throw new Error(`${where} has the ref ${r.ref} twice`);
+    out[r.ref] = r.keys;
+  }
+  return out;
+}
+
+/** The metadata.jsonl of a set's folder, or undefined when the set has none. */
+export function readMetadata(folder: string): Metadata | undefined {
+  const file = `${folder}/metadata.jsonl`;
+  return existsSync(file) ? parseMetadata(readFileSync(file, "utf8"), file) : undefined;
 }
 
 export function parseQrels(text: string, where = "qrels"): Qrel[] {
@@ -160,12 +195,12 @@ export function gradesByQuery(qrels: Qrel[]): Map<string, Record<string, number>
 }
 
 /** The cases of a set: each query with the grades of its qrels rows (a pair graded again keeps its last grade) and the assets its rows ban. */
-export function casesOf(queries: Query[], qrels: Qrel[]): Case[] {
+export function casesOf(queries: Query[], qrels: Qrel[], metadata?: Metadata): Case[] {
   const grades = gradesByQuery(qrels);
   const banned = bannedByQuery(qrels);
   const sentinels = sentinelsByQuery(qrels);
   const aliases = aliasesOf(qrels);
-  return queries.map((q) => ({ id: q.id, query: q.query, kind: q.kind, grades: grades.get(q.id) ?? {}, banned: banned.get(q.id) ?? [], ...(q.searchArgs ? { searchArgs: q.searchArgs } : {}), ...(sentinels.has(q.id) ? { sentinels: sentinels.get(q.id) } : {}), ...(Object.keys(aliases).length ? { aliases } : {}) }));
+  return queries.map((q) => ({ id: q.id, query: q.query, kind: q.kind, grades: grades.get(q.id) ?? {}, banned: banned.get(q.id) ?? [], ...(q.searchArgs ? { searchArgs: q.searchArgs } : {}), ...(sentinels.has(q.id) ? { sentinels: sentinels.get(q.id) } : {}), ...(Object.keys(aliases).length ? { aliases } : {}), ...(q.selection ? { selection: q.selection } : {}), ...(q.same_as ? { sameAs: q.same_as } : {}), ...(q.selection && metadata ? { metadata } : {}) }));
 }
 
 /**

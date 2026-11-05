@@ -133,6 +133,12 @@ export async function assets(sb: Sandbox, expected: number): Promise<Asset[]> {
   return found;
 }
 
+/** The default `--selection-flag`: today's hard filter. `prefer` and any other name stand for a candidate's flag. */
+export const SELECTION_FLAG = "filter";
+
+/** A selection as argv: `--<flag> key=value` for each value of each key, in the order of the keys. A key with several values repeats the flag, as `--filter` takes it. */
+export const selectionArgs = (flag: string, selection: Record<string, string | string[]> | undefined): string[] => Object.entries(selection ?? {}).flatMap(([key, value]) => [value].flat().flatMap((v) => [`--${flag}`, `${key}=${v}`]));
+
 export interface Answer {
   /** The assets in akm's order, sections folded into their asset. */
   refs: string[];
@@ -144,6 +150,10 @@ export interface Answer {
   error?: string;
   /** The call ran into its time limit and was killed. It is an error too, and the only kind that says akm is slow and not wrong. */
   timedOut?: boolean;
+  /** The characters akm printed. */
+  outChars?: number;
+  /** `estimatedTokens` of each result in the order of `refs`, when akm prints it (search does, curate does not). */
+  tokens?: number[];
 }
 
 /** How long one call may take before it is killed. */
@@ -155,15 +165,15 @@ export const CALL_TIMEOUT_MS = 120_000;
  * search, `fts-fallback`, and that is not the semantic result. A semantic call has to say `searchMode: "semantic"`: an
  * answer with results that does not say how it searched could be keyword rankings, and is an error as well. One with no
  * results and no searchMode searched nothing (curate's abstention), and is taken as empty. A keyword call that does not
- * say is taken as it comes.
+ * say is taken as it comes. `selection` is argv for both commands (selectionArgs); `searchArgs` is for search only.
  */
-export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = LIMIT, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS, searchArgs: readonly string[] = []): Promise<Answer> {
-  const { stdout, stderr, code, ms, timedOut } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", ...(system === "search" ? searchArgs : []), "--", query], { timeoutMs }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0, timedOut: false }));
+export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = LIMIT, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS, searchArgs: readonly string[] = [], selection: readonly string[] = []): Promise<Answer> {
+  const { stdout, stderr, code, ms, timedOut } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", ...selection, ...(system === "search" ? searchArgs : []), "--", query], { timeoutMs }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0, timedOut: false }));
   const seconds = () => Number((ms / 1000).toFixed(2));
   const failed = (error: string, extra: { timedOut?: true } = {}): Answer => ({ refs: [], assets: [], mode: null, seconds: seconds(), error, ...extra });
   if (timedOut) return failed(`akm ${system} timed out after ${+(timeoutMs / 1000).toFixed(1)}s`, { timedOut: true });
   if (code !== 0) return failed(`akm ${system} exited ${code}: ${(stderr.trim() || stdout.trim()).slice(-300)}`);
-  type Hit = { ref?: unknown; type?: unknown; name?: unknown; description?: unknown; path?: unknown };
+  type Hit = { ref?: unknown; type?: unknown; name?: unknown; description?: unknown; path?: unknown; estimatedTokens?: unknown };
   let out: { hits?: Hit[]; items?: Hit[]; searchMode?: unknown; warnings?: unknown };
   try {
     out = JSON.parse(stdout);
@@ -179,12 +189,17 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
   }
   const refs: string[] = [];
   const assets = new Map<string, Asset>();
+  const tokens = new Map<string, number>();
   for (const h of results) {
     if (typeof h.ref !== "string") return failed(`akm ${system} returned a result with no ref`);
     const printed = oldSpelling(h.ref, h.type);
     refs.push(printed);
     const [ref] = foldRefs([printed]);
-    if (ref && !assets.has(ref)) assets.set(ref, { ref, type: String(h.type ?? ""), name: String(h.name ?? ref), description: String(h.description ?? ""), path: String(h.path ?? "") });
+    if (ref && !assets.has(ref)) {
+      assets.set(ref, { ref, type: String(h.type ?? ""), name: String(h.name ?? ref), description: String(h.description ?? ""), path: String(h.path ?? "") });
+      if (typeof h.estimatedTokens === "number") tokens.set(ref, h.estimatedTokens);
+    }
   }
-  return { refs: foldRefs(refs), assets: [...assets.values()], mode: said, seconds: seconds() };
+  const folded = foldRefs(refs);
+  return { refs: folded, assets: [...assets.values()], mode: said, seconds: seconds(), outChars: stdout.length, ...(tokens.size === folded.length && folded.length > 0 ? { tokens: folded.map((r) => tokens.get(r) as number) } : {}) };
 }

@@ -8,17 +8,20 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME } from "./collect.ts";
-import { casesOf, parseQrels, parseQueries } from "./lib.ts";
+import { casesOf, parseQrels, parseQueries, readMetadata } from "./lib.ts";
+import { sha256Json } from "../../../lib/provenance.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarizeRows } from "./score.ts";
 
 /** What a run adds to the input of every query: the library akm indexed and the bundle mapping. Another library gives akm other results for every query. */
 export interface LibraryDigests {
   library_sha256: string | null;
   bundles_sha256: string | null;
+  /** The flag the collector put a query's selection on (`filter`, `prefer`, ...). Only a run of a set with selections records it. */
+  selection_flag?: string;
 }
 
 /** The library of a summary, from the `assets` digests it records. */
-export const libraryOf = (summary: Record<string, any>): LibraryDigests => ({ library_sha256: summary.assets?.library_sha256 ?? null, bundles_sha256: summary.assets?.bundles_sha256 ?? null });
+export const libraryOf = (summary: Record<string, any>): LibraryDigests => ({ library_sha256: summary.assets?.library_sha256 ?? null, bundles_sha256: summary.assets?.bundles_sha256 ?? null, ...(typeof summary.selection_flag === "string" ? { selection_flag: summary.selection_flag } : {}) });
 
 /**
  * The folder that holds the queries.jsonl and qrels.jsonl a run was scored against. The public corpus is in the repository. A run on a custom
@@ -39,23 +42,27 @@ export function setFolder(root: string, summary: Record<string, any>): string {
 }
 
 /** Everything the case presents to akm: its query, in the library the run indexed. */
-const inputOf = (c: Case, library?: unknown): unknown => ({ query: c.query, library: library ?? null, ...(c.searchArgs ? { searchArgs: c.searchArgs } : {}) });
+const inputOf = (c: Case, library?: unknown): unknown => ({ query: c.query, library: library ?? null, ...(c.searchArgs ? { searchArgs: c.searchArgs } : {}), ...(c.selection ? { selection: c.selection } : {}) });
+
+/** The digest of a set's metadata, once for all its cases: they share one object. */
+const metadataDigests = new WeakMap<object, string>();
+const metadataSha256 = (metadata: object): string => metadataDigests.get(metadata) ?? (metadataDigests.set(metadata, sha256Json(metadata)), metadataDigests.get(metadata) as string);
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.3",
-  scoringVersion: "0.5",
+  version: "0.4",
+  scoringVersion: "0.6",
   loadCases: (root, summary) => {
     const folder = setFolder(root, summary);
-    const cases = casesOf(parseQueries(readFileSync(join(folder, "queries.jsonl"), "utf8"), join(folder, "queries.jsonl")), parseQrels(readFileSync(join(folder, "qrels.jsonl"), "utf8"), join(folder, "qrels.jsonl")));
+    const cases = casesOf(parseQueries(readFileSync(join(folder, "queries.jsonl"), "utf8"), join(folder, "queries.jsonl")), parseQrels(readFileSync(join(folder, "qrels.jsonl"), "utf8"), join(folder, "qrels.jsonl")), readMetadata(folder));
     return cases;
   },
   caseId: (c) => c.id,
   input: inputOf,
   rescoreContexts: (_root, summary, cases) => new Map(cases.map(c => [c.id, libraryOf(summary)])),
-  // Everything score() reads of the case: whether it is a task, the grade of each asset judged for it and the assets it bans.
-  labels: (c) => ({ kind: c.kind, grades: c.grades, banned: [...c.banned].sort(), ...(c.aliases ? { aliases: c.aliases } : {}), ...(c.sentinels ? { sentinels: [...c.sentinels].sort() } : {}) }),
+  // Everything score() reads of the case: whether it is a task, the grade of each asset judged for it and the assets it bans; for a query with a selection, the digest of the metadata that says which assets match it.
+  labels: (c) => ({ kind: c.kind, grades: c.grades, banned: [...c.banned].sort(), ...(c.aliases ? { aliases: c.aliases } : {}), ...(c.sentinels ? { sentinels: [...c.sentinels].sort() } : {}), ...(c.sameAs ? { same_as: c.sameAs } : {}), ...(c.selection && c.metadata ? { metadata_sha256: metadataSha256(c.metadata) } : {}) }),
   rawOf,
   score: makeRow,
   errored,

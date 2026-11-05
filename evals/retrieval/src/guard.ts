@@ -9,6 +9,10 @@
 
 import type { Row, System } from "./score.ts";
 
+// A query with a selection (see score.ts, `Case.selection`) is guarded differently: its flag reaches both commands, so curate is scored for it too, and
+// the only evidence that a column cannot apply it is akm refusing the flag. A selection has no sentinel: a build that ignores a flag it does not
+// declare (before 0.9.0) is not a build the selection suite supports, and the version is on the summary.
+
 /** akm's refusal of a flag it does not declare: `{"code": "UNKNOWN_FLAG", "error": "Unknown flag \"--since\"."}`. */
 export const isUnknownFlag = (error: string): boolean => /UNKNOWN_FLAG|Unknown flag/.test(error);
 
@@ -18,11 +22,18 @@ export const takesSearchArgs = (sys: System): boolean => sys === "search" || sys
 /** A guarded row is a query with sentinels. */
 export const isGuarded = (row: Pick<Row, "sentinels">): boolean => (row.sentinels?.length ?? 0) > 0;
 
+/** A selected row is a query with a selection. */
+export const isSelected = (row: Pick<Row, "selection">): boolean => Object.keys(row.selection ?? {}).length > 0;
+
+/** Whether the special flags of a row (its searchArgs or its selection) reach the column: searchArgs reach search only, a selection reaches both commands. */
+export const reaches = (row: Pick<Row, "sentinels" | "selection">, sys: System): boolean => isSelected(row) || (isGuarded(row) && takesSearchArgs(sys));
+
 /** Why one guarded row shows that its column does not apply the flags, or null when it does not show it. */
 export function evidenceOf(row: Row, sys: System): string | null {
   const answer = row[sys];
-  if (!isGuarded(row) || !takesSearchArgs(sys) || answer === undefined) return null;
-  if (answer.unsupported) return `${row.id}: akm refused the flag (${row.searchArgs?.join(" ") ?? "no searchArgs"})`;
+  if ((!isGuarded(row) && !isSelected(row)) || !reaches(row, sys) || answer === undefined) return null;
+  if (answer.unsupported) return `${row.id}: akm refused the flag (${isSelected(row) ? "the selection" : (row.searchArgs?.join(" ") ?? "no searchArgs")})`;
+  if (!isGuarded(row)) return null;
   const returned = (row.sentinels ?? []).find((ref) => answer.refs.includes(ref));
   return returned === undefined ? null : `${row.id}: the out-of-window sentinel ${returned} came back`;
 }
@@ -35,4 +46,17 @@ export function unsupportedColumns(rows: Row[], systems: readonly System[]): Par
     if (evidence) out[sys] = evidence;
   }
   return out;
+}
+
+/** The kind of a query that holds a metadata value found in no asset's text (a project codename). */
+export const LEAK_KIND = "leak";
+
+/**
+ * How many leak queries returned anything in a column, or null where the check does not hold. Metadata that reaches the ranked text makes a
+ * query for a metadata value find the assets that carry it, with the selection and without. A keyword column returns nothing for a word that is in
+ * no text, so any result is a leak; a semantic column returns its nearest neighbours whatever the query is, so it is not checked.
+ */
+export function leaked(rows: Row[], sys: System): number | null {
+  if (sys.startsWith("semantic_")) return null;
+  return rows.filter((r) => r.kind === LEAK_KIND && (r[sys]?.refs.length ?? 0) > 0).length;
 }

@@ -913,6 +913,31 @@ describe("the manifest", () => {
   });
 });
 
+describe("selection", () => {
+  const queries = [{ id: "s1", query: "alpha", kind: "k", selection: { channel: "ops" } }, { id: "s2", query: "alpha", kind: "k2" }];
+  const qrels = [grade("s1", "a/x", 3), grade("s1", "a/y", 2), grade("s2", "a/x", 3)];
+
+  test("records the flag in the summary, and the digest of the queries with a selection changes with it", async () => {
+    const a = setup(queries, qrels);
+    const filter = await quiet(() => runCollection(OWN, "own", { ...a.ctx, semantic: false }, a.folders));
+    const b = setup(queries, qrels);
+    const prefer = await quiet(() => runCollection(OWN, "own", { ...b.ctx, semantic: false, selectionFlag: "prefer" }, b.folders));
+    expect([filter.selection_flag, prefer.selection_flag]).toEqual(["filter", "prefer"]);
+    const digests = (s: typeof filter) => Object.fromEntries(Object.entries(s.manifest.cases).map(([id, c]) => [id, c.input_sha256]));
+    expect(digests(filter).s1).not.toBe(digests(prefer).s1);
+    expect(prefer.checks).toBeDefined();
+    expect(prefer.calls.search.out_tokens).toBeGreaterThan(0);
+  });
+
+  test("a set without a selection has no selection fields, and its assets digest has no metadata", async () => {
+    const a = setup();
+    const s = await quiet(() => runCollection(OWN, "own", { ...a.ctx, semantic: false }, a.folders));
+    expect(s.selection_flag).toBeNull();
+    expect(s.checks).toBeUndefined();
+    expect(s.assets.metadata_sha256).toBeUndefined();
+  });
+});
+
 describe("banned assets", () => {
   // q1 bans a/z, which search puts first. q2 bans b/y, which curate puts after b/x, and search returns nothing.
   const queries = QUERIES.slice(0, 2);
@@ -1039,6 +1064,23 @@ if (args[0] !== "search" || args[1] !== "--help") {
     await akm.ask(sb, "curate", "quartz", 10, "keyword", 30_000, flags);
     const curated = JSON.parse(readFileSync(join(sb.dir, "argv.json"), "utf8"));
     expect(curated).not.toContain("--filter");
+  });
+
+  test("puts a selection on both commands, after the runner's flags and before the query", async () => {
+    const sb = boxFor({ hits: [{ ref: "a/x", estimatedTokens: 12 }], items: [{ ref: "a/x" }], searchMode: "keyword" });
+    const script = sb.cmd[1]!;
+    writeFileSync(script, printing({ hits: [{ ref: "a/x", estimatedTokens: 12 }], items: [{ ref: "a/x" }], searchMode: "keyword" }) + `
+const args = process.argv.slice(2);
+if (args[0] !== "search" || args[1] !== "--help") require("node:fs").writeFileSync(${JSON.stringify(join(sb.dir, "argv.json"))}, JSON.stringify(args));
+`);
+    const selection = akm.selectionArgs("prefer", { channel: ["ops", "qa"] });
+    const searched = await akm.ask(sb, "search", "quartz", 10, "keyword", 30_000, ["--since", "2026-01-01"], selection);
+    expect(JSON.parse(readFileSync(join(sb.dir, "argv.json"), "utf8")).slice(-8)).toEqual(["--prefer", "channel=ops", "--prefer", "channel=qa", "--since", "2026-01-01", "--", "quartz"]);
+    expect(searched).toMatchObject({ tokens: [12] });
+    expect(searched.outChars).toBeGreaterThan(0);
+    const curated = await akm.ask(sb, "curate", "quartz", 10, "keyword", 30_000, ["--since", "2026-01-01"], selection);
+    expect(JSON.parse(readFileSync(join(sb.dir, "argv.json"), "utf8")).slice(-6)).toEqual(["--prefer", "channel=ops", "--prefer", "channel=qa", "--", "quartz"]);
+    expect(curated.tokens).toBeUndefined();
   });
 
   test("a semantic call has to say it searched with embeddings: no searchMode is an error, as keyword and fts-fallback are", async () => {
