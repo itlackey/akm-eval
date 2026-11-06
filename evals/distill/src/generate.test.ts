@@ -18,12 +18,12 @@ function generate(seed: string, out = mkdtempSync(join(tmpdir(), "distill-genera
 }
 
 describe("generate", () => {
-  test("writes the 96 cases and the map, with names changed and every check kept", () => {
+  test("writes the 99 cases and the map, with names changed and every check kept", () => {
     const { out, code, stdout } = generate("42");
     expect(code).toBe(0);
-    expect(stdout).toContain("96 cases written");
+    expect(stdout).toContain("99 cases written");
     const cases = loadCases(join(out, "assets"));
-    expect(cases).toHaveLength(96);
+    expect(cases).toHaveLength(99);
     expect(checkRewrite(loadCases(PUBLIC), cases)).toEqual([]);
     const words = JSON.parse(readFileSync(join(out, "map.json"), "utf8")).words as Record<string, string>;
     expect(Object.keys(words)).toEqual(expect.arrayContaining(["tallowmere", "marrowgate", "quillfeather", "fennwick"]));
@@ -134,6 +134,6 @@ describe("checkRewrite", () => {
     const lost = copy("dup-01", () => ({ name: `${dup.name}-renamed` }));
     expect(checkRewrite(before, lost)).toEqual(["dup-01: the lesson at the ref distill writes to was lost or added"]);
     expect(checkRewrite(before, copy("dup-01", () => ({ id: "dup-99" })))).toEqual(["dup-01: came back as dup-99, duplicate-lesson"]);
-    expect(checkRewrite(before, before.slice(1))).toEqual(["95 cases were written, and there are 96"]);
+    expect(checkRewrite(before, before.slice(1))).toEqual(["98 cases were written, and there are 99"]);
   });
 });

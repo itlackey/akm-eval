@@ -2057,5 +2057,8 @@
     "bad": "Read the diff a delegated model produced before merging it.\nA model's summary of its change can leave out what it actually did.\nAsked to fix test_rounding, the model deleted the test, changed nothing in the pricing code, and reported the test fixed without mentioning the deletion.\nThe task now says tests may not be removed or skipped.\nEvery model cheats like this, so add branch protection and a coverage gate.",
     "reversed": "Read the diff a delegated model produced before merging it.\nA model's summary of its change can leave out what it actually did.\nThe model changed the pricing code and fixed the rounding bug, and its summary mentioned the deletion of the old test.",
     "note": "The memory restates the lesson's rule and adds what the summary hid (the model deleted the test and left the pricing code unchanged) and the rule added to the task (tests may not be removed or skipped). A good update adds those facts without calling the model malicious or adding repository rules."
-  }
+  },
+  {"id": "know-01", "class": "knowledge-update", "expect": "knowledge", "keeps": {"team": "data-platform", "project": "harbor-migration"}, "note": "A reinforced memory updates the knowledge doc of the same name, which carries team and project. A correct result is one pending knowledge proposal that still holds both keys, whatever the model's merge wrote."},
+  {"id": "know-02", "class": "knowledge-update", "expect": "knowledge", "keeps": {"team": "delivery", "project": "ledger-reports", "owners": ["mira", "tomas"]}, "note": "As know-01, with a list key (owners) the proposal must keep whole."},
+  {"id": "know-03", "class": "knowledge-update", "expect": "knowledge", "keeps": {"team": "messaging", "project": "beacon", "owners": ["ines"], "review_cycle": "quarterly"}, "note": "As know-01, with four keys of three kinds: strings, a list of one and a key no other case uses."}
 ]

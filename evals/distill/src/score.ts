@@ -8,9 +8,9 @@ import { FILLERS, type Negation, negations, reaches } from "../../../lib/negatio
 // The checks read a lesson's frontmatter with bun's own YAML parser. Without it every lesson would be scored on its body alone.
 if (typeof Bun.YAML?.parse !== "function") throw new Error("distill: this eval needs a bun that has Bun.YAML. Upgrade it with `bun upgrade`. See https://bun.sh");
 
-export const CLASSES = ["lesson-worthy", "over-claim", "dated-status", "restates-asset", "duplicate-lesson", "lesson-update"] as const;
+export const CLASSES = ["lesson-worthy", "over-claim", "dated-status", "restates-asset", "duplicate-lesson", "lesson-update", "knowledge-update"] as const;
 export type Class = (typeof CLASSES)[number];
-export type Expect = "lesson" | "none" | "update";
+export type Expect = "lesson" | "none" | "update" | "knowledge";
 
 /** A lesson longer than this many times its memory, in words, is too long. */
 export const MAX_RATIO = 1.5;
@@ -45,6 +45,11 @@ export interface Case {
   existing?: string;
   /** What a correct result is, in a sentence. */
   note: string;
+  /**
+   * A knowledge-update case only: the frontmatter keys of the knowledge doc the library holds (`knowledge/<memory name>.md` in the case's bundle)
+   * that the proposal must still have, with their values. They are keys the model's merge may leave out and akm does not own (`team`, `project`, a list).
+   */
+  keeps?: Record<string, unknown>;
   /** Feedback recorded about the memory before distill runs (`akm feedback`), in order. Optional: the public cases have none. */
   feedback?: { signal: "positive" | "negative"; reason?: string }[];
 }
@@ -61,7 +66,7 @@ export interface LoadedCase extends Case {
   existingBody?: string;
 }
 
-export const expectOf = (klass: Class): Expect => (klass === "lesson-worthy" || klass === "over-claim" ? "lesson" : klass === "lesson-update" ? "update" : "none");
+export const expectOf = (klass: Class): Expect => (klass === "lesson-worthy" || klass === "over-claim" ? "lesson" : klass === "lesson-update" ? "update" : klass === "knowledge-update" ? "knowledge" : "none");
 
 // ---- Matching phrases ------------------------------------------------------------------------------------------
 
@@ -673,8 +678,33 @@ function scoreUpdate(c: LoadedCase, run: CaseRun, base: Omit<Row, "verdict" | "o
   return { ...base, ...extra, checks, verdict: right ? "right" : "bad", outcome: updates.length > 0 ? "update" : "lesson", detail, lesson: lessonText(shown.content), status: shown.status, gate: shown.gate, scores: shown.scores ?? judgeScores(run.improve) };
 }
 
+/** The frontmatter keys of `keeps` that the proposed knowledge doc lacks or holds with another value. */
+export function lostKeys(keeps: Record<string, unknown>, content: string): string[] {
+  let front: Record<string, unknown> = {};
+  try {
+    front = (Bun.YAML.parse(FRONTMATTER.exec(content)?.[1] ?? "") as Record<string, unknown> | null) ?? {};
+  } catch {
+    // Unreadable frontmatter keeps nothing.
+  }
+  return Object.entries(keeps).filter(([key, value]) => JSON.stringify(front[key]) !== JSON.stringify(value)).map(([key]) => key);
+}
+
+/** Score a knowledge-update case: the pending proposal on `knowledge/<memory name>` must keep every key of `keeps`. A key it lost is in `missing`. */
+function scoreKnowledge(c: LoadedCase, run: CaseRun, base: Omit<Row, "verdict" | "outcome" | "detail">): Row {
+  const target = run.proposals.find((p) => sameRef(p.ref, `knowledge/${c.name}`) && p.status === "pending");
+  if (!target) {
+    const { outcome, detail } = distillOutcome(run.improve);
+    return outcome === "error" ? errorRow(c, detail, run.seconds) : { ...base, scores: judgeScores(run.improve), rejected_lesson: rejectedLesson(run.improve), verdict: "missed", outcome, detail };
+  }
+  const lost = lostKeys(c.keeps ?? {}, target.content);
+  return { ...base, missing: lost, verdict: lost.length === 0 ? "right" : "bad", outcome: "update", detail: [target.gate ?? target.status, target.reason ?? ""].filter(Boolean).join(": "), lesson: target.content, status: target.status, gate: target.gate, scores: target.scores };
+}
+
 function scoreRun(c: LoadedCase, run: CaseRun): Row {
   const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, served: servedModels(run.improve), calls: modelCalls(run.improve), lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], contradicted: [], ambiguous: [], ratio: null };
+  if (c.expect === "knowledge") return scoreKnowledge(c, run, base);
+  // Only knowledge cases read a knowledge proposal; a lesson case reads the lessons the queue holds.
+  run = { ...run, proposals: run.proposals.filter((p) => !conceptId(p.ref).startsWith("knowledge/")) };
   const proposal = run.proposals[0];
   if (proposal && c.expect === "update") return scoreUpdate(c, run, base);
   if (proposal) {
@@ -732,13 +762,13 @@ export function metrics(rows: Row[]): Metrics {
   const updates = scored.filter((r) => r.expect === "update");
   const unsure = (rs: Row[]) => rs.filter((r) => (r.ambiguous ?? []).length > 0).length;
   const counts = (): Record<Outcome, number> => ({ lesson: 0, update: 0, skipped: 0, rejected: 0, invalid: 0, error: 0 });
-  const outcomes: Metrics["outcomes"] = { lesson: counts(), none: counts(), update: counts() };
+  const outcomes: Metrics["outcomes"] = { lesson: counts(), none: counts(), update: counts(), knowledge: counts() };
   for (const r of rows) outcomes[r.expect][r.outcome]++;
   const by_class: Metrics["by_class"] = {};
   for (const klass of CLASSES) {
     if (rows.every((r) => r.class !== klass)) continue;
     const rs = scored.filter((r) => r.class === klass);
-    by_class[klass] = klass === "lesson-worthy" || klass === "over-claim" ? { n: rs.length, good: count(rs, "good"), rate: ratio(count(rs, "good"), rs.length) } : klass === "lesson-update" ? { n: rs.length, right: count(rs, "right"), rate: ratio(count(rs, "right"), rs.length) } : { n: rs.length, wrong: count(rs, "wrong"), rate: ratio(count(rs, "wrong"), rs.length) };
+    by_class[klass] = klass === "lesson-worthy" || klass === "over-claim" ? { n: rs.length, good: count(rs, "good"), rate: ratio(count(rs, "good"), rs.length) } : klass === "lesson-update" || klass === "knowledge-update" ? { n: rs.length, right: count(rs, "right"), rate: ratio(count(rs, "right"), rs.length) } : { n: rs.length, wrong: count(rs, "wrong"), rate: ratio(count(rs, "wrong"), rs.length) };
   }
   const bad = lessons.filter((r) => r.verdict === "bad");
   return {

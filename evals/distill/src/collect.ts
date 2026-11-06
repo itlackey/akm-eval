@@ -55,12 +55,12 @@ export const timedOutMessage = (message: string): boolean => /\btimed out after 
 /** The gate reason akm gives a proposal that extends an existing lesson (distill, akm #1090). */
 export const UPDATE_REASON = "distill-update";
 
-/** The lesson proposals distill queued, new lessons and updates to existing ones, from the lists `akm proposal list --detail full` printed for each state. */
+/** The proposals distill queued, new lessons and updates to existing ones, and knowledge docs (a reinforced memory graduates to one), from the lists `akm proposal list --detail full` printed for each state. */
 export function lessonProposals(listed: { status: string; proposals?: unknown[] }[]): Proposal[] {
   const found: Proposal[] = [];
   for (const { status, proposals } of listed) {
     for (const p of (proposals ?? []) as Record<string, any>[]) {
-      if (p?.source !== "distill" || typeof p.ref !== "string" || !conceptId(p.ref).startsWith("lessons/")) continue;
+      if (p?.source !== "distill" || typeof p.ref !== "string" || !/^(?:lessons|knowledge)\//.test(conceptId(p.ref))) continue;
       const gate = p.gateDecision ? `${p.gateDecision.outcome}/${p.gateDecision.reason}` : null;
       const reason = typeof p.gateDecision?.judgeReason === "string" ? p.gateDecision.judgeReason : null;
       found.push({ ref: p.ref, status, gate, scores: p.gateDecision?.scores ?? null, reason, content: typeof p.payload?.content === "string" ? p.payload.content : "", update: p.gateDecision?.reason === UPDATE_REASON });

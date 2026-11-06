@@ -8,9 +8,9 @@
 // Everything is written into a temporary folder and moved into place only when the checks pass, so a generation that
 // fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed.
 
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { GENERATED, type LoadedCase, MAX_COPIED, checkLesson, checkUpdate, lessonFile, loadCases, memoryBody, mentions, stated } from "./lib.ts";
+import { GENERATED, type LoadedCase, MAX_COPIED, checkLesson, checkUpdate, lessonFile, loadCases, lostKeys, memoryBody, mentions, stated } from "./lib.ts";
 import { generateArgs } from "../../../lib/cli.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -59,6 +59,7 @@ export function checkRewrite(before: LoadedCase[], after: LoadedCase[]): string[
       const now = passes(a);
       if (was !== now) note(`the ${key} example lesson ${now ? "now passes" : "no longer passes"}`);
     }
+    if (a.keeps && lostKeys(a.keeps, readFileSync(join(a.dir, "knowledge", `${a.name}.md`), "utf8")).length > 0) note("its knowledge doc no longer holds the keys the case keeps");
     if (existsSync(join(b.dir, lessonFile(b))) !== existsSync(join(a.dir, lessonFile(a)))) note("the lesson at the ref distill writes to was lost or added");
     if (files(b) !== files(a)) note(`it has ${files(a)} files, and the public case has ${files(b)}`);
   });
