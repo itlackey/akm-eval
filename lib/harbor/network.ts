@@ -38,7 +38,7 @@ export function singleService(tasksDir: string): boolean {
   try {
     return [...new Bun.Glob("*/environment/docker-compose.y*ml").scanSync({ cwd: tasksDir })].length === 0;
   } catch {
-    return true; // no folder, no task with a second service
+    return false; // can't tell, so keep each trial on its own network
   }
 }
 
@@ -77,9 +77,14 @@ export function prepareNetworks(plan: ReturnType<typeof networkPlan>): void {
     return;
   }
   if (daemonHasOwnPools()) return; // its pools are not the built-in ones, so the count below would be wrong
-  const nets = lines(sh(["docker", "network", "ls", "-q"]).out);
-  const subnets = nets.length ? lines(sh(["docker", "network", "inspect", "--format", "{{range .IPAM.Config}}{{.Subnet}}\n{{end}}", ...nets]).out) : [];
-  const routes = lines(sh(["ip", "-4", "route"]).out).map((l) => l.split(" ")[0]!);
+  const read = (cmd: string[]): string[] => {
+    const r = sh(cmd);
+    if (!r.ok) fail(`could not count Docker's free subnets: \`${cmd.slice(0, 3).join(" ")}\` failed`);
+    return lines(r.out);
+  };
+  const nets = read(["docker", "network", "ls", "-q"]);
+  const subnets = nets.length ? read(["docker", "network", "inspect", "--format", "{{range .IPAM.Config}}{{.Subnet}}\n{{end}}", ...nets]) : [];
+  const routes = read(["ip", "-4", "route"]).map((l) => l.split(" ")[0]!);
   const free = freeSubnets([...subnets, ...routes]);
   if (plan.concurrency > free) fail(`${plan.concurrency} concurrent trials each need a Docker network, and Docker's address pools have ${free} subnets free. Remove unused networks (docker network prune), lower --concurrency, or give the daemon a larger default-address-pools in /etc/docker/daemon.json (see evals/agent-ab/README.md).`);
 }
