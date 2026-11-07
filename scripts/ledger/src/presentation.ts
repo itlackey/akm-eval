@@ -30,6 +30,7 @@ const tests: Record<string, [string, string]> = {
   "memory-utility": ["Memory usefulness", "Do original notes help later answers, and does native memory inference add value beyond those notes?"],
   "agent-ab": ["Agent tasks", "Does giving a coding agent access to AKM help it finish benchmark tasks?"],
   "terminal-bench": ["Terminal tasks", "Does giving a terminal agent access to AKM help it finish Terminal-Bench tasks?"],
+  "project-intent": ["Project knowledge", "With a project registered for the agent's directory, does an agent that passes no selection flag use the right project's knowledge, at equal or fewer tokens?"],
 };
 
 export function testInfo(suite: string) {
@@ -179,6 +180,23 @@ export function scores(summary: Record<string, unknown>): Score[] {
       ratio("Tasks passed with AKM", "akm.pass_rate", "akm.passed", "akm.scored", "Scored tasks completed successfully by the agent with AKM available.");
       ratio("Trials that used AKM", "engagement.rate", "engagement.called", "engagement.trials", "Agent trials in which AKM was actually called.");
       break;
+    case "project-intent": {
+      const arms = Object.keys(object(m.arms));
+      // The bare arm first: it is the run's primary score, the arm whose name convention the eval tests.
+      for (const arm of [...arms.filter(a => a === "bare"), ...arms.filter(a => a !== "bare")])
+        ratio(`Pass rate · ${arm}`, `arms.${arm}.pass_rate`, `arms.${arm}.passed`, `arms.${arm}.scored`, "Mean over tasks of each task's share of passed attempts, for this arm of akm's projects config; the counts are trials.");
+      for (const pair of ["bare-none", "explicit-none"]) {
+        const name = `Pass-rate gain · ${pair.replace("-", " − ")}`;
+        metric(name, `comparisons.${pair}.value`, "Paired pass-rate difference of the two arms over the tasks both scored, in percentage points.");
+        metric(`${name} · CI low`, `comparisons.${pair}.lo`, "Lower end of the recorded 95% paired bootstrap interval (tasks, then attempts), in percentage points.");
+        metric(`${name} · CI high`, `comparisons.${pair}.hi`, "Upper end of the recorded 95% paired bootstrap interval (tasks, then attempts), in percentage points.");
+      }
+      for (const arm of arms) {
+        metric(`Other project's value · ${arm}`, `arms.${arm}.other_project_rate`, "Conflict trials whose answer held the other project's value.", { lower: true });
+        metric(`Tokens per correct outcome · ${arm}`, `arms.${arm}.tokens_per_correct`, "Input plus output tokens over the trials that reported them, divided by the passed trials.", { unit: "count", lower: true });
+      }
+      break;
+    }
   }
   return list;
 }

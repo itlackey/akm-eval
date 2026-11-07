@@ -10,6 +10,7 @@
 import asyncio
 import json
 import os
+import shlex
 import stat
 import hashlib
 import subprocess
@@ -56,6 +57,17 @@ def test_the_arm_has_its_own_name_and_says_which_plugin(tmp_path):
     assert agent.name() == "akm-opencode"
     assert agent.to_agent_info().name == "akm-opencode"
     assert agent.version().endswith("+akm-opencode@0.9.26202610051302")
+
+
+def test_an_arm_label_names_the_agent_and_projects_go_into_the_akm_config(tmp_path):
+    projects = {"orchid": {"paths": ["/work/orchid"], "filters": {"project": ["orchid", ""]}}}
+    agent = make(tmp_path, arm="explicit", projects=projects)
+    assert agent.name() == "akm-opencode"
+    assert agent.to_agent_info().name == "akm-opencode-explicit"
+    seed = agent._seed_command()
+    assert f"akm config set projects {shlex.quote(json.dumps(projects))} --silent && akm config get projects >/dev/null && " in seed
+    assert subprocess.run(["bash", "-n", "-c", seed], capture_output=True, text=True).returncode == 0
+    assert "config set projects" not in make(tmp_path, arm="none")._seed_command()
 
 
 def test_the_plugin_is_the_only_thing_added_to_the_config(tmp_path):

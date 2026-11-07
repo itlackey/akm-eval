@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/region--orchid"
+version = "1.0.0"
+description = "The region our services are pinned to (orchid)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "orchid"
+gold_ref = "memories/home-region-94fa"
+library_tokens = ["eu-north-4"]
+other_ref = "memories/home-region-1d3e"
+other_tokens = ["ap-south-7"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

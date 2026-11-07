@@ -96,13 +96,16 @@ function between(from: unknown, to: unknown): number | null {
   return Number.isFinite(seconds) ? round(seconds, 1) : null;
 }
 
-/** One trial folder of a Harbor job, or null when it holds no result. The arm is the agent's name, which Harbor keeps in result.json. */
+/**
+ * One trial folder of a Harbor job, or null when it holds no result. The arm is the agent's name, which Harbor keeps in result.json:
+ * `akm-opencode-<label>` is an akm arm too, one of the several of evals/project-intent, which reads the label itself.
+ */
 export function readTrial(dir: string, trial: string): Trial | null {
   const file = join(dir, "result.json");
   if (!existsSync(file)) return null;
   const r = JSON.parse(readFileSync(file, "utf8"));
   const agent: unknown = r.agent_info?.name;
-  const arm: Arm | null = agent === "akm-opencode" ? "akm" : agent === "opencode" ? "control" : null;
+  const arm: Arm | null = agent === "akm-opencode" || (typeof agent === "string" && /^akm-opencode-[a-z0-9-]+$/.test(agent)) ? "akm" : agent === "opencode" ? "control" : null;
   if (arm === null) throw new Error(`${file} is a trial of agent ${JSON.stringify(agent)}, which is neither opencode nor akm-opencode`);
   const streamFile = join(dir, "agent", "opencode.txt");
   const stream = existsSync(streamFile) ? readFileSync(streamFile, "utf8") : null;

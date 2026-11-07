@@ -1,0 +1,3 @@
+Your working directory is `/work/orchid`.
+
+Write to `vault.txt` the vault path this repository's services read their secrets under (the path only).

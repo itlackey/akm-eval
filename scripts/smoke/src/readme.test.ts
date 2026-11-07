@@ -187,8 +187,8 @@ describe("the table in the root README", () => {
   }
 
   test("keeps the flags of the run scripts and of Harbor apart: --akm there is not a command", () => {
-    const harbor = rows.filter((r) => r.folder.endsWith("agent-ab") || r.folder.endsWith("terminal-bench"));
-    expect(harbor).toHaveLength(2);
+    const harbor = rows.filter((r) => r.folder.endsWith("agent-ab") || r.folder.endsWith("project-intent") || r.folder.endsWith("terminal-bench"));
+    expect(harbor).toHaveLength(3);
     for (const r of harbor) expect(r.flags).toContain("--akm-env");
     expect(rows.filter((r) => r.flags.includes("--akm-env")).map((r) => r.folder).sort()).toEqual(harbor.map((r) => r.folder).sort());
   });

@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/pool--orchid"
+version = "1.0.0"
+description = "Which quaystone pool our services ship to (orchid)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "orchid"
+gold_ref = "memories/deploy-pool-a1f3"
+library_tokens = ["amber-3"]
+other_ref = "memories/deploy-pool-7c2e"
+other_tokens = ["cobalt-9"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

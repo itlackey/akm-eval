@@ -7,7 +7,7 @@ import { comparisonFields, coreColumns, scoreColumns, type Cell } from "../../le
 import { scores } from "../../ledger/src/presentation.ts";
 import { memoryColumns } from "../../ledger/src/memory.ts";
 
-export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "lesson-judge", "pair-judge", "drain-judge", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret", "memory-utility"];
+export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "lesson-judge", "pair-judge", "drain-judge", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret", "memory-utility", "project-intent"];
 type Row = Record<string, any>;
 /** `repeats` is set for a --repeat set, loaded from its repeat-summary.json: the runs it names, in order. Its `summary` is the first run's with the mean of each metric, and its rows are the first run's (case counts and timing). */
 export interface Run { dir: string; summary: Row; rows: Row[]; samplesMissing?: boolean; running?: boolean; repeats?: Run[] }

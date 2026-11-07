@@ -1,0 +1,11 @@
+{
+  "none": null,
+  "bare": {
+    "orchid": { "paths": ["/work/orchid"] },
+    "quill": { "paths": ["/work/quill"] }
+  },
+  "explicit": {
+    "orchid": { "paths": ["/work/orchid"], "filters": { "project": ["orchid", ""] } },
+    "quill": { "paths": ["/work/quill"], "filters": { "project": ["quill", ""] } }
+  }
+}
