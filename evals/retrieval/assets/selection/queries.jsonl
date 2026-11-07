@@ -1,20 +1,20 @@
-{"id":"s01","kind":"team-first","query":"how do I rotate the staging TLS certificate","selection":{"channel":"ops"}}
-{"id":"s02","kind":"team-first","query":"restart the queue consumer when a job is stuck","selection":{"channel":"ops"}}
-{"id":"s03","kind":"team-first","query":"purge the CDN cache after a release","selection":{"channel":"ops"}}
-{"id":"s04","kind":"team-first","query":"unlock a locked service account","selection":{"channel":"ops"}}
-{"id":"s05","kind":"general-only","query":"export an invoice to PDF","selection":{"channel":"ops"}}
-{"id":"s06","kind":"general-only","query":"set up a Python virtualenv for the project","selection":{"channel":"ops"}}
-{"id":"s07","kind":"general-only","query":"what goes into a commit message","selection":{"channel":"ops"}}
-{"id":"s08","kind":"partial","query":"rebalance the shard map","selection":{"channel":"ops","agent":"atlas"}}
-{"id":"s09","kind":"partial","query":"move shards between nodes and check the shard map","selection":{"channel":"ops","agent":"atlas"}}
-{"id":"s10","kind":"partial","query":"tune the compaction schedule","selection":{"channel":"ops","agent":"atlas"}}
-{"id":"s11","kind":"missing-vs-conflict","query":"approve a vendor invoice over the limit","selection":{"channel":"ops"}}
-{"id":"s12","kind":"missing-vs-conflict","query":"request a laptop for a contractor","selection":{"channel":"ops"}}
+{"id":"s01","kind":"team-first","query":"how do I rotate the staging TLS certificate","selection":{"team":"ops"}}
+{"id":"s02","kind":"team-first","query":"restart the queue consumer when a job is stuck","selection":{"team":"ops"}}
+{"id":"s03","kind":"team-first","query":"purge the CDN cache after a release","selection":{"team":"ops"}}
+{"id":"s04","kind":"team-first","query":"unlock a locked service account","selection":{"team":"ops"}}
+{"id":"s05","kind":"general-only","query":"export an invoice to PDF","selection":{"team":"ops"}}
+{"id":"s06","kind":"general-only","query":"set up a Python virtualenv for the project","selection":{"team":"ops"}}
+{"id":"s07","kind":"general-only","query":"what goes into a commit message","selection":{"team":"ops"}}
+{"id":"s08","kind":"partial","query":"rebalance the shard map","selection":{"team":"ops","project":"atlas"}}
+{"id":"s09","kind":"partial","query":"move shards between nodes and check the shard map","selection":{"team":"ops","project":"atlas"}}
+{"id":"s10","kind":"partial","query":"tune the compaction schedule","selection":{"team":"ops","project":"atlas"}}
+{"id":"s11","kind":"missing-vs-conflict","query":"approve a vendor invoice over the limit","selection":{"team":"ops"}}
+{"id":"s12","kind":"missing-vs-conflict","query":"request a laptop for a contractor","selection":{"team":"ops"}}
 {"id":"s13","kind":"control","query":"back up the build cache to cold storage"}
-{"id":"s14","kind":"no-match","query":"back up the build cache to cold storage","selection":{"channel":"zz-nowhere"},"same_as":"s13"}
-{"id":"s15","kind":"no-match","query":"back up the build cache to cold storage","selection":{"agent":"zz-nowhere"},"same_as":"s13"}
-{"id":"s16","kind":"duplicate","query":"who has the weekend pager","selection":{"channel":"ops"}}
-{"id":"s17","kind":"untagged-team","query":"check the disk usage of the build hosts","selection":{"channel":"ops"}}
-{"id":"s18","kind":"leak","query":"orchidfalcon","selection":{"agent":"orchidfalcon"}}
-{"id":"s19","kind":"multi-value","query":"approve a vendor invoice over the limit","selection":{"channel":["ops","finance"]}}
-{"id":"s20","kind":"multi-value","query":"request a laptop for a contractor","selection":{"channel":["ops","finance"]}}
+{"id":"s14","kind":"no-match","query":"back up the build cache to cold storage","selection":{"team":"zz-nowhere"},"same_as":"s13"}
+{"id":"s15","kind":"no-match","query":"back up the build cache to cold storage","selection":{"project":"zz-nowhere"},"same_as":"s13"}
+{"id":"s16","kind":"duplicate","query":"who has the weekend pager","selection":{"team":"ops"}}
+{"id":"s17","kind":"untagged-team","query":"check the disk usage of the build hosts","selection":{"team":"ops"}}
+{"id":"s18","kind":"leak","query":"orchidfalcon","selection":{"project":"orchidfalcon"}}
+{"id":"s19","kind":"multi-value","query":"approve a vendor invoice over the limit","selection":{"team":["ops","finance"]}}
+{"id":"s20","kind":"multi-value","query":"request a laptop for a contractor","selection":{"team":["ops","finance"]}}

@@ -13,8 +13,8 @@ import type { Row, System } from "./score.ts";
 // the only evidence that a column cannot apply it is akm refusing the flag. A selection has no sentinel: a build that ignores a flag it does not
 // declare (before 0.9.0) is not a build the selection suite supports, and the version is on the summary.
 
-/** akm's refusal of a flag it does not declare: `{"code": "UNKNOWN_FLAG", "error": "Unknown flag \"--since\"."}`. */
-export const isUnknownFlag = (error: string): boolean => /UNKNOWN_FLAG|Unknown flag/.test(error);
+/** akm's refusal of a flag it does not declare: `{"code": "UNKNOWN_FLAG", "error": "Unknown flag \"--since\"."}`, or of a filter key it does not know (before #1453): exit 2, `INVALID_FLAG_VALUE`, `Unknown scope key "team" in --filter`. */
+export const isUnknownFlag = (error: string): boolean => /UNKNOWN_FLAG|Unknown flag|Unknown scope key/.test(error);
 
 /** The columns that `searchArgs` reach: curate keeps its usual invocation, so a filter query is not scored there. */
 export const takesSearchArgs = (sys: System): boolean => sys === "search" || sys === "semantic_search";
