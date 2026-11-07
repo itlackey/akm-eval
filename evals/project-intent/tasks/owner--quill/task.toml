@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/owner--quill"
+version = "1.0.0"
+description = "The team that owns our services (quill)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "quill"
+gold_ref = "memories/owner-79c9"
+library_tokens = ["team-ember"]
+other_ref = "memories/owner-1218"
+other_tokens = ["team-sable"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

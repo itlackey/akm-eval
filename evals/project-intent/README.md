@@ -13,12 +13,23 @@ agent-ab compares opencode alone with opencode plus the akm plugin, in a two-arm
 ## Run
 
 ```
-evals/project-intent/run --model NAME                      # 28 tasks x 3 arms x 4 attempts = 336 trials
+evals/project-intent/run --model NAME                      # 80 tasks x 3 arms x 4 attempts = 960 trials
 evals/project-intent/run --model NAME --limit 2            # 2 tasks, once per arm: a setup check
 evals/project-intent/run --model NAME --akm ~/code/akm     # an akm checkout (packed, as in agent-ab)
 ```
 
 The flags are agent-ab's (see its README for `--concurrency`, `--semantic`, `--akm`, `--akm-env` and what the model needs), without `--repeat`. `--cases DIR` runs a folder of your own with `tasks/`, `libraries/` and `projects.json`. There is no rewrite, so `--corpus custom` and `all` need `--cases`.
+
+Fewer arms need no code: the arms are the entries of the `projects.json` in the folder `--cases` names. To compare only `none` and `bare` (80 x 2 x 4 = 640 trials, a third fewer), copy the tasks and the library into a folder inside the repository (its `private/` is ignored by git) and give it a `projects.json` of those two arms:
+
+```
+cases=private/project-intent/none-bare
+mkdir -p $cases && cp -r evals/project-intent/tasks evals/project-intent/libraries $cases/
+jq '{none, bare}' evals/project-intent/projects.json > $cases/projects.json
+evals/project-intent/run --model NAME --cases $cases   # results in private/project-intent/results/
+```
+
+A `--cases` run is a custom corpus: it writes its summary under `private/`, and its arms (`arms_sha256`) differ from the public ones, so compare it only with runs of the same arms.
 
 The default akm is `akm-cli@0.10.261111-beta` with `akm-opencode@0.10.261110-beta`, the first plugin release that runs akm in the session's directory; it depends on exactly that CLI. The plugin installs from its committed lockfile (`lib/harbor/locks/`); the CLI does not: on the containers' Node 22 without a compiler, `npm ci` from a lockfile drops akm's optional SQLite driver (`better-sqlite3` 13 runs `node-gyp rebuild` there, fails, and is left out), while `npm install akm-cli@0.10.261111-beta` keeps its prebuilt binding. So `akm_install.locked` is false, as in the 0.10.261110-beta agent-ab round, and the run is aborted if its containers install different trees. Projects need akm 0.10.261111 or later: on an older akm `akm config set projects` exits 0 and stores a key akm ignores, so the seed follows it with `akm config get projects`, which exits 2 there, and the trial errors. Another `--akm` release gets lib/harbor's plugin choice for it (`RELEASE_PLUGINS`, else the agent-ab pin, which carries an older akm in process and does not pass the session directory): check `pins` in the summary.
 
@@ -36,18 +47,20 @@ So `bare` minus `none` is the name convention, and `explicit` minus `bare` is th
 
 ## The tasks
 
-The library `libraries/teams` is one bundle for every task: a skill for the made-up `quaystone` CLI and 28 memories.
+The library `libraries/teams` is one bundle for every task: a skill for the made-up `quaystone` CLI and 80 memories.
 
-- **Conflict tasks (24).** Twelve questions (the pool a service ships to, the health port, the log retention, the image mirror, the replica count, the alert channel, the backup window, the release tag prefix, the region, the drain grace period, the vault path, the nightly cron schedule), each answered by two memories with the same description and tags, one with `project: orchid` and one with `project: quill`, as a bare entry would have stamped them. The memories' names and bodies do not say which project they belong to. Each question runs once in `/work/orchid` and once in `/work/quill`, so an agent that always takes the same note passes half of them.
-- **General tasks (4, two per directory).** The answer is in a memory with no `project` key (the hold time after a rewind, the lock file's first line, the config file's path, the exit code of a locked pool), so a project's filter must keep it: the `""` in `explicit`'s filter.
+- **Conflict tasks (68).** Thirty-four questions: the first run's twelve (the pool a service ships to, the health port, the log retention, the image mirror, the replica count, the alert channel, the backup window, the release tag prefix, the region, the drain grace period, the vault path, the nightly cron schedule) and 22 added (below), each answered by two memories with the same description and tags, one with `project: orchid` and one with `project: quill`, as a bare entry would have stamped them. The memories' names and bodies do not say which project they belong to. Each question runs once in `/work/orchid` and once in `/work/quill`, so an agent that always takes the same note passes half of them. The 22 added ask for the request timeout, the CPU cap, the memory limit, the canary's traffic share, the cooldown between ships, the owning team, the release-notes address, the runtime version, the no-ship weekday, the cost center, the job queue (each a `quaystone` command the skill describes), and the log level, the image registry path, the default branch, the on-call shift length, the staging host, the pre-merge check, the metric prefix, the status page slug, the hotfix branch prefix, the artifact bucket and the DNS zone (a value to write down).
+- **General tasks (12, six per directory).** The answer is in a memory with no `project` key (the hold time after a rewind, the lock file's first line, the config file's path, the exit code of a locked pool, and eight more: how long a pool lock lasts, the variable that holds the API token, the report file extension, the command that prints the version, the cache directory, the largest ship batch, the command that lists every pool, the exit code of a failed probe), so a project's filter must keep it: the `""` in `explicit`'s filter.
 
-The instruction gives the working directory and the question, and never mentions akm, a library, a skill or a project; `run.test.ts` checks that with agent-ab's checks, that each gold note holds the verifier's answer and the other project's note the other answer, and that each working directory is inside its project's `paths`. A task's verifier writes `reward.json`: `reward` is 1 when a line of the answer file is exactly the expected answer and the other project's value is nowhere in it, and `other_project` is 1 when the other project's value is in the file. Harbor's oracle agent scores 28 of 28 and its nop agent 0 of 28:
+The instruction gives the working directory and the question, and never mentions akm, a library, a skill or a project; `run.test.ts` checks that with agent-ab's checks, that each gold note holds the verifier's answer and the other project's note the other answer, and that each working directory is inside its project's `paths`. A task's verifier writes `reward.json`: `reward` is 1 when a line of the answer file is exactly the expected answer and the other project's value is nowhere in it, and `other_project` is 1 when the other project's value is in the file. Harbor's oracle agent scores 80 of 80 and its nop agent 0 of 80; run on every verifier by hand, the other project's answer, a hedge that holds both answers (on two lines, or in one line) and a wrong answer score 0 on all 68 conflict tasks, the first two with `other_project` 1:
 
 ```
 uv run --no-project --python 3.12 --with "harbor==$(bun lib/harbor/pin.ts harbor)" harbor run -p evals/project-intent/tasks -a oracle -o evals/project-intent/results/check -y
 ```
 
 The write path (a bare entry stamps `project: <name>` on `akm remember`) is left out on purpose: it does not depend on the model, and akm's own tests cover it.
+
+The first 28 tasks are the first run's (reports/0.10.261111-beta), byte for byte, and later task sets only append, so its trials can be pooled with a later run's of the same arms. The library grew since, though (28 memories and a shorter skill then), so those 28 tasks now ask their questions among more notes.
 
 ## Metrics
 
@@ -71,7 +84,7 @@ The owner's rule is that a feature must improve results at about equal tokens, o
 
 ## Limits
 
-- Size. 28 tasks and 4 attempts were sized with lib/harbor's paired bootstrap on simulated runs (conflict tasks passing between 0.1 and 0.9 in `none`, general tasks at 0.8 in both arms): the `bare - none` interval is about 0.29 wide (±0.14), and a rise of 0.25 in the conflict tasks' pass rate (about 0.2 over all tasks) puts its lower end above 0 in about 80% of runs (about 90% with 5 attempts), 0.2 in about 60%. A smaller effect is likely to read as unproven. A served model need not be deterministic, so attempts can disagree; read the per-task table.
+- Size. 80 tasks and 4 attempts were sized with lib/harbor's paired bootstrap on simulated runs (200 per effect; conflict tasks passing between 0.1 and 0.9 in `none`, general tasks at 0.8 in both arms; the same simulation gave the 28-task set's 0.29 and 80% below): the `bare - none` interval is about 0.17 wide (±0.09, against 0.29 for 28 tasks), and a rise in the conflict tasks' pass rate of 0.25 or 0.2 (about 0.21 and 0.17 over all tasks) puts its lower end above 0 in all runs, 0.15 in about 87%, 0.1 (about 0.085 over all tasks) in about 46%. The first 28-task run read +0.098 over all tasks (about 0.11 in the conflict tasks), so an effect that size is a coin flip to read as proven, and a smaller one is likely to read as unproven. The 28-task set had 80% at 0.25 (about 90% with 5 attempts), 60% at 0.2, 32% at 0.15 and 12% at 0.1. A served model need not be deterministic, so attempts can disagree; read the per-task table.
 - The projects are named after their directories (`/work/orchid`), and the memories carry `project:` in frontmatter, which `akm show` prints. An agent without a project can still match the two; that is the realistic case, and the difference measures what the project adds to it.
 - The arms share one library, so `none` sees exactly the knowledge the other arms see, only unranked by project and unfiltered.
 - One model per run. Tokens come from opencode's stream as Harbor reads it, so a side call opencode makes outside the session is not counted, in any arm.

@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/freeze--quill"
+version = "1.0.0"
+description = "The weekday we never ship on (quill)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "quill"
+gold_ref = "memories/freeze-c7f9"
+library_tokens = ["tuesday"]
+other_ref = "memories/freeze-f457"
+other_tokens = ["thursday"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

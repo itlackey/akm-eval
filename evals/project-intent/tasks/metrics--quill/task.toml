@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/metrics--quill"
+version = "1.0.0"
+description = "The prefix of our metric names (quill)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "quill"
+gold_ref = "memories/metrics-d3ea"
+library_tokens = ["kt2_"]
+other_ref = "memories/metrics-e84e"
+other_tokens = ["mx7_"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

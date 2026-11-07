@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/memory--orchid"
+version = "1.0.0"
+description = "The memory limit of our services (orchid)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "orchid"
+gold_ref = "memories/memory-5244"
+library_tokens = ["768Mi"]
+other_ref = "memories/memory-7b9a"
+other_tokens = ["1536Mi"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "teams"
