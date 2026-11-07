@@ -185,10 +185,22 @@ describe("reading a Harbor job folder", () => {
     }
   });
 
+  test("a labelled akm arm is an akm arm, with akm run in its shell counted", () => {
+    const stream = JSON.stringify({ type: "tool_use", part: { tool: "bash", callID: "c1", state: { input: { command: "akm search pool" } } } });
+    const dir = job({ b__1: { result: result("akm-opencode-bare"), stream } });
+    try {
+      const [t] = loadTrials(dir);
+      expect([t.arm, t.akm]).toEqual(["akm", { "akm (shell)": 1 }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("refuses a trial of some other agent", () => {
-    const dir = job({ x__1: { result: result("oracle") } });
+    const dir = job({ x__1: { result: result("oracle") }, y__1: { result: result("akm-opencode-") } });
     try {
       expect(() => readTrial(join(dir, "x__1"), "x__1")).toThrow("neither opencode nor akm-opencode");
+      expect(() => readTrial(join(dir, "y__1"), "y__1")).toThrow("neither opencode nor akm-opencode");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

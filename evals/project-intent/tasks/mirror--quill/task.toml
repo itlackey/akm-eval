@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/mirror--quill"
+version = "1.0.0"
+description = "The registry mirror our builds pull images through (quill)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "quill"
+gold_ref = "memories/image-mirror-f408"
+library_tokens = ["mirror.rigel.internal"]
+other_ref = "memories/image-mirror-6e21"
+other_tokens = ["mirror.vela.internal"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

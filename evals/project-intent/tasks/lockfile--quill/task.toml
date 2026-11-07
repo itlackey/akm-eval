@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/lockfile--quill"
+version = "1.0.0"
+description = "Start a quaystone lock file"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "general"
+project = "quill"
+gold_ref = "memories/lockfile-schema-9a57"
+library_tokens = ["quay.lock.toml", "schema = 4"]
+other_ref = ""
+other_tokens = []
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

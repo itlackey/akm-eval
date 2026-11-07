@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/rewind--orchid"
+version = "1.0.0"
+description = "Roll ledger back with the house hold time"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "general"
+project = "orchid"
+gold_ref = "memories/rewind-hold-3d81"
+library_tokens = ["25"]
+other_ref = ""
+other_tokens = []
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

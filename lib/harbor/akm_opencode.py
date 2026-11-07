@@ -130,11 +130,22 @@ class AkmOpenCodeOptions(EvalOpenCodeOptions):
     packages_dir: str | None = None
     akm_package: str | None = None
     plugin_package: str | None = None
+    # The akm config `projects` the seed writes (evals/project-intent), and the arm's label, which Harbor records as the agent
+    # name `akm-opencode-<arm>`, so several akm arms of one job are told apart. Neither is set in agent-ab.
+    projects: dict | None = None
+    arm: str | None = None
 
     @field_validator("akm_env")
     @classmethod
     def _akm_env_is_akm(cls, env: dict[str, str]) -> dict[str, str]:
         return check_akm_env(env)
+
+    @field_validator("arm")
+    @classmethod
+    def _arm_is_a_label(cls, arm: str | None) -> str | None:
+        if arm is not None and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", arm):
+            raise ValueError(f"arm {arm!r} is not a label of lower-case letters, digits and dashes")
+        return arm
 
     @field_validator("akm_package", "plugin_package")
     @classmethod
@@ -227,6 +238,11 @@ class AkmOpenCode(EvalOpenCode):
     def name() -> str:
         # Harbor tells the arms apart by this name alone. Inherited, it would put this arm in the control's bucket.
         return "akm-opencode"
+
+    @override
+    def to_agent_info(self):
+        info = super().to_agent_info()
+        return info.model_copy(update={"name": f"{info.name}-{self.options.arm}"}) if self.options.arm else info
 
     @override
     def version(self) -> str | None:
@@ -402,6 +418,7 @@ class AkmOpenCode(EvalOpenCode):
                 "if(JSON.parse(s).searchMode!==\"semantic\"){console.error(\"AKM-SETUP FATAL: search is not semantic\");process.exit(1)};"
                 "console.log(\"AKM-SETUP search_mode=semantic\")})' && "
             )
+        projects = f"akm config set projects {shlex.quote(json.dumps(self.options.projects))} --silent && " if self.options.projects else ""
         assets = self.options.library_assets
         want = f'"$(find {LIBRARIES}/"$stash" -type f -not -name ".*" | wc -l)"' if assets is None else str(assets)
         return (
@@ -409,7 +426,7 @@ class AkmOpenCode(EvalOpenCode):
             '[[ "$stash" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "AKM-SETUP FATAL: AKM_TASK_STASH=$stash is not a library name" >&2; exit 1; }; '
             f'[ -d {LIBRARIES}/"$stash" ] || {{ echo "AKM-SETUP FATAL: no library named $stash" >&2; exit 1; }}; '
             f"akm bundle create --dir {BUNDLE} --set-default && akm config set registries '[]' && "
-            + semantic_config +
+            + semantic_config + projects +
             f'for d in {LIBRARIES}/"$stash"/*/; do cp -a "$d" {BUNDLE}/; done; '
             f"want={want}; rm -rf {LIBRARIES}; "
             + index +
