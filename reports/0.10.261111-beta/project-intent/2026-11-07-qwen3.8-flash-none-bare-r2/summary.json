@@ -1,0 +1,1947 @@
+{
+  "eval": "project-intent",
+  "corpus": "custom",
+  "corpus_folder": "private/project-intent/none-bare",
+  "label": "qwen3.8-flash-none-bare-r2",
+  "date": "2026-11-07T22:31:58.020Z",
+  "git_commit": "7f658b6",
+  "model": "openai/opencode-zen/qwen3.8-flash",
+  "akm_version": "0.10.261111-beta",
+  "akm_bin": "akm-cli@0.10.261111-beta",
+  "akm_build": null,
+  "akm_build_fingerprint": "16e104a984159223775193b774da4b99308bdaf7db540f647e807f259a3be671",
+  "akm_env": {},
+  "akm_install": {
+    "from": "release",
+    "plugin_from": "release",
+    "plugin_version": "0.10.261110-beta",
+    "packages": [],
+    "dependency_tree_sha256": "2e8795640c735c44eb908d3b0270119ed42b5f7b2e955e518a4de3325008b083",
+    "locked": false,
+    "observed": {
+      "akm_version": [
+        "0.10.261111-beta"
+      ],
+      "plugin_akm_cli": [
+        "0.10.261111-beta"
+      ],
+      "assets_indexed": [
+        81
+      ],
+      "env": {
+        "AKM_BUNDLE_DIR": "/opt/akm/bundle",
+        "AKM_CONFIG_DIR": "/opt/akm/config",
+        "AKM_DATA_DIR": "/opt/akm/data",
+        "AKM_CACHE_DIR": "/opt/akm/cache",
+        "AKM_STATE_DIR": "/opt/akm/state",
+        "AKM_OPENCODE_CLI": "/usr/local/bin/akm",
+        "AKM_AUTO_FEEDBACK": "0",
+        "AKM_AUTO_LEARNING": "0",
+        "AKM_AUTO_MEMORY": "0",
+        "AKM_INDEX_ON_SESSION_END": "0",
+        "AKM_CURATE_TIMEOUT": "15",
+        "AKM_PENDING_PROPOSAL_TIMEOUT": "5"
+      },
+      "dependency_trees": [
+        "2e8795640c735c44eb908d3b0270119ed42b5f7b2e955e518a4de3325008b083"
+      ],
+      "lockfiles": {
+        "akm_cli": null,
+        "plugin": "1a54eb0dbd1fc7732c7afaec7bbcbdba8da822568520856d7b2090b42174b7cd"
+      }
+    }
+  },
+  "pins": {
+    "akm_cli": "0.10.261111-beta",
+    "akm_plugin": "0.10.261110-beta",
+    "opencode": "1.18.34",
+    "harbor": "0.24.0"
+  },
+  "limit": null,
+  "n_tasks": 80,
+  "attempts": 4,
+  "arms": {
+    "none": null,
+    "bare": {
+      "orchid": {
+        "paths": [
+          "/work/orchid"
+        ]
+      },
+      "quill": {
+        "paths": [
+          "/work/quill"
+        ]
+      }
+    }
+  },
+  "harbor_exit": 0,
+  "status": "complete",
+  "aborted_reason": null,
+  "completion": {
+    "none": {
+      "expected": 320,
+      "completed": 320,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "bare": {
+      "expected": 320,
+      "completed": 320,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    }
+  },
+  "libraries_sha256": "d41410f5a350b3dcc21dc9cc056ed86e623deb5ea49c1f4475cd4fe45236ace0",
+  "tasks_sha256": {
+    "alerts--orchid": "4c59e3c4dd3cc10de140facd4b7ff616394eabf1e45b0f9cd2f6ebe0861aa989",
+    "alerts--quill": "64641ad84d0165fa2f391f0d51c440c9bf5bf4975ab9b66bfab9b1db9fc29e04",
+    "backup--orchid": "e1d998a6bf0306301193505814c26ce19becf68fa81c169ea9d33130a784f8fe",
+    "backup--quill": "5f22cbec1b8cd4d6cb62dff0aaeab1e1886c38237a92e2522de7ad5f8e40e3ac",
+    "batch--quill": "0354d5a6ad0ad466e163acebf9317ed0b7dd67f6197cbe6bafe11de784af7af9",
+    "branch--orchid": "2e1a869dc7a02783cf6589f0aaf45a40ed5bf91a2e54a83f7f27ffcbd885c023",
+    "branch--quill": "bf2165321bdb1516ee4d08234f1da9a393949056991de7c79b86f405cd410013",
+    "bucket--orchid": "6ecb0d4c831760ec07006588d7673f890d07bbc525004912407c703a53cadbf5",
+    "bucket--quill": "ecab660056295aa4ec9bfdf8bd2bf58b0fbf88da8b7a2b9c69fe6f7108685fe2",
+    "cachedir--orchid": "189ade80df3e533d76a10060686bd9611fdd70b1669e2d09af630a0325bbd90c",
+    "canary--orchid": "d79f44ba8372077cd05483359d029bb97e4e12d4cfb19daa3a254ba95ca23558",
+    "canary--quill": "aad1dcfd6c76c4de4b67d217acef6b80a1c002f84a9e567ca46cedd1d9d66bd7",
+    "check--orchid": "b35d4ec8f967cb39184d5d4125337eb075a67be1334d1d83687e1dedc8d124bf",
+    "check--quill": "9ffe93a7c96c11c5f7572a596f58da0224b8c2ebf28186a26c44efbd3c2fc280",
+    "config--orchid": "572a12c52bf94153dc120685b06fa31be0daf6ae40eb964ff9d5e64b79a10831",
+    "cooldown--orchid": "b85fd6f0c41c05cab1fe6ab62aed0928bc0d6eacfd0cc36d5f333a74d3753795",
+    "cooldown--quill": "9bf48291c47f3c0af772849467af40af8e8fea772f3f8186bc2e5975940232de",
+    "costcenter--orchid": "74313117bee77d6f3cd9da848e420e14c18c65964da7776d87519f1856ae643f",
+    "costcenter--quill": "9b4ae496d4cd3ab25b826c5ddab2ac29321caa53ed9ca8db08f861cb1303bfb1",
+    "cpu--orchid": "036400d93b1a448f965b5a212ce12e32127f3d2f502cd7e0e28595534081d42d",
+    "cpu--quill": "6fe9e79e40247982c2eadc85462c614d2c5c5c57b2db3a0357ed7db706afd036",
+    "dns--orchid": "2ef902090a9358cd8bb964521561cd975c734c7e286dd159b18a1a139bd8b8b2",
+    "dns--quill": "83fe720ed6b3e1c0c6e42be820c613b7c1ffc1a349c5ca55a0128e8e54465ab8",
+    "drain--orchid": "15691d0df7a6e0534fd6bf2739e9526d632243a58949321b110ebc492cdf171f",
+    "drain--quill": "56663e50d1726cef4b911c8d23d925bbac7412d2745a1ca801290f01413c1a7d",
+    "exitcode--quill": "da080cb97c096fc14c09c5209d76e8e9cd1e81b0753227f7879ec13d70dd686b",
+    "freeze--orchid": "af226f3a239a0a4be9cf674ddade5293b8d2135fd0fd6c9305a54d60a27a25c8",
+    "freeze--quill": "1cc6176b5656b4d508279ab8968a453f58f484cf2358738ab4e86a42878034bf",
+    "hotfix--orchid": "ac297dd4fd92e7c68618bbdf4a16e13537a22931816b161d7a0baa40f08cd869",
+    "hotfix--quill": "e16b87b2ec53c02e4f2c2aac2ed68be7b3ae005d5e8e77a150a7ff66a51ed772",
+    "lockfile--quill": "0b00826da63e0ad905d4d63ae87319481b24d4006a148e04561e31c9eee1c575",
+    "lockttl--orchid": "a5298196f7f1a4a663bcbdf40b36bea37a989cdc8cc68581d1d068aa7c1ee864",
+    "loglevel--orchid": "f6b0f489f9b581a9b8a5c1096f63a2a1af65f7870af662a241f61b46171ec268",
+    "loglevel--quill": "b6cfd4c917c8e6f9631bfe919cf002c143e168121aa7053d8c9d006f2aa6117e",
+    "memory--orchid": "6eba295da7f5ab954e0a7c560de3a9819048876eaa82704950666ab6944365a7",
+    "memory--quill": "7256d5c8e865ab9702ef259162bffe258ea10719d4b091e8711fb984c198509f",
+    "metrics--orchid": "29c33a9bd38740e6f3e56a6be998310f6c6bf9e46b8f710572ae71010b303fff",
+    "metrics--quill": "4e09e7c699c751c0063856052f02b8fc09b8eedc084315a1b3f30b78a8a23464",
+    "mirror--orchid": "bdce203a9857b7aae9e5bc3ac9df26c01e8babf7abe7e4d1ce4cb28b13604c37",
+    "mirror--quill": "b8c6d0f8e89ec2426192e23799df6e7316a19dd9fd1579a9e7587167d6275535",
+    "notify--orchid": "e742f776c03648a91bf090193b9610ee23e7f8c25097fd427d03308bbf813b9b",
+    "notify--quill": "76e20401befcf14debb3b10cae42df4f582941a7bb8af57c4a3d8362f9d53763",
+    "owner--orchid": "9cc8813a3f066d296cd17f3a792a99871564f3d1799ec79e51495100d86cd84b",
+    "owner--quill": "097cb2fde7add75d9710ea4891b21c573c534f514130b284c0c58f1cc3be7cc6",
+    "pool--orchid": "34da5969fe67c2c20fff64716842a7079a539a62e5615e3322476bf2399c2ecb",
+    "pool--quill": "844024da9c8bd06cd0a22faa82670c5840fc10f7e21578d6f05477466359f071",
+    "pools--orchid": "c6cfd46875b9a20952dad489fcece5ed389d4162866be7f2e30e839441d41c75",
+    "port--orchid": "bc14988c86af381d05e9098c8249c255d88b596654a30ec5b69a366584410f4c",
+    "port--quill": "b67d846ff6e6fbf38134c828404ef859bc152045cc101f42c46bf42548e0bcaa",
+    "probeexit--quill": "339559a4833371edab529b7bf92d589a7ecd131f25c52b6018640b799058330a",
+    "queue--orchid": "eb4f486c4a2d49490bf24fc748a5ad603bade4ef883435dc8023d2b206d32e06",
+    "queue--quill": "e48af5df10c9884b0b7fe9afefa8aac54d330efaa7984af5c53faa65162968a2",
+    "region--orchid": "a32f57ef556eb152d5d29ab813f1f8b80b75b130d3a4f87f33668835e9ba4bda",
+    "region--quill": "a33f400d535c81632015df8c3f4bbf7d2d1565ff0ed6b0348d41a28746f098c1",
+    "registry--orchid": "630eaa0d2d6fdda88fbd8c2c94f3d6eafa941ac20e2683195bdcc5e0d5dc30c1",
+    "registry--quill": "89c91d08988719ad9cb73b7ee43cc17d6ec041dae00e037f44ad66f9b9d79f5e",
+    "replicas--orchid": "f6f1c8f33bee97e66e336f6af3f13e775807ca53ac68543f8fc38ce112c96588",
+    "replicas--quill": "0d2d292894ceea10a7592ff3fa199651a10fa8ce5cf1cb7f133500749d5261c5",
+    "reportext--orchid": "7e7bc39351e8ae9efcf71940ddd5e7d51a064a371cd8f6410b3519bdbd337f54",
+    "retention--orchid": "afcc904138fd267f07e60fbb0b9c9c6b016ad239bbb7299837b25513cf64c49b",
+    "retention--quill": "1a3647ffa676cfe4dc58f8a1d430fc3c78919dc47c4ec9307788c1a51609591b",
+    "rewind--orchid": "d8c79af05bc5ce34c4033d8490a48b62f96898e9e748a350d1c8ddf19e250839",
+    "rotation--orchid": "8917b27df41174b8cd169a7ee8ad285538832cff8faa0bf14751a4b4be3595a9",
+    "rotation--quill": "561135c04a6225ec65160a9d3c895e80743d6c4ec16435d24c3423400af336cc",
+    "runtime--orchid": "7c23fb8c003ed52e2f1085f8076f21e1e1af8efc7f843af176873be0d0d3be03",
+    "runtime--quill": "78a93ab82958113a9c44d490b5f04032979cff11153d5468cb44775aec6f33e9",
+    "schedule--orchid": "82477bb2f6878e4949ca2a8427bf1062a2c3cb59d90419cbccd36288638f107c",
+    "schedule--quill": "4297e0a7b50e66c0a644fce314426263a635d3ee5a93b9c46fa2be92e76586ac",
+    "staging--orchid": "dad76b0974619685884e0330feba2dcf247996ac0e7bde6be6af4742951e5804",
+    "staging--quill": "1846e0b52b9d3ade0a1a3b95a9c42fc0df79828932ab8a5475c8f84da6417c06",
+    "status--orchid": "ddf498327c6bcaf3b1060212a8c95ff222a78bac6f86fe22364ae6585279da78",
+    "status--quill": "6a3dc20b614f5da24d4e6a1fe304cda7c68b4350fac4ab9be208870463b7f5b9",
+    "tags--orchid": "c5c054a4c695ba5dc22c6de38f929a4e277362366a8cf31c4197483e7d515264",
+    "tags--quill": "4747870d4e0a429f70d7e98947c9dbafb2d3dd46e749b5e0418caf20a4ba7958",
+    "timeout--orchid": "87c9b0a813b286d2f9d4473a0b51b326dd4e66e50964937ba24746addfc642f4",
+    "timeout--quill": "39f9953fbd6922461946accef5db1e92bc44cb88ca4c89160f3ba97b95314d97",
+    "tokenenv--quill": "bd2632e5bd5ef6add37c20ff0e8449c68486aa9152282de8782bd3f80dbc3896",
+    "vault--orchid": "f6baf935b4400ca5270f12d041bfcfc5a247cb7f96beb1f6795140eacc8c4f87",
+    "vault--quill": "964c9915b24b79e9eb41482fed55bbacd1e5655009612df638d8df37c5aeceaf",
+    "version--quill": "478110f9725cc59531bf0d38f272b444134a6ae9321c960251681fc74c14b93a"
+  },
+  "arms_sha256": "82504ea0c3f955d902d776099e0fdbe96f0e6df3584d47e44a806c8199fe054c",
+  "assets_sha256": "b654ba6ec48de247955896e6fd4257b17fdd8c79df9af750fb5f37d5edfb961b",
+  "engine": {
+    "model": "openai/opencode-zen/qwen3.8-flash",
+    "endpoint": "<MODEL_BASE_URL>"
+  },
+  "config": {
+    "n_attempts": 4,
+    "n_concurrent_trials": 8,
+    "environment": {
+      "type": "docker",
+      "delete": true,
+      "extra_docker_compose": [
+        "lib/harbor/shared-network.yaml"
+      ]
+    },
+    "agents": [
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/opencode-zen/qwen3.8-flash",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/opencode-zen/qwen3.8-flash",
+            "provider": {
+              "openai": {
+                "models": {
+                  "opencode-zen/qwen3.8-flash": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 8192
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "arm": "none"
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/opencode-zen/qwen3.8-flash",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/opencode-zen/qwen3.8-flash",
+            "provider": {
+              "openai": {
+                "models": {
+                  "opencode-zen/qwen3.8-flash": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 8192
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "arm": "bare",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ]
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "alerts--orchid",
+          "alerts--quill",
+          "backup--orchid",
+          "backup--quill",
+          "batch--quill",
+          "branch--orchid",
+          "branch--quill",
+          "bucket--orchid",
+          "bucket--quill",
+          "cachedir--orchid",
+          "canary--orchid",
+          "canary--quill",
+          "check--orchid",
+          "check--quill",
+          "config--orchid",
+          "cooldown--orchid",
+          "cooldown--quill",
+          "costcenter--orchid",
+          "costcenter--quill",
+          "cpu--orchid",
+          "cpu--quill",
+          "dns--orchid",
+          "dns--quill",
+          "drain--orchid",
+          "drain--quill",
+          "exitcode--quill",
+          "freeze--orchid",
+          "freeze--quill",
+          "hotfix--orchid",
+          "hotfix--quill",
+          "lockfile--quill",
+          "lockttl--orchid",
+          "loglevel--orchid",
+          "loglevel--quill",
+          "memory--orchid",
+          "memory--quill",
+          "metrics--orchid",
+          "metrics--quill",
+          "mirror--orchid",
+          "mirror--quill",
+          "notify--orchid",
+          "notify--quill",
+          "owner--orchid",
+          "owner--quill",
+          "pool--orchid",
+          "pool--quill",
+          "pools--orchid",
+          "port--orchid",
+          "port--quill",
+          "probeexit--quill",
+          "queue--orchid",
+          "queue--quill",
+          "region--orchid",
+          "region--quill",
+          "registry--orchid",
+          "registry--quill",
+          "replicas--orchid",
+          "replicas--quill",
+          "reportext--orchid",
+          "retention--orchid",
+          "retention--quill",
+          "rewind--orchid",
+          "rotation--orchid",
+          "rotation--quill",
+          "runtime--orchid",
+          "runtime--quill",
+          "schedule--orchid",
+          "schedule--quill",
+          "staging--orchid",
+          "staging--quill",
+          "status--orchid",
+          "status--quill",
+          "tags--orchid",
+          "tags--quill",
+          "timeout--orchid",
+          "timeout--quill",
+          "tokenenv--quill",
+          "vault--orchid",
+          "vault--quill",
+          "version--quill"
+        ]
+      }
+    ]
+  },
+  "n_errored": 0,
+  "metrics": {
+    "arms": {
+      "none": {
+        "pass_rate": 0.988,
+        "conflict_pass_rate": 0.985,
+        "general_pass_rate": 1,
+        "passed": 316,
+        "scored": 320,
+        "errored": 0,
+        "other_project_rate": 0,
+        "akm_called_rate": 1,
+        "tokens_per_trial": 71180,
+        "tokens_per_correct": 72081
+      },
+      "bare": {
+        "pass_rate": 0.994,
+        "conflict_pass_rate": 0.993,
+        "general_pass_rate": 1,
+        "passed": 318,
+        "scored": 320,
+        "errored": 0,
+        "other_project_rate": 0,
+        "akm_called_rate": 1,
+        "tokens_per_trial": 73955,
+        "tokens_per_correct": 74421
+      }
+    },
+    "comparisons": {
+      "bare-none": {
+        "value": 0.006,
+        "lo": -0.009,
+        "hi": 0.031,
+        "n": 80,
+        "sign_p": 1
+      }
+    }
+  },
+  "job": {
+    "n_attempts": 4,
+    "n_concurrent_trials": 8,
+    "environment": {
+      "type": "docker",
+      "delete": true,
+      "extra_docker_compose": [
+        "lib/harbor/shared-network.yaml"
+      ]
+    },
+    "agents": [
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/opencode-zen/qwen3.8-flash",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/opencode-zen/qwen3.8-flash",
+            "provider": {
+              "openai": {
+                "models": {
+                  "opencode-zen/qwen3.8-flash": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 8192
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "arm": "none"
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/opencode-zen/qwen3.8-flash",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/opencode-zen/qwen3.8-flash",
+            "provider": {
+              "openai": {
+                "models": {
+                  "opencode-zen/qwen3.8-flash": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 8192
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "arm": "bare",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ]
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "alerts--orchid",
+          "alerts--quill",
+          "backup--orchid",
+          "backup--quill",
+          "batch--quill",
+          "branch--orchid",
+          "branch--quill",
+          "bucket--orchid",
+          "bucket--quill",
+          "cachedir--orchid",
+          "canary--orchid",
+          "canary--quill",
+          "check--orchid",
+          "check--quill",
+          "config--orchid",
+          "cooldown--orchid",
+          "cooldown--quill",
+          "costcenter--orchid",
+          "costcenter--quill",
+          "cpu--orchid",
+          "cpu--quill",
+          "dns--orchid",
+          "dns--quill",
+          "drain--orchid",
+          "drain--quill",
+          "exitcode--quill",
+          "freeze--orchid",
+          "freeze--quill",
+          "hotfix--orchid",
+          "hotfix--quill",
+          "lockfile--quill",
+          "lockttl--orchid",
+          "loglevel--orchid",
+          "loglevel--quill",
+          "memory--orchid",
+          "memory--quill",
+          "metrics--orchid",
+          "metrics--quill",
+          "mirror--orchid",
+          "mirror--quill",
+          "notify--orchid",
+          "notify--quill",
+          "owner--orchid",
+          "owner--quill",
+          "pool--orchid",
+          "pool--quill",
+          "pools--orchid",
+          "port--orchid",
+          "port--quill",
+          "probeexit--quill",
+          "queue--orchid",
+          "queue--quill",
+          "region--orchid",
+          "region--quill",
+          "registry--orchid",
+          "registry--quill",
+          "replicas--orchid",
+          "replicas--quill",
+          "reportext--orchid",
+          "retention--orchid",
+          "retention--quill",
+          "rewind--orchid",
+          "rotation--orchid",
+          "rotation--quill",
+          "runtime--orchid",
+          "runtime--quill",
+          "schedule--orchid",
+          "schedule--quill",
+          "staging--orchid",
+          "staging--quill",
+          "status--orchid",
+          "status--quill",
+          "tags--orchid",
+          "tags--quill",
+          "timeout--orchid",
+          "timeout--quill",
+          "tokenenv--quill",
+          "vault--orchid",
+          "vault--quill",
+          "version--quill"
+        ]
+      }
+    ]
+  },
+  "report": {
+    "arms": [
+      "none",
+      "bare"
+    ],
+    "by_arm": {
+      "none": {
+        "trials": 320,
+        "scored": 320,
+        "passed": 316,
+        "errored": 0,
+        "timeouts": 0,
+        "agent_exits": 0,
+        "pass_rate": {
+          "value": 0.988,
+          "lo": 0.963,
+          "hi": 1,
+          "n": 80
+        },
+        "conflict_pass_rate": {
+          "value": 0.985,
+          "lo": 0.956,
+          "hi": 1,
+          "n": 68
+        },
+        "general_pass_rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1,
+          "n": 12
+        },
+        "other_project": {
+          "trials": 272,
+          "count": 0,
+          "rate": 0
+        },
+        "akm_called": {
+          "trials": 320,
+          "called": 320,
+          "rate": 1
+        },
+        "curated_read": 141,
+        "tokens": {
+          "trials": 320,
+          "input": 22631195,
+          "cache": 20344064,
+          "output": 146413,
+          "per_trial": 71180,
+          "per_correct": 72081
+        }
+      },
+      "bare": {
+        "trials": 320,
+        "scored": 320,
+        "passed": 318,
+        "errored": 0,
+        "timeouts": 0,
+        "agent_exits": 0,
+        "pass_rate": {
+          "value": 0.994,
+          "lo": 0.984,
+          "hi": 1,
+          "n": 80
+        },
+        "conflict_pass_rate": {
+          "value": 0.993,
+          "lo": 0.982,
+          "hi": 1,
+          "n": 68
+        },
+        "general_pass_rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1,
+          "n": 12
+        },
+        "other_project": {
+          "trials": 272,
+          "count": 0,
+          "rate": 0
+        },
+        "akm_called": {
+          "trials": 320,
+          "called": 320,
+          "rate": 1
+        },
+        "curated_read": 143,
+        "tokens": {
+          "trials": 320,
+          "input": 23517085,
+          "cache": 21266176,
+          "output": 148649,
+          "per_trial": 73955,
+          "per_correct": 74421
+        }
+      }
+    },
+    "comparisons": [
+      {
+        "a": "bare",
+        "b": "none",
+        "delta": {
+          "value": 0.006,
+          "lo": -0.009,
+          "hi": 0.031,
+          "n": 80,
+          "ci": [
+            -0.009,
+            0.031
+          ],
+          "resampled": "tasks and attempts"
+        },
+        "better": {
+          "a": 1,
+          "b": 1,
+          "same": 78
+        },
+        "sign_test": {
+          "n": 2,
+          "p": 1
+        }
+      }
+    ],
+    "tasks": [
+      {
+        "task": "alerts--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "3/4"
+        }
+      },
+      {
+        "task": "alerts--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "0/4",
+          "bare": "3/4"
+        }
+      },
+      {
+        "task": "backup--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "backup--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "batch--quill",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "branch--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "branch--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "bucket--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "bucket--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "cachedir--orchid",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "canary--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "canary--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "check--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "check--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "config--orchid",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "cooldown--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "cooldown--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "costcenter--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "costcenter--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "cpu--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "cpu--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "dns--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "dns--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "drain--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "drain--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "exitcode--quill",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "freeze--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "freeze--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "hotfix--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "hotfix--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "lockfile--quill",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "lockttl--orchid",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "loglevel--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "loglevel--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "memory--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "memory--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "metrics--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "metrics--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "mirror--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "mirror--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "notify--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "notify--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "owner--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "owner--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "pool--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "pool--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "pools--orchid",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "port--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "port--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "probeexit--quill",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "queue--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "queue--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "region--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "region--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "registry--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "registry--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "replicas--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "replicas--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "reportext--orchid",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "retention--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "retention--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "rewind--orchid",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "rotation--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "rotation--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "runtime--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "runtime--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "schedule--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "schedule--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "staging--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "staging--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "status--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "status--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "tags--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "tags--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "timeout--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "timeout--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "tokenenv--quill",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "vault--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "vault--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      },
+      {
+        "task": "version--quill",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4"
+        }
+      }
+    ]
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "project-intent",
+    "corpus": "custom",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.1"
+    },
+    "cases": {
+      "alerts--orchid": {
+        "input_sha256": "78b3867294586d6b6c79cda5098741f2e92df3656fdaa85526906c4785251290",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "alerts--quill": {
+        "input_sha256": "372bc5b10baf4c4f25008448514e918bb6d9c192a848204584c3cb16a89b8a25",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "backup--orchid": {
+        "input_sha256": "3ba891526ae1297f1c6893049d07e46b0dbcbe9870deabc055b90d068f4fd5a0",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "backup--quill": {
+        "input_sha256": "9d35bf16874569000754cae931b3a1e1f6e47588a934210ae45a4deb77b2879b",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "batch--quill": {
+        "input_sha256": "b3aa3363b14eef6a2603d7999ffe9de04bc18147b39c253d8267bc4e9e3ff112",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "branch--orchid": {
+        "input_sha256": "633c5933974d924e936e821f7d6fa6365880bed83e63e08cb7bf102051bfefac",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "branch--quill": {
+        "input_sha256": "fe8df0bb9872402e74693da8a52f246ee39bccc1c76525319436113bf4422a2f",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "bucket--orchid": {
+        "input_sha256": "1e06acd9f6b1246ca478eedc5f829307197bf1f1651beca500ed7c46a7363f73",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "bucket--quill": {
+        "input_sha256": "614b0275fc4ea0e5b37e1df3892ed381b118ff952b02b826defeb267995aa2af",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "cachedir--orchid": {
+        "input_sha256": "9976f8341466a5f0c8be5ac0144c9f7e62b899601fabeb510d1ce011a2678d12",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "canary--orchid": {
+        "input_sha256": "c4ac650206ac9d03040eb5433bdfc82fca9c1ebaa19391c499420c22a66b0fe3",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "canary--quill": {
+        "input_sha256": "c7d2deb206df8befe11faca8f4e23964f58c5071e9f4f59cd2fe0cf8b16f9517",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "check--orchid": {
+        "input_sha256": "7dd1ad053c077825b5840cf98c37fd9c227f828c3f4a7eb1362eba5f14d75212",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "check--quill": {
+        "input_sha256": "5ae71dfc3a4a1703b3f02f899ff0c056f3b6eb025e290108ae8532581ea8e95a",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "config--orchid": {
+        "input_sha256": "b01c0c3f0ff555f244c2fad63b44e62b2a06dfa57b42b6a857edd93ed1c49a1b",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "cooldown--orchid": {
+        "input_sha256": "8775ccc42387327e4f6658df89ddf59edcd0bcae67a8036dd9f0fbaad5ded5fc",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "cooldown--quill": {
+        "input_sha256": "618048e02207b45f4a5ae5daf056360a3652015c6ac3206cb2cacf238a856191",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "costcenter--orchid": {
+        "input_sha256": "1114d10fbd9cba44704cb64295b50cc23c3c56e40ef980c04dcc7eeffd7ef773",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "costcenter--quill": {
+        "input_sha256": "1e286b6b2f758e569c2493e38700667fac2f531ff82078ad478599d7337356f0",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "cpu--orchid": {
+        "input_sha256": "27b1d3100e2697a571bdf3a341dfc7d99ae6eadee87b740536d746e442b6861c",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "cpu--quill": {
+        "input_sha256": "5f1fe8c5734eea816090641f066f4eeeb9ad55e544ed847decd73ad5753eb280",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "dns--orchid": {
+        "input_sha256": "dc9c0f114ada9fa36e14559adadcca565f5af4da43e7b4dcc1b87fbfa0d43a21",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "dns--quill": {
+        "input_sha256": "844ba8b8256dcd567a657db58fd38e808fd2c9feeef70c39de99043f3c82b2ae",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "drain--orchid": {
+        "input_sha256": "ecc2238653f2a904ce16f164791203f4de98ea560682e20dc8b07f583885e939",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "drain--quill": {
+        "input_sha256": "91805c3bce7d72b95b5ea4c423a27ef9d49fb2d9348f5d3a94b2f0a81810fa26",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "exitcode--quill": {
+        "input_sha256": "eda8b04924c9176fdd12ffa5d27194efacf28c2a55a64572b5b986ac631b7bac",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "freeze--orchid": {
+        "input_sha256": "30097a9f2b4feb24b64859967f560602192aad797698270f4fdd95e13a60c0d9",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "freeze--quill": {
+        "input_sha256": "df7a1cfa56d8a8538a6a46e4929febdd5405d0c85bf98ed41d95fed1f9ec5001",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "hotfix--orchid": {
+        "input_sha256": "344c42bdfe820d8cb18a492171c069e3d23e1fb36f12faffab4e321ff26c0286",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "hotfix--quill": {
+        "input_sha256": "fdfb9931dd734e95ab91b009c3d2b4b159fff0a88220fa78f33bf10409fb1525",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "lockfile--quill": {
+        "input_sha256": "f60e4c39821c4ba52c4f4356aff8a0bf4ed70941cc24046146c2852093d0757f",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "lockttl--orchid": {
+        "input_sha256": "ba0abe6de6d27ac9a532911e693a32f65e4441263e915736ca87f4b4a3609768",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "loglevel--orchid": {
+        "input_sha256": "5014e6079869b31e9445487777b84449f0f1ea1b22aa0003b14ecdc61d774ad9",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "loglevel--quill": {
+        "input_sha256": "7e9897decbfa36c08266545df919dba4b1069b7fecdcd5d310a3bfd3ef4023eb",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "memory--orchid": {
+        "input_sha256": "cde49ea491ec5f8f1be9eb11202b1ba961472159d5c5528f0cf67c620256f118",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "memory--quill": {
+        "input_sha256": "76cc0ab248a2c1652cd1cb23d1040f43b079e89f225baeb5c571b4c90e492b94",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "metrics--orchid": {
+        "input_sha256": "a2fe1ea52c64b9ef19ac0849826cca391146b70198c985c8e8225797cb17d6da",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "metrics--quill": {
+        "input_sha256": "a28a81e7fcbc7e9aacba2ed29bc721043469b35d37bd974fe04b4e6ff1f0d4bb",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "mirror--orchid": {
+        "input_sha256": "f764d085c32ecbfaeda79160be2e8832abd8165340bc584eec05da67e089640e",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "mirror--quill": {
+        "input_sha256": "06d57e70ae909479a18021c6707e25b4a4a2c7883fd4abf4c2455c7dd05069c8",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "notify--orchid": {
+        "input_sha256": "df7b724c288642bcd2a34f43965d095dda5f39802688fba4e57952586f7314a5",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "notify--quill": {
+        "input_sha256": "049dac798336112c0a48cff876b0751a4eb8e5549f40e2f01e7e62d9a335dd79",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "owner--orchid": {
+        "input_sha256": "852231f33fef941f6fa683cf556a0ecd53ee4e32b4b0ac2c0855d6a1e49d50c9",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "owner--quill": {
+        "input_sha256": "32fdd9fc4b109a332b6eebfa534ee8a9d27b7b3fab8a69ad66b0b39e881c1779",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "pool--orchid": {
+        "input_sha256": "18a22d65e6b846fc83e4e867a932d5fc0d73d9f47b6c483413f233956cc3d31a",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "pool--quill": {
+        "input_sha256": "c6654c9b91e7bff3feae15bf64f2cf78863d5a791c30574f5c639afef2324885",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "pools--orchid": {
+        "input_sha256": "a950c4c1abd4839afa2c30956d9da6eb33689d4e5d8c9885b0dae680b0e0269a",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "port--orchid": {
+        "input_sha256": "35c61b9a5375cc6a84dfcda6929b25d318efc51f8a2408d7d0267252d52d13af",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "port--quill": {
+        "input_sha256": "269ffb45df78ff8033a0a0ba6dd476f9ae1ba50799fb68214777eddeba56d25b",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "probeexit--quill": {
+        "input_sha256": "26530fbcb551f774d1b490d21b51fdb1f95bb6e0016fcd76f9e8b662b0214f14",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "queue--orchid": {
+        "input_sha256": "ed5f9735af7678343d39243f684216b2512e2b513ea26105b8348707d7375859",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "queue--quill": {
+        "input_sha256": "e209189b504df70260cd8d9c2d7919e167f8d604bf43981a6f37f1378c6b4031",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "region--orchid": {
+        "input_sha256": "278f083b16ad42a289c6cf730fc5f4929ae72585565a76fcf445cc9d2014c14c",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "region--quill": {
+        "input_sha256": "2f25c4013e0e64c35285915d8e4ea5494e20d85087140e6c5d7f36114bacd63c",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "registry--orchid": {
+        "input_sha256": "444c0600c22746c570370c89e9fb19584397c3c3f6d0201bd3ae0638e0aed99e",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "registry--quill": {
+        "input_sha256": "83279bbab1df73fffb24d861bf885d6f25db1ef7c78a44bab43ddf48fa1fee7f",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "replicas--orchid": {
+        "input_sha256": "c9267889a19e42fe39d665a18a66c72600e8ae8e92ae0d1e40d7d78af61c4583",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "replicas--quill": {
+        "input_sha256": "b3ca4e6500f00b5c2bfde3974567d6a51903e82d642136746b071c165980c36b",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "reportext--orchid": {
+        "input_sha256": "9231e6a6adac3537b0364f135f6084f65d317a625875a6720f26d9eca74e7db4",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "retention--orchid": {
+        "input_sha256": "11bb8d769e95afe135e8e364eebb08ef6c89d929ceaf9cc96f8eef7033c7fa60",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "retention--quill": {
+        "input_sha256": "8ddbbb3e34e5802b9ea2e64e9e15623b9df896682e9ddc6ea58c15c3e0d7049c",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "rewind--orchid": {
+        "input_sha256": "a68b9e2e804d9a83ec2f1dfb310cb719fed5ce68c2fe16cf455e655393ff2fd4",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "rotation--orchid": {
+        "input_sha256": "8cbeeabdc29b7ac3237144cf25f1e851d2d68fe4d11e4ce8c2f56a12f4e58a4d",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "rotation--quill": {
+        "input_sha256": "b7209363ce3d14b83faf9bbc212584889a034597568347716070a027a38c9725",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "runtime--orchid": {
+        "input_sha256": "654b91892508d1508675467a273f23d5fefc625f3a3fa193c89524d16cff5d52",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "runtime--quill": {
+        "input_sha256": "9b3f205762afd1a535a52297876752f7991590870980989c9461fe294a2eb3d6",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "schedule--orchid": {
+        "input_sha256": "e2107e8b5be121a94b89d22cf508010775e96f304b32abeec44721b790ac0d6b",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "schedule--quill": {
+        "input_sha256": "2d8009c9373af19c5ca1b716e2862f8a8d7587384b7557b7f0f098fefac713ae",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "staging--orchid": {
+        "input_sha256": "d2cd93d61c1acc7a949715642247db160ac51122a87b0c89d819e55c8ae8d0d0",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "staging--quill": {
+        "input_sha256": "3a5da3a3fef61ae1880d0cb41e986bfc380ae49a67bd83f89f0466f1e25ea0f4",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "status--orchid": {
+        "input_sha256": "c0e225788ac7f83a3f6a2b29b0724fcb846825a870205b48e2124571b7daeb36",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "status--quill": {
+        "input_sha256": "7d8345f8e59931825aea62a51aa5e31c4e8cff7ff7ea8b436adbdf2ccbec154e",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "tags--orchid": {
+        "input_sha256": "1c1c500e6d9aa94c273fb657c6f8e0b40d97c1b487f8c599c1461939142fd7f8",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "tags--quill": {
+        "input_sha256": "1d745b38cb42bf192be5ee4ad0254757629d899648527217a9c13eba4313c08a",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "timeout--orchid": {
+        "input_sha256": "b9cea9fd17d20d83cb346ece5d3a579a39b850af973c93f193dc9d4f49d109df",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "timeout--quill": {
+        "input_sha256": "ef9c6c53ed00c95cbc0ef01459ec5a7fda0141d9baf5befb50012df94c322610",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "tokenenv--quill": {
+        "input_sha256": "8ac4ecdb321b1f7d4de7f9dfef2a17371f0c608afd55c6484e22b70a5df72c4a",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "vault--orchid": {
+        "input_sha256": "d1e0fcf03aefee890d1b5c6ca38dc6b9eea6e7b363670569419c265ac2f1c69d",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "vault--quill": {
+        "input_sha256": "36e58549707d7b497a39ce64c078e8f2f752c2d6438ea1799bdf5c8761d60474",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "version--quill": {
+        "input_sha256": "1db3a355a4c487850db91d92edd27fc5af976eb86d2c03d0ed53c71cc808faef",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      }
+    },
+    "akm": {
+      "version": "0.10.261111-beta",
+      "bin": "akm-cli@0.10.261111-beta",
+      "build": null,
+      "build_fingerprint": "16e104a984159223775193b774da4b99308bdaf7db540f647e807f259a3be671"
+    },
+    "config": {
+      "redacted": {
+        "n_concurrent_trials": 8,
+        "environment": {
+          "type": "docker",
+          "delete": true,
+          "extra_docker_compose": [
+            "lib/harbor/shared-network.yaml"
+          ]
+        },
+        "agents": [
+          {
+            "import_path": "akm_opencode:AkmOpenCode",
+            "model_name": "openai/opencode-zen/qwen3.8-flash",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/opencode-zen/qwen3.8-flash",
+                "provider": {
+                  "openai": {
+                    "models": {
+                      "opencode-zen/qwen3.8-flash": {
+                        "limit": {
+                          "context": 131072,
+                          "output": 8192
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "setup_cache_dir": ".cache/harbor-setup",
+              "akm_cli_version": "0.10.261111-beta",
+              "akm_plugin_version": "0.10.261110-beta",
+              "libraries_dir": "libraries",
+              "arm": "none"
+            }
+          },
+          {
+            "import_path": "akm_opencode:AkmOpenCode",
+            "model_name": "openai/opencode-zen/qwen3.8-flash",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/opencode-zen/qwen3.8-flash",
+                "provider": {
+                  "openai": {
+                    "models": {
+                      "opencode-zen/qwen3.8-flash": {
+                        "limit": {
+                          "context": 131072,
+                          "output": 8192
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "setup_cache_dir": ".cache/harbor-setup",
+              "akm_cli_version": "0.10.261111-beta",
+              "akm_plugin_version": "0.10.261110-beta",
+              "libraries_dir": "libraries",
+              "arm": "bare",
+              "projects": {
+                "orchid": {
+                  "paths": [
+                    "/work/orchid"
+                  ]
+                },
+                "quill": {
+                  "paths": [
+                    "/work/quill"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "opencode": {
+        "model": "openai/opencode-zen/qwen3.8-flash",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": null,
+        "enableThinking": null,
+        "timeoutMs": null
+      }
+    },
+    "eval_settings": {
+      "attempts": 4
+    },
+    "completion": {
+      "selected": [
+        "alerts--orchid",
+        "alerts--quill",
+        "backup--orchid",
+        "backup--quill",
+        "batch--quill",
+        "branch--orchid",
+        "branch--quill",
+        "bucket--orchid",
+        "bucket--quill",
+        "cachedir--orchid",
+        "canary--orchid",
+        "canary--quill",
+        "check--orchid",
+        "check--quill",
+        "config--orchid",
+        "cooldown--orchid",
+        "cooldown--quill",
+        "costcenter--orchid",
+        "costcenter--quill",
+        "cpu--orchid",
+        "cpu--quill",
+        "dns--orchid",
+        "dns--quill",
+        "drain--orchid",
+        "drain--quill",
+        "exitcode--quill",
+        "freeze--orchid",
+        "freeze--quill",
+        "hotfix--orchid",
+        "hotfix--quill",
+        "lockfile--quill",
+        "lockttl--orchid",
+        "loglevel--orchid",
+        "loglevel--quill",
+        "memory--orchid",
+        "memory--quill",
+        "metrics--orchid",
+        "metrics--quill",
+        "mirror--orchid",
+        "mirror--quill",
+        "notify--orchid",
+        "notify--quill",
+        "owner--orchid",
+        "owner--quill",
+        "pool--orchid",
+        "pool--quill",
+        "pools--orchid",
+        "port--orchid",
+        "port--quill",
+        "probeexit--quill",
+        "queue--orchid",
+        "queue--quill",
+        "region--orchid",
+        "region--quill",
+        "registry--orchid",
+        "registry--quill",
+        "replicas--orchid",
+        "replicas--quill",
+        "reportext--orchid",
+        "retention--orchid",
+        "retention--quill",
+        "rewind--orchid",
+        "rotation--orchid",
+        "rotation--quill",
+        "runtime--orchid",
+        "runtime--quill",
+        "schedule--orchid",
+        "schedule--quill",
+        "staging--orchid",
+        "staging--quill",
+        "status--orchid",
+        "status--quill",
+        "tags--orchid",
+        "tags--quill",
+        "timeout--orchid",
+        "timeout--quill",
+        "tokenenv--quill",
+        "vault--orchid",
+        "vault--quill",
+        "version--quill"
+      ],
+      "scored": [
+        "alerts--orchid",
+        "alerts--quill",
+        "backup--orchid",
+        "backup--quill",
+        "batch--quill",
+        "branch--orchid",
+        "branch--quill",
+        "bucket--orchid",
+        "bucket--quill",
+        "cachedir--orchid",
+        "canary--orchid",
+        "canary--quill",
+        "check--orchid",
+        "check--quill",
+        "config--orchid",
+        "cooldown--orchid",
+        "cooldown--quill",
+        "costcenter--orchid",
+        "costcenter--quill",
+        "cpu--orchid",
+        "cpu--quill",
+        "dns--orchid",
+        "dns--quill",
+        "drain--orchid",
+        "drain--quill",
+        "exitcode--quill",
+        "freeze--orchid",
+        "freeze--quill",
+        "hotfix--orchid",
+        "hotfix--quill",
+        "lockfile--quill",
+        "lockttl--orchid",
+        "loglevel--orchid",
+        "loglevel--quill",
+        "memory--orchid",
+        "memory--quill",
+        "metrics--orchid",
+        "metrics--quill",
+        "mirror--orchid",
+        "mirror--quill",
+        "notify--orchid",
+        "notify--quill",
+        "owner--orchid",
+        "owner--quill",
+        "pool--orchid",
+        "pool--quill",
+        "pools--orchid",
+        "port--orchid",
+        "port--quill",
+        "probeexit--quill",
+        "queue--orchid",
+        "queue--quill",
+        "region--orchid",
+        "region--quill",
+        "registry--orchid",
+        "registry--quill",
+        "replicas--orchid",
+        "replicas--quill",
+        "reportext--orchid",
+        "retention--orchid",
+        "retention--quill",
+        "rewind--orchid",
+        "rotation--orchid",
+        "rotation--quill",
+        "runtime--orchid",
+        "runtime--quill",
+        "schedule--orchid",
+        "schedule--quill",
+        "staging--orchid",
+        "staging--quill",
+        "status--orchid",
+        "status--quill",
+        "tags--orchid",
+        "tags--quill",
+        "timeout--orchid",
+        "timeout--quill",
+        "tokenenv--quill",
+        "vault--orchid",
+        "vault--quill",
+        "version--quill"
+      ],
+      "errored": []
+    }
+  }
+}
