@@ -19,6 +19,10 @@ function assetsWith(cases: Record<string, unknown>[], memories: Record<string, s
     const files = memories[c.id as string] ?? ["m"];
     mkdirSync(join(root, "bundles", c.id as string, "memories"), { recursive: true });
     for (const f of files) writeFileSync(join(root, "bundles", c.id as string, "memories", `${f}.md`), `---\ndescription: d\n---\nThe memory ${f}.\n`);
+    if (c.expect === "knowledge" && c.id !== "k0") {
+      mkdirSync(join(root, "bundles", c.id as string, "knowledge"), { recursive: true });
+      writeFileSync(join(root, "bundles", c.id as string, "knowledge", "m.md"), "---\ndescription: d\nteam: t\n---\nThe old doc.\n");
+    }
     if (c.expect === "update" && c.existing !== "missing" && c.existing !== undefined) {
       mkdirSync(join(root, "bundles", c.id as string, "lessons"), { recursive: true });
       writeFileSync(join(root, "bundles", c.id as string, "lessons", `${c.existing}.md`), "---\ndescription: d\n---\nThe old rule.\n");
@@ -32,12 +36,12 @@ const updateCase = (extra: Record<string, unknown> = {}) => ({ id: "u1", class: 
 const noneCase = (extra: Record<string, unknown> = {}) => ({ id: "n1", class: "dated-status", expect: "none", note: "n", ...extra });
 
 describe("loadCases", () => {
-  test("reads the public cases: 96, in six classes", () => {
+  test("reads the public cases: 99, in seven classes", () => {
     const cases = loadCases(PUBLIC);
-    expect(cases).toHaveLength(96);
+    expect(cases).toHaveLength(99);
     const count = (k: Class) => cases.filter((c) => c.class === k).length;
-    expect(CLASSES.map(count)).toEqual([23, 17, 6, 5, 5, 40]);
-    expect(new Set(cases.map((c) => c.id)).size).toBe(96);
+    expect(CLASSES.map(count)).toEqual([23, 17, 6, 5, 5, 40, 3]);
+    expect(new Set(cases.map((c) => c.id)).size).toBe(99);
     for (const c of cases) expect(c.memory.startsWith("---\n")).toBe(true);
   });
 
@@ -58,7 +62,7 @@ describe("loadCases", () => {
   });
 
   test("every lesson, over-claim and update case lists what would contradict it, and has a reversed lesson", () => {
-    const cases = loadCases(PUBLIC).filter((c) => c.expect !== "none");
+    const cases = loadCases(PUBLIC).filter((c) => c.expect === "lesson" || c.expect === "update");
     expect(cases).toHaveLength(80);
     for (const c of cases) {
       expect(c.contradicts.length, `${c.id}: contradicts`).toBeGreaterThanOrEqual(1);
@@ -97,6 +101,13 @@ describe("loadCases", () => {
     fails([lessonCase({ expect: "none" })], "expects lesson");
     fails([noneCase({ expect: "lesson" })], "expects none");
     fails([lessonCase({ required: [] })], "needs required and forbidden");
+    const knowledge = (extra: Record<string, unknown> = {}) => ({ id: "k1", class: "knowledge-update", expect: "knowledge", keeps: { team: "t" }, note: "n", ...extra });
+    expect(loadCases(assetsWith([knowledge()]))[0].keeps).toEqual({ team: "t" });
+    fails([knowledge({ id: "k0" })], "needs the doc knowledge/m.md");
+    fails([knowledge({ keeps: {} })], 'needs "keeps"');
+    fails([knowledge({ keeps: undefined })], 'needs "keeps"');
+    fails([knowledge({ required: [["a fact"]] })], "no required");
+    fails([knowledge({ expect: "none" })], "expects knowledge");
     fails([lessonCase({ required: [["###"]] })], "a letter or a digit");
     fails([lessonCase({ required: [[]] })], "list of lists");
     fails([lessonCase({ bad: undefined })], '"bad" example');
@@ -131,13 +142,14 @@ describe("selectCases", () => {
     expect(selectCases(cases, 5).map((c) => c.id)).toEqual(["lesson-01", "claim-01", "status-01", "asset-01", "dup-01"]);
     expect(selectCases(cases, 3).map((c) => c.id)).toEqual(["lesson-01", "claim-01", "status-01"]);
     expect(selectCases(cases, 6).map((c) => c.id)).toEqual(["lesson-01", "claim-01", "status-01", "asset-01", "dup-01", "upd-01"]);
-    expect(selectCases(cases, 7).map((c) => c.id)).toEqual(["lesson-01", "lesson-02", "claim-01", "status-01", "asset-01", "dup-01", "upd-01"]);
+    expect(selectCases(cases, 7).map((c) => c.id)).toEqual(["lesson-01", "claim-01", "status-01", "asset-01", "dup-01", "upd-01", "know-01"]);
+    expect(selectCases(cases, 8).map((c) => c.id)).toEqual(["lesson-01", "lesson-02", "claim-01", "status-01", "asset-01", "dup-01", "upd-01", "know-01"]);
   });
 
   test("a limit at or above the size runs everything", () => {
-    expect(selectCases(cases, 96)).toHaveLength(96);
-    expect(selectCases(cases, 99)).toHaveLength(96);
-    expect(selectCases(cases)).toHaveLength(96);
+    expect(selectCases(cases, 99)).toHaveLength(99);
+    expect(selectCases(cases, 120)).toHaveLength(99);
+    expect(selectCases(cases)).toHaveLength(99);
   });
 });
 
@@ -878,6 +890,14 @@ describe("the public cases check themselves", () => {
   });
 });
 
+describe("the public knowledge-update cases", () => {
+  test("each records two or more positive feedbacks, which is what makes akm promote the memory", () => {
+    const cases = loadCases(PUBLIC).filter((c) => c.expect === "knowledge");
+    expect(cases.length).toBeGreaterThan(0);
+    for (const c of cases) expect((c.feedback ?? []).filter((f) => f.signal === "positive").length, c.id).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe("the public update cases check themselves", () => {
   for (const c of loadCases(PUBLIC).filter((c) => c.expect === "update")) {
     describe(c.id, () => {
@@ -1074,14 +1094,15 @@ describe("refs", () => {
 describe("what akm did", () => {
   const proposal = (extra: Record<string, unknown> = {}) => ({ id: "1", ref: "bundle//lessons/memory-m-lesson", source: "distill", payload: { content: "---\ndescription: d\nwhen_to_use: w\n---\nBody.\n" }, gateDecision: { outcome: "deferred", reason: "distill-review", scores: { novelty: 4 }, judgeReason: "fine" }, ...extra });
 
-  test("lessonProposals keeps the lessons distill queued, in any state, with the gate's decision", () => {
+  test("lessonProposals keeps the lessons and knowledge docs distill queued, in any state, with the gate's decision", () => {
     const found = lessonProposals([
-      { status: "pending", proposals: [proposal(), proposal({ ref: "bundle//knowledge/x" }), proposal({ source: "reflect" })] },
+      { status: "pending", proposals: [proposal(), proposal({ ref: "bundle//knowledge/x" }), proposal({ ref: "bundle//skills/x" }), proposal({ source: "reflect" })] },
       { status: "rejected", proposals: [proposal({ ref: "lessons/short-ref" })] },
       { status: "accepted" },
     ]);
     expect(found.map((p) => [p.ref, p.status, p.gate, p.reason])).toEqual([
       ["bundle//lessons/memory-m-lesson", "pending", "deferred/distill-review", "fine"],
+      ["bundle//knowledge/x", "pending", "deferred/distill-review", "fine"],
       ["lessons/short-ref", "rejected", "deferred/distill-review", "fine"],
     ]);
     expect(found[0].scores).toEqual({ novelty: 4 });
@@ -1261,6 +1282,47 @@ describe("what akm did", () => {
     test("no proposal is missed, for a skip and for a judge's rejection; that is the result of akm without #1090 too", () => {
       expect(scoreCase(u, run([], { outcome: "skipped", skipReason: "nothing_reusable" }))).toMatchObject({ verdict: "missed", outcome: "skipped", checks: { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, no_new_lesson: true }, added: null });
       expect(scoreCase(u, run([], { outcome: "quality_rejected", reason: "redundant" }))).toMatchObject({ verdict: "missed", outcome: "rejected" });
+    });
+  });
+
+  describe("scoreCase: a knowledge-update case (#1454)", () => {
+    const k = loadCases(PUBLIC).find((x) => x.id === "know-02") as LoadedCase;
+    const doc = (front: string) => queued(`---\ndescription: d\n${front}---\nMerged body.\n`, { ref: `bundle//knowledge/${k.name}` });
+    const keys = "team: delivery\nproject: ledger-reports\nowners:\n  - mira\n  - tomas\n";
+
+    test("right when the pending knowledge proposal keeps every key with its value", () => {
+      expect(scoreCase(k, run([doc(keys)]))).toMatchObject({ verdict: "right", outcome: "update", missing: [], status: "pending" });
+    });
+
+    test("bad, naming the keys it lost: a missing key, a shortened list, another value", () => {
+      expect(scoreCase(k, run([doc("team: delivery\n")]))).toMatchObject({ verdict: "bad", missing: ["project", "owners"] });
+      expect(scoreCase(k, run([doc("team: delivery\nproject: ledger-reports\nowners:\n  - mira\n")]))).toMatchObject({ verdict: "bad", missing: ["owners"] });
+      expect(scoreCase(k, run([doc(keys.replace("delivery", "ops"))]))).toMatchObject({ verdict: "bad", missing: ["team"] });
+      expect(scoreCase(k, run([queued("No frontmatter at all.", { ref: `knowledge/${k.name}` })]))).toMatchObject({ verdict: "bad", missing: ["team", "project", "owners"] });
+    });
+
+    test("missed with no pending proposal on the doc: a skip, a rejection, a proposal on another doc or one that is not pending", () => {
+      expect(scoreCase(k, run([], { outcome: "skipped", skipReason: "conflict_noop" }))).toMatchObject({ verdict: "missed", outcome: "skipped" });
+      expect(scoreCase(k, run([], { outcome: "quality_rejected", reason: "redundant" }))).toMatchObject({ verdict: "missed", outcome: "rejected" });
+      expect(scoreCase(k, run([{ ...doc(keys), ref: "bundle//knowledge/another" }]))).toMatchObject({ verdict: "missed" });
+      expect(scoreCase(k, run([{ ...doc(keys), status: "rejected" }]))).toMatchObject({ verdict: "missed" });
+    });
+
+    test("a lesson case never reads a knowledge proposal, and its metrics are the same with one in the queue", () => {
+      const lesson = queued("---\ndescription: d\nwhen_to_use: w\n---\nBody.");
+      const only = scoreCase(status, run([lesson]));
+      expect(scoreCase(status, run([doc(keys), lesson]))).toEqual({ ...only, proposals: expect.anything() });
+      expect(scoreCase(status, run([doc(keys)]))).toMatchObject({ verdict: "right", outcome: "skipped" });
+    });
+
+    test("counts in by_class and outcomes.knowledge, and in none of the lesson metrics", () => {
+      const rows = [scoreCase(k, run([doc(keys)])), scoreCase(k, run([doc("")]))];
+      const m = metrics(rows);
+      expect(m.by_class["knowledge-update"]).toEqual({ n: 2, right: 1, rate: 0.5 });
+      expect(m.outcomes.knowledge.update).toBe(2);
+      expect(m.good_lessons.n).toBe(0);
+      expect(m.wrong_lessons.n).toBe(0);
+      expect(m.lesson_updates.n).toBe(0);
     });
   });
 

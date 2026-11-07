@@ -12,14 +12,14 @@ import { type LoadedCase, type Raw, type Row, errored, makeRow, rawOf, summarize
 export const MEASUREMENT: Measurement<LoadedCase, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.2",
+  version: "0.3",
   loadCases: (root, summary) => loadCases(corpusFolder(root, summary)),
   caseId: (c) => c.id,
   // The files of the case's bundle go into the sandbox as they are, and the feedback is recorded against the memory before distill runs.
   input: (c) => ({ bundle: bundleFiles(c.dir), feedback: c.feedback ?? [] }),
   // Everything score() reads of the case: its class, what it expects, the facts, claims and reversals it checks for, the memory it measures a
-  // lesson's length against and, for an update, the lesson the library holds.
-  labels: (c) => ({ class: c.class, expect: c.expect, required: c.required, forbidden: c.forbidden, contradicts: c.contradicts, existing: c.existing ?? null, existing_body: c.existingBody ?? null, memory: c.memory }),
+  // lesson's length against and, for an update, the lesson the library holds and, for a knowledge update, the keys it must keep (left out when the case has none, so the digests of the other cases stay as they were).
+  labels: (c) => ({ class: c.class, expect: c.expect, required: c.required, forbidden: c.forbidden, contradicts: c.contradicts, existing: c.existing ?? null, existing_body: c.existingBody ?? null, ...(c.keeps === undefined ? {} : { keeps: c.keeps }), memory: c.memory }),
   rawOf,
   score: makeRow,
   errored,

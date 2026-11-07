@@ -43,6 +43,10 @@ export function loadCases(assets: string): LoadedCase[] {
     if (row.expect === "lesson" || row.expect === "update") {
       if (required.length === 0 || forbidden.length === 0) throw new Error(`${at} expects ${row.expect === "lesson" ? "a lesson" : "an update"}, so it needs required and forbidden`);
       for (const key of ["good", "bad"] as const) if (typeof row[key] !== "string" || !row[key]?.trim()) throw new Error(`${at} needs a "${key}" example lesson`);
+    } else if (row.expect === "knowledge") {
+      const keeps = row.keeps;
+      if (typeof keeps !== "object" || keeps === null || Array.isArray(keeps) || Object.keys(keeps).length === 0) throw new Error(`${at} is a knowledge update, so it needs "keeps": the frontmatter keys its proposal must hold, with their values`);
+      if (required.length > 0 || forbidden.length > 0 || contradicts.length > 0 || row.reversed !== undefined) throw new Error(`${at} is a knowledge update, so it has no required, forbidden, contradicts or reversed`);
     } else if (required.length > 0 || forbidden.length > 0 || contradicts.length > 0 || row.reversed !== undefined) {
       throw new Error(`${at} expects no lesson, so it has no required, forbidden, contradicts or reversed`);
     }
@@ -57,6 +61,7 @@ export function loadCases(assets: string): LoadedCase[] {
       if (`lessons/${row.existing}.md` === lessonFile({ name })) throw new Error(`${at} holds its existing lesson where distill would write the memory's own, so distill would skip the memory and never try an update`);
       existingBody = memoryBody(readFileSync(file, "utf8"));
     }
+    if (row.expect === "knowledge" && !existsSync(join(dir, "knowledge", `${name}.md`))) throw new Error(`${at} is a knowledge update, so it needs the doc knowledge/${name}.md in its bundle: the memory's name is the doc's`);
     return { ...row, required, forbidden, contradicts, dir, name, memory: readFileSync(join(dir, "memories", memories[0]), "utf8"), ...(existingBody === undefined ? {} : { existingBody }) };
   });
 }
