@@ -140,13 +140,6 @@ class AkmOpenCodeOptions(EvalOpenCodeOptions):
     def _akm_env_is_akm(cls, env: dict[str, str]) -> dict[str, str]:
         return check_akm_env(env)
 
-    @field_validator("arm")
-    @classmethod
-    def _arm_is_a_label(cls, arm: str | None) -> str | None:
-        if arm is not None and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", arm):
-            raise ValueError(f"arm {arm!r} is not a label of lower-case letters, digits and dashes")
-        return arm
-
     @field_validator("akm_package", "plugin_package")
     @classmethod
     def _package_is_a_file_name(cls, name: str | None) -> str | None:
@@ -418,7 +411,8 @@ class AkmOpenCode(EvalOpenCode):
                 "if(JSON.parse(s).searchMode!==\"semantic\"){console.error(\"AKM-SETUP FATAL: search is not semantic\");process.exit(1)};"
                 "console.log(\"AKM-SETUP search_mode=semantic\")})' && "
             )
-        projects = f"akm config set projects {shlex.quote(json.dumps(self.options.projects))} --silent && " if self.options.projects else ""
+        # An akm that does not know `projects` stores and ignores it, so `config get` (which exits 2 then) stops the trial.
+        projects = f"akm config set projects {shlex.quote(json.dumps(self.options.projects))} --silent && akm config get projects >/dev/null && " if self.options.projects else ""
         assets = self.options.library_assets
         want = f'"$(find {LIBRARIES}/"$stash" -type f -not -name ".*" | wc -l)"' if assets is None else str(assets)
         return (

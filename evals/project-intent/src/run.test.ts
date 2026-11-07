@@ -21,7 +21,7 @@ const frontmatter = (ref: string) => readFileSync(join(LIBRARIES, "teams", `${re
 describe("the tasks", () => {
   const names = taskNames(TASKS);
 
-  test("ten tasks: four questions in each of the two projects, and two that need only unscoped notes", () => {
+  test("28 tasks: 24 conflict tasks (twelve questions in each of the two projects) and 4 that need only unscoped notes", () => {
     expect(names).toHaveLength(28);
     expect(names.filter((t) => kindOf(join(TASKS, t)) === "conflict")).toHaveLength(24);
     expect(names.filter((t) => kindOf(join(TASKS, t)) === "general")).toEqual(["config--orchid", "exitcode--quill", "lockfile--quill", "rewind--orchid"]);

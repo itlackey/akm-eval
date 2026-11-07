@@ -65,11 +65,9 @@ def test_an_arm_label_names_the_agent_and_projects_go_into_the_akm_config(tmp_pa
     assert agent.name() == "akm-opencode"
     assert agent.to_agent_info().name == "akm-opencode-explicit"
     seed = agent._seed_command()
-    assert f"akm config set projects {shlex.quote(json.dumps(projects))} --silent && " in seed
+    assert f"akm config set projects {shlex.quote(json.dumps(projects))} --silent && akm config get projects >/dev/null && " in seed
     assert subprocess.run(["bash", "-n", "-c", seed], capture_output=True, text=True).returncode == 0
     assert "config set projects" not in make(tmp_path, arm="none")._seed_command()
-    with pytest.raises(ValueError, match="is not a label"):
-        make(tmp_path, arm="Bare arm")
 
 
 def test_the_plugin_is_the_only_thing_added_to_the_config(tmp_path):
