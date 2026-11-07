@@ -76,11 +76,15 @@ Per arm, over the scored trials (a trial is scored when the verifier gave it a r
 
 ## Pass rule
 
-The owner's rule is that a feature must improve results at about equal tokens, or cut tokens. Read it per comparison:
+The owner's rule is that a feature must improve results at about equal tokens, or cut tokens.
 
-- **The name convention earns its place** when `bare - none` is above 0 with the lower end of its interval above 0, `bare`'s tokens per correct outcome are no more than 5% above `none`'s, and `bare`'s general pass rate is not below `none`'s.
-- An interval that holds 0 is no evidence for the convention: by the owner's rule, unproven is dropped by default. Read `explicit - none` beside it: when only the filter helps, the measured-good part is the explicit filter, not the convention.
-- `other project` should fall from `none` to `bare` to `explicit`; `explicit` should be at 0 unless the agent guessed a value.
+**Revised 2026-11-07, before any result of the `opencode-zen/qwen3.8-flash` run existed.** The first rule made the pass rate the primary test. The pass rate moves with things the name convention does not touch: agent exits and timeouts scored 0 in every arm, tasks every arm passes or fails, and the agent's own reading of the notes. The convention's job is to keep the agent on its project's notes, and the `other project` rate measures exactly that. The first run (35B, 28 tasks) read that rate down from 9.4% to 1.0% (`bare - none` -0.083, interval -0.156 to -0.021, 8 tasks down and 0 up), while the pass rate read +0.098 with an interval holding 0. Read each comparison against these three tests, in this order:
+
+1. **Primary: `other project` rate, `bare - none`.** Use lib/harbor's `pairedEstimate` over the conflict tasks, with each trial's `other_project` as its value. It passes when the upper end of the 95% interval is below 0.
+2. **Guard: pass rate, `bare - none`.** The lower end of its 95% interval must be above -0.05: the convention may not cost correct answers. Also, `bare`'s tokens per correct outcome must be no more than 5% above `none`'s.
+3. **Supporting: pass-rate gain.** Run lib/harbor's `signTest` on the tasks where the arms differ, pooled across every published run of this eval (one count per task and model; a task asked of two models counts twice). A result below 0.05 means the gain is shown. A result at or above 0.05 does not fail the convention when tests 1 and 2 pass.
+
+**The convention earns its place** when tests 1 and 2 pass on every model run. A failed test 1, or a failed test 2, is evidence against it, and by the owner's rule it is dropped. Read `explicit - none` beside it. When only the filter helps, the measured-good part is the explicit filter, not the convention. `other project` should fall from `none` to `bare` to `explicit`, and `explicit` should be at 0 unless the agent guessed a value.
 
 ## Limits
 
