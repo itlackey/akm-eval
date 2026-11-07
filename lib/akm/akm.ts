@@ -57,7 +57,7 @@ export interface AkmResult {
   timedOut: boolean; // the timeout killed it. Its exit code is 137, and runAkm ends its stderr with "akm timed out after <N>s", so a caller that only prints stderr says why
 }
 
-type RunOptions = { stdin?: string; timeoutMs?: number };
+type RunOptions = { stdin?: string; timeoutMs?: number; cwd?: string };
 
 const FOLDERS = ["bundle", "config", "data", "cache", "state", "xdg-config", "xdg-data", "xdg-state"];
 const HOME_FOLDERS = ["home", "xdg-cache"];
@@ -455,7 +455,7 @@ export async function runAkm(sandbox: Sandbox, args: string[], opts: RunOptions 
   const t0 = performance.now();
   const proc = Bun.spawn([...sandbox.cmd, ...args], {
     env: sandbox.env,
-    cwd: sandbox.dir,
+    cwd: opts.cwd ?? sandbox.dir,
     stdin: opts.stdin === undefined ? "ignore" : new Blob([opts.stdin]),
     stdout: "pipe",
     stderr: "pipe",

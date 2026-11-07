@@ -20,7 +20,7 @@ export interface Query {
   expected?: string[];
   /** Existing search CLI flags, e.g. ["--filter", "user=alice"]. */
   searchArgs?: string[];
-  /** Frontmatter the session selects on, key to value or list of values. The collector puts it on search and curate as `--<selection flag> key=value` (--selection-flag, `filter` by default). */
+  /** Frontmatter the session selects on, key to value or list of values ("" stands for the assets without the key). The collector puts it on search and curate as `--<selection flag> key=value` (--selection-flag, `filter` by default). */
   selection?: Selection;
   /** The id of the query whose result list this one's must equal in the same run: a selection that matches no asset changes nothing. */
   same_as?: string;
@@ -77,8 +77,8 @@ export function parseQueries(text: string, where = "queries"): Query[] {
     if (r.selection !== undefined) {
       const sel = r.selection as Record<string, unknown>;
       const keys = typeof sel === "object" && sel !== null && !Array.isArray(sel) ? Object.keys(sel) : [];
-      const values = (v: unknown): v is string[] => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && x);
-      if (keys.length === 0 || !keys.every((k) => /^[a-z][a-z0-9_-]*$/.test(k) && (typeof sel[k] === "string" ? sel[k] !== "" : values(sel[k])))) return 'has a "selection" that is not an object of keys to a value or a list of values';
+      const values = (v: unknown): v is string[] => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string"); // "" is a value: the assets without the key
+      if (keys.length === 0 || !keys.every((k) => /^[a-z][a-z0-9_-]*$/.test(k) && (typeof sel[k] === "string" || values(sel[k])))) return 'has a "selection" that is not an object of keys to a value or a list of values';
     }
     if (r.same_as !== undefined && (typeof r.same_as !== "string" || !r.same_as || r.same_as === r.id)) return 'has a "same_as" that is not the id of another query';
     const owned = (r.searchArgs as string[] | undefined)?.find((x) => RUNNER_ARGS.some((flag) => x === flag || x.startsWith(`${flag}=`)));

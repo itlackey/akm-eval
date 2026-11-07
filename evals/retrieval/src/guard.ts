@@ -16,6 +16,9 @@ import type { Row, System } from "./score.ts";
 /** akm's refusal of a flag it does not declare: `{"code": "UNKNOWN_FLAG", "error": "Unknown flag \"--since\"."}`, or of a filter key it does not know (before #1453): exit 2, `INVALID_FLAG_VALUE`, `Unknown scope key "team" in --filter`. */
 export const isUnknownFlag = (error: string): boolean => /UNKNOWN_FLAG|Unknown flag|Unknown scope key/.test(error);
 
+/** Whether a selection selects the assets without a key: one of its values is empty (`--filter team=`). */
+export const hasEmptyValue = (selection: Record<string, string | string[]> | undefined): boolean => Object.values(selection ?? {}).some((v) => [v].flat().includes(""));
+
 /** The columns that `searchArgs` reach: curate keeps its usual invocation, so a filter query is not scored there. */
 export const takesSearchArgs = (sys: System): boolean => sys === "search" || sys === "semantic_search";
 

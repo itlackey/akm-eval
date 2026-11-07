@@ -50,7 +50,8 @@ scored. Needs akm on PATH, or in AKM_BIN.
   --semantic  also score the semantic search, whatever --limit or corpus is given. Without it only keyword search is scored. The
             semantic index of a large library of your own embeds every asset: tens of minutes the first time.
   --selection-flag  the akm flag a query's selection goes on, for search and curate: \`--<NAME> key=value\`. Default: filter, today's hard filter.
-            \`prefer\` or another name runs a candidate that has that flag. A set with selections is described in evals/retrieval/assets/selection/README.md.
+            \`prefer\` or another name runs a candidate that has that flag. \`project-filter\` puts the selection in the config as the
+            filters of a project and runs akm in its folder instead (akm 0.10.261111 and later). A set with selections is described in evals/retrieval/assets/selection/README.md.
   --repeat  run each collection N times, into <label>-r1-<collection> to <label>-rN-<collection>, and write the min, max and mean of each metric to
             <UTC date>-<label>-<collection>-repeat-summary.json beside them
 ${akmUsage}
@@ -126,8 +127,8 @@ interface Summary {
   by_kind?: Record<string, Columns<SystemMetrics>>;
   /** Only for a set with selections: the metrics by what the query wants (team, general, mixed: see intentOf in score.ts). */
   by_intent?: Record<string, Columns<SystemMetrics>>;
-  /** Only for a set with selections: `unchanged`, the share of the queries with a `same_as` partner whose list equals the partner's, and `leaked`, how many leak queries returned anything in a keyword column (it has to be 0). */
-  checks?: { unchanged: Columns<number | null>; leaked: Columns<number | null> };
+  /** Only for a set with selections: `unchanged`, the share of the queries with a `same_as` partner whose list equals the partner's, `empty_value`, the same for a selection with an empty value (the partner's list less the assets of other values), and `leaked`, how many leak queries returned anything in a keyword column (it has to be 0). */
+  checks?: { unchanged: Columns<number | null>; empty_value: Columns<number | null>; leaked: Columns<number | null> };
   /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
@@ -191,7 +192,7 @@ function printSummary(s: Summary): void {
   };
   const selected = s.checks !== undefined;
   if (selected) {
-    console.log(`  selection on --${s.selection_flag}, over the ${at(m, "search").selection?.n ?? 0} queries whose selection matches some asset`);
+    console.log(`  selection on ${s.selection_flag === "project-filter" ? "" : "--"}${s.selection_flag}, over the ${at(m, "search").selection?.n ?? 0} queries whose selection matches some asset`);
     selectionRows("    ", m);
   }
   for (const [kind, km] of Object.entries(s.by_kind ?? {})) {
@@ -208,6 +209,7 @@ function printSummary(s: Summary): void {
   if (s.checks) {
     const line = (label: string, g: Columns<number | null>, f: (x: number | null) => string) => console.log(`  ${label.padEnd(20)}  ${systems.map((sys) => f(at(g, sys)).padEnd(COLUMN)).join("  ")}`.trimEnd());
     line("unchanged (same_as)", s.checks.unchanged, pct);
+    line("empty value kept", s.checks.empty_value, pct);
     line("leaked (must be 0)", s.checks.leaked, (x) => (x === null ? "n/a" : String(x)));
   }
   const cost = (label: string, f: (x: CallStats) => string) => console.log(`  ${label.padEnd(20)}  ${systems.map((sys) => f(at(s.calls, sys)).padEnd(COLUMN)).join("  ")}`.trimEnd());

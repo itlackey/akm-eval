@@ -112,8 +112,13 @@ describe("the hand-built selection set", () => {
   const counts = Object.fromEntries([...new Set(queries.map((q) => q.kind))].map((k) => [k, queries.filter((q) => q.kind === k).length]));
 
   test("has the kinds of cases its README lists", () => {
-    expect(counts).toEqual({ "team-first": 4, "general-only": 3, partial: 3, "missing-vs-conflict": 2, "multi-value": 2, control: 1, "no-match": 2, duplicate: 1, "untagged-team": 1, leak: 1 });
-    expect(queries.filter((q) => q.same_as).every((q) => q.same_as === "s13")).toBe(true);
+    expect(counts).toEqual({ "team-first": 4, "general-only": 3, partial: 3, "missing-vs-conflict": 2, "multi-value": 2, control: 5, "no-match": 2, duplicate: 1, "untagged-team": 1, leak: 1, "empty-general-only": 2, "empty-missing-vs-conflict": 2 });
+    expect(queries.filter((q) => q.kind === "no-match").every((q) => q.same_as === "s13")).toBe(true);
+    // An empty value changes the list on purpose; its partner is the same query with no selection.
+    for (const q of queries.filter((x) => x.kind.startsWith("empty-"))) {
+      const twin = queries.find((x) => x.id === q.same_as);
+      expect([twin?.kind, twin?.query, twin?.selection]).toEqual(["control", q.query, undefined]);
+    }
     expect(queries.some((q) => Array.isArray(q.selection?.team))).toBe(true);
   });
 

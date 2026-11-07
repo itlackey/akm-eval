@@ -6,7 +6,8 @@
 // A change to what this file asks akm, or to what it records of the answer, is a new version of the eval: change `version` in
 // measurement.ts by hand.
 
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Sandbox, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { type BuiltBy, type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
@@ -115,17 +116,51 @@ export async function openIndexes(i: IndexInput): Promise<Indexes> {
   }
 }
 
+/** The project arm (`--selection-flag project-filter`): the selection is not put on the call but in the config, as the `filters` of a project that holds the folder the call runs in. */
+const PROJECT_ARM = "project-filter";
+
+/**
+ * A copy of the sandbox whose config also has one project, for the selection of a query: a new folder is its only path, and `filters` its selection.
+ * A project with no `prefer` prefers `project=<name>`, so it gets an empty one. The copy has its own config folder, so the kept semantic index is not written to.
+ * `dir` is the project's folder, where the call runs, and `remove` deletes both.
+ */
+function projectBox(sb: Sandbox, selection: NonNullable<Case["selection"]>): { box: Sandbox; dir: string; remove(): void } {
+  const root = mkdtempSync(join(tmpdir(), "akm-eval-project-"));
+  const dir = join(root, "work");
+  const config = join(root, "config");
+  mkdirSync(dir);
+  mkdirSync(config);
+  const base = JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"));
+  const project = { paths: [dir], filters: selection, prefer: {} };
+  writeFileSync(join(config, "config.json"), JSON.stringify({ ...base, projects: { selection: project } }));
+  return { box: { ...sb, env: { ...sb.env, AKM_CONFIG_DIR: config } }, dir, remove: () => rmSync(root, { recursive: true, force: true }) };
+}
+
 /**
  * Asks akm for the first results of one query in every column of the run, and returns the row the scorer makes of them. `modes` is how akm
  * said it searched, for each call that said, for the summary. A call that fails is an answer with an error and no results (see akm.ask).
+ * `selectionFlag` is the akm flag the query's selection goes on, or a project arm.
  */
 export async function collectQuery(boxes: Indexes["boxes"], c: Case, systems: readonly System[], timeoutMs?: number, selectionFlag: string = akm.SELECTION_FLAG): Promise<{ row: Row; modes: [Mode, string][] }> {
   const raw: Partial<Record<System, RawAnswer>> = {};
   const modes: [Mode, string][] = [];
-  for (const sys of systems) {
-    const a = await akm.ask(boxes[modeOf(sys)] as Sandbox, commandOf(sys), c.query, akm.LIMIT, modeOf(sys), timeoutMs, c.searchArgs, akm.selectionArgs(selectionFlag, c.selection));
-    if (a.mode) modes.push([modeOf(sys), a.mode]);
-    raw[sys] = { refs: a.refs, seconds: a.seconds, ...(a.error ? { error: a.error } : {}), ...(a.timedOut ? { timedOut: true } : {}), ...(a.outChars !== undefined ? { outChars: a.outChars } : {}), ...(a.tokens ? { tokens: a.tokens } : {}) };
+  const inProject = selectionFlag === PROJECT_ARM;
+  const projects: Partial<Record<Mode, ReturnType<typeof projectBox>>> | undefined = inProject && c.selection !== undefined ? {} : undefined;
+  try {
+    for (const sys of systems) {
+      const mode = modeOf(sys);
+      const sandbox = boxes[mode] as Sandbox;
+      if (projects !== undefined) projects[mode] ??= projectBox(sandbox, c.selection as NonNullable<Case["selection"]>);
+      const project = projects?.[mode];
+      const a = await akm.ask(project?.box ?? sandbox, commandOf(sys), c.query, akm.LIMIT, mode, timeoutMs, c.searchArgs, inProject ? [] : akm.selectionArgs(selectionFlag, c.selection), project?.dir);
+      if (a.mode) modes.push([mode, a.mode]);
+      raw[sys] = { refs: a.refs, seconds: a.seconds, ...(a.error ? { error: a.error } : {}), ...(a.timedOut ? { timedOut: true } : {}), ...(a.outChars !== undefined ? { outChars: a.outChars } : {}), ...(a.tokens ? { tokens: a.tokens } : {}) };
+    }
+  } finally {
+    for (const p of Object.values(projects ?? {})) p?.remove();
   }
-  return { row: makeRow(c, raw as Raw), modes };
+  const row = makeRow(c, raw as Raw);
+  // `empty_value` is a check of the filter arms: a prefer arm keeps the other values' assets.
+  if (selectionFlag !== akm.SELECTION_FLAG && selectionFlag !== PROJECT_ARM) delete row.excluded;
+  return { row, modes };
 }

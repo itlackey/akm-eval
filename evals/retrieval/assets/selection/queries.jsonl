@@ -18,3 +18,11 @@
 {"id":"s18","kind":"leak","query":"orchidfalcon","selection":{"project":"orchidfalcon"}}
 {"id":"s19","kind":"multi-value","query":"approve a vendor invoice over the limit","selection":{"team":["ops","finance"]}}
 {"id":"s20","kind":"multi-value","query":"request a laptop for a contractor","selection":{"team":["ops","finance"]}}
+{"id":"t01","kind":"control","query":"export an invoice to PDF"}
+{"id":"e01","kind":"empty-general-only","query":"export an invoice to PDF","selection":{"team":["ops",""]},"same_as":"t01"}
+{"id":"t02","kind":"control","query":"set up a Python virtualenv for the project"}
+{"id":"e02","kind":"empty-general-only","query":"set up a Python virtualenv for the project","selection":{"team":["ops",""]},"same_as":"t02"}
+{"id":"t03","kind":"control","query":"approve a vendor invoice over the limit"}
+{"id":"e03","kind":"empty-missing-vs-conflict","query":"approve a vendor invoice over the limit","selection":{"team":["ops",""]},"same_as":"t03"}
+{"id":"t04","kind":"control","query":"request a laptop for a contractor"}
+{"id":"e04","kind":"empty-missing-vs-conflict","query":"request a laptop for a contractor","selection":{"team":["ops",""]},"same_as":"t04"}
