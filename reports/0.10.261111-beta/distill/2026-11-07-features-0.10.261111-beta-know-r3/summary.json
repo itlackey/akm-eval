@@ -1,0 +1,335 @@
+{
+  "eval": "distill",
+  "corpus": "custom",
+  "corpus_folder": null,
+  "label": "features-0.10.261111-beta-know-r3",
+  "date": "2026-11-07T09:09:58.388Z",
+  "git_commit": "996a657",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261111-beta",
+  "akm_bin": "~/.cache/akm-eval-selection-projects/a111/node_modules/.bin/akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "config_form": "connections",
+  "limit": null,
+  "strategy": "distill-only",
+  "config_patch": {
+    "path": "--semantic",
+    "sha256": "591a6213cec2890f9c7e4cd52a35c9e2eab91bf5db0879f27aa6efd178555ef5"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "model": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "model",
+      "improveStrategy": "distill-only"
+    },
+    "improve": {
+      "strategies": {
+        "distill-only": {
+          "engine": "model",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": true,
+              "allowedTypes": [
+                "memory"
+              ]
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false
+          }
+        }
+      }
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    }
+  },
+  "engine": {
+    "engine": "model",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "<MODEL_BASE_URL>",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "model": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "8e796594358598038b444cabf9e3da0a9d10e47fadda5358517e47b12a997a0a",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 3,
+  "n_run": 3,
+  "n_scored": 3,
+  "n_errored": 0,
+  "timeouts": 0,
+  "served_models": [
+    "qwen3.6-35b-a3b"
+  ],
+  "metrics": {
+    "good_lessons": {
+      "n": 0,
+      "good": 0,
+      "rate": null,
+      "ambiguous": 0
+    },
+    "wrong_lessons": {
+      "n": 0,
+      "wrong": 0,
+      "rate": null
+    },
+    "lesson_updates": {
+      "n": 0,
+      "right": 0,
+      "rate": null,
+      "ambiguous": 0,
+      "checks": {
+        "update_proposed": 0,
+        "existing_kept": 0,
+        "new_facts": 0,
+        "no_extra_claims": 0,
+        "not_copied": 0,
+        "no_new_lesson": 0
+      }
+    },
+    "by_class": {
+      "knowledge-update": {
+        "n": 3,
+        "right": 2,
+        "rate": 0.6667
+      }
+    },
+    "outcomes": {
+      "lesson": {
+        "lesson": 0,
+        "update": 0,
+        "skipped": 0,
+        "rejected": 0,
+        "invalid": 0,
+        "error": 0
+      },
+      "none": {
+        "lesson": 0,
+        "update": 0,
+        "skipped": 0,
+        "rejected": 0,
+        "invalid": 0,
+        "error": 0
+      },
+      "update": {
+        "lesson": 0,
+        "update": 0,
+        "skipped": 0,
+        "rejected": 0,
+        "invalid": 0,
+        "error": 0
+      },
+      "knowledge": {
+        "lesson": 0,
+        "update": 2,
+        "skipped": 0,
+        "rejected": 1,
+        "invalid": 0,
+        "error": 0
+      }
+    },
+    "bad_by": {
+      "missing_fact": 0,
+      "forbidden_claim": 0,
+      "contradiction": 0,
+      "too_long": 0,
+      "copied": 0
+    }
+  },
+  "model_calls": {
+    "calls": 6,
+    "errors": 0,
+    "prompt_tokens": 620.2,
+    "completion_tokens": 117.7,
+    "seconds": 1.62,
+    "output_tokens_per_second": 72.6
+  },
+  "semantic_verification": {
+    "index_checks": 3,
+    "indexed_entries": 6,
+    "embedded_entries": 6,
+    "searches": {
+      "semantic": 0,
+      "non_semantic": 0,
+      "unknown": 0
+    },
+    "telemetry_errors": 0,
+    "failures": 0
+  },
+  "concurrency": 1,
+  "timeout_ms": 900000,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "distill",
+    "corpus": "custom",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.3"
+    },
+    "cases": {
+      "know-01": {
+        "input_sha256": "ed852288259de8b70b1a1408c803f7eb6bdad3960c87c03be11fc71eb6a1d1a5",
+        "label_sha256": "4d1138c9ff40c0ee75f81236736590dc3183b1b09adc25f41b625f23e8294856"
+      },
+      "know-02": {
+        "input_sha256": "bb7293c2e39b7061ac70aee0dc220f04b3f2979ddb9e08a4367e46a47528dc56",
+        "label_sha256": "4b0d9ca4ee95b44ddd03fb8bc0346f60235831c205d6bbf43112a25175312d18"
+      },
+      "know-03": {
+        "input_sha256": "90c110091392b8ac9c070a236fcb067a3440d70d4954ce8633321020cb9ae50f",
+        "label_sha256": "d0a37d5a8105d780b95b4241253180b4ada2b6f83aba6f13e9bbe776aa26fd7d"
+      }
+    },
+    "akm": {
+      "version": "0.10.261111-beta",
+      "bin": "~/.cache/akm-eval-selection-projects/a111/node_modules/.bin/akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "model": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "model",
+          "improveStrategy": "distill-only"
+        },
+        "improve": {
+          "strategies": {
+            "distill-only": {
+              "engine": "model",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": true,
+                  "allowedTypes": [
+                    "memory"
+                  ]
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false
+              }
+            }
+          }
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": "distill-only",
+      "config_patch_sha256": "591a6213cec2890f9c7e4cd52a35c9e2eab91bf5db0879f27aa6efd178555ef5",
+      "timeout_ms": 900000,
+      "seed": null
+    },
+    "engines": {
+      "model": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "eval_settings": {},
+    "completion": {
+      "selected": [
+        "know-01",
+        "know-02",
+        "know-03"
+      ],
+      "scored": [
+        "know-01",
+        "know-02",
+        "know-03"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 18.48
+}
