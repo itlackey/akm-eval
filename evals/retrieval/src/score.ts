@@ -6,7 +6,7 @@
 // A fix here applies to stored runs too: scripts/rescore scores them again from their raw outputs.
 
 import { type Retrieval, mean, retrievalMetrics } from "../../../lib/ir.ts";
-import { LEAK_KIND, isGuarded, isSelected, isUnknownFlag, leaked, reaches, takesSearchArgs, unsupportedColumns } from "./guard.ts";
+import { LEAK_KIND, hasEmptyValue, isGuarded, isSelected, isUnknownFlag, leaked, reaches, takesSearchArgs, unsupportedColumns } from "./guard.ts";
 
 export const NON_TASK_KINDS = ["chitchat", "notification", "log", "status", "nontask", LEAK_KIND];
 
@@ -49,13 +49,14 @@ export interface Case {
 export type Selection = Record<string, string | string[]>;
 /** Ref to the selection keys the asset carries, key to value. */
 export type Metadata = Record<string, Record<string, string>>;
-/** An asset against a selection. `full`: every selected key matches (a key with several values matches any of them). `partial`: some do. `conflict`: none does, and a selected key has another value. `missing`: no selected key is there. */
+/** An asset against a selection. `full`: every selected key matches (a key with several values matches any of them; the value "" matches an asset without the key). `partial`: some do. `conflict`: none does, and a selected key has another value. `missing`: no selected key is there. */
 export type Match = "full" | "partial" | "conflict" | "missing";
 
 export function matchOf(selection: Selection, keys: Record<string, string> | undefined): Match {
   const states = Object.entries(selection).map(([key, want]) => {
     const have = keys?.[key];
-    return have === undefined ? "missing" : [want].flat().includes(have) ? "match" : "conflict";
+    const wanted = [want].flat();
+    return have === undefined ? (wanted.includes("") ? "match" : "missing") : wanted.includes(have) ? "match" : "conflict";
   });
   const matched = states.filter((x) => x === "match").length;
   if (matched === states.length) return "full";
@@ -63,8 +64,8 @@ export function matchOf(selection: Selection, keys: Record<string, string> | und
   return states.includes("conflict") ? "conflict" : "missing";
 }
 
-/** Whether some asset of the set fully matches the selection. One that matches none (`@absent`, `no-match`) is a check that the list stays as it was (`unchanged`), not a preference to measure. */
-export const selectsAny = (c: Pick<Case, "selection" | "metadata">): boolean => c.selection !== undefined && Object.values(c.metadata ?? {}).some((keys) => matchOf(c.selection as Selection, keys) === "full");
+/** Whether some asset of the set fully matches the selection. A selection with an empty value is not scored here: its list differs from the control's on purpose (`empty_value`). One that matches none (`@absent`, `no-match`) is a check that the list stays as it was (`unchanged`), not a preference to measure. */
+export const selectsAny = (c: Pick<Case, "selection" | "metadata">): boolean => c.selection !== undefined && !hasEmptyValue(c.selection) && Object.values(c.metadata ?? {}).some((keys) => matchOf(c.selection as Selection, keys) === "full");
 
 /** Which kind of query this is for the selection, from the qrels: `team` when most of its relevant assets match, `general` when none does, `mixed` otherwise. null for a selection that matches no asset (selectsAny). */
 export type Intent = "team" | "general" | "mixed";
@@ -321,6 +322,8 @@ export type Row = {
   /** The selection of the query, when it has one, and the id of the row whose list this one's must equal. */
   selection?: Selection;
   same_as?: string;
+  /** Only for a selection with an empty value, on a filter arm: the assets of the set that another value of a selected key excludes (`conflict`). The `empty_value` check removes them from the partner's list. */
+  excluded?: string[];
   /** What the qrels say the query wants: see intentOf. */
   intent?: Intent;
   /** How many assets have grade 2 or 3 for this query. Zero for a non-task input. */
@@ -330,7 +333,7 @@ export type Row = {
 /** The row of a query: each column's results with the grade of each, and, for a task query with a relevant asset, the scores of a call that did not fail. */
 export function makeRow(c: Case, raw: Raw): Row {
   const nRelevant = Object.values(c.grades).filter((g) => g >= RELEVANT).length;
-  const row: Record<string, unknown> = { id: c.id, kind: c.kind, query: c.query, n_relevant: nRelevant, ...(c.searchArgs ? { searchArgs: c.searchArgs } : {}), ...(c.sentinels?.length ? { sentinels: c.sentinels } : {}), ...(c.selection ? { selection: c.selection } : {}), ...(c.sameAs ? { same_as: c.sameAs } : {}), ...(intentOf(c) ? { intent: intentOf(c) } : {}) };
+  const row: Record<string, unknown> = { id: c.id, kind: c.kind, query: c.query, n_relevant: nRelevant, ...(c.searchArgs ? { searchArgs: c.searchArgs } : {}), ...(c.sentinels?.length ? { sentinels: c.sentinels } : {}), ...(c.selection ? { selection: c.selection } : {}), ...(c.sameAs ? { same_as: c.sameAs } : {}), ...(hasEmptyValue(c.selection) ? { excluded: Object.keys(c.metadata ?? {}).filter((r) => matchOf(c.selection as Selection, c.metadata?.[r]) === "conflict").sort() } : {}), ...(intentOf(c) ? { intent: intentOf(c) } : {}) };
   const selected = isSelected(c);
   for (const sys of SYSTEMS) {
     const a = raw[sys];
@@ -440,6 +443,7 @@ export function summarizeRows(rows: Row[]) {
           by_intent: Object.fromEntries([...new Set(scored.flatMap((r) => (r.intent ? [r.intent] : [])))].sort().map((intent) => [intent, metricsOf(scored.filter((r) => r.intent === intent))])),
           checks: {
             unchanged: columns((s) => unchanged(counted(rows, s), s)),
+            empty_value: columns((s) => emptyValue(counted(rows, s), s)),
             leaked: columns((s) => leaked(ok(rows, s), s)),
           },
         }
@@ -469,8 +473,20 @@ function callStats(rows: Row[], sys: System): CallStats {
 /** The share of the queries with a partner (`same_as`) whose list equals the partner's list in this column. null when no query has a partner among the rows. */
 function unchanged(counted: Row[], sys: System): number | null {
   const by = new Map(counted.map((r) => [r.id, r]));
-  const pairs = counted.flatMap((r) => (r.same_as !== undefined && by.has(r.same_as) ? [[r, by.get(r.same_as) as Row] as const] : []));
+  const pairs = counted.flatMap((r) => (r.same_as !== undefined && !hasEmptyValue(r.selection) && by.has(r.same_as) ? [[r, by.get(r.same_as) as Row] as const] : []));
   return mean(pairs.map(([a, b]) => (JSON.stringify(at(a, sys).refs.slice(0, DEPTH)) === JSON.stringify(at(b, sys).refs.slice(0, DEPTH)) ? 1 : 0)));
+}
+
+/**
+ * The share of the queries with an empty selection value (`team` = ops or none) and a partner without a selection (`same_as`) whose list is the
+ * partner's with the assets of other values of the key removed: general answers kept, other teams' notes dropped, nothing else added or lost. Exact while the
+ * partner's list is shorter than the page, as the selection set's are, so null in a semantic column (it always returns a full page, and a filtered one fills up with other assets). null when no query has such a partner among the rows.
+ */
+function emptyValue(counted: Row[], sys: System): number | null {
+  if (sys.startsWith("semantic_")) return null;
+  const by = new Map(counted.map((r) => [r.id, r]));
+  const pairs = counted.flatMap((r) => (r.excluded !== undefined && r.same_as !== undefined && by.has(r.same_as) ? [[r, by.get(r.same_as) as Row] as const] : []));
+  return mean(pairs.map(([a, b]) => (JSON.stringify(at(a, sys).refs.slice(0, DEPTH)) === JSON.stringify(at(b, sys).refs.slice(0, DEPTH).filter((ref) => !(a.excluded as string[]).includes(ref))) ? 1 : 0)));
 }
 
 /** The sentence for a build that does not apply the filters of the filter queries. */

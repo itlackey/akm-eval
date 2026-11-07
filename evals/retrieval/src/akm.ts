@@ -165,21 +165,23 @@ export const CALL_TIMEOUT_MS = 120_000;
  * search, `fts-fallback`, and that is not the semantic result. A semantic call has to say `searchMode: "semantic"`: an
  * answer with results that does not say how it searched could be keyword rankings, and is an error as well. One with no
  * results and no searchMode searched nothing (curate's abstention), and is taken as empty. A keyword call that does not
- * say is taken as it comes. `selection` is argv for both commands (selectionArgs); `searchArgs` is for search only.
+ * say is taken as it comes. `selection` is argv for both commands (selectionArgs); `searchArgs` is for search only. `cwd` is a project's folder
+ * (the project arm): the answer has to carry `project`, else the build ignored the `projects` config key, and that is an error.
  */
-export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = LIMIT, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS, searchArgs: readonly string[] = [], selection: readonly string[] = []): Promise<Answer> {
-  const { stdout, stderr, code, ms, timedOut } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", ...selection, ...(system === "search" ? searchArgs : []), "--", query], { timeoutMs }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0, timedOut: false }));
+export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = LIMIT, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS, searchArgs: readonly string[] = [], selection: readonly string[] = [], cwd?: string): Promise<Answer> {
+  const { stdout, stderr, code, ms, timedOut } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", ...selection, ...(system === "search" ? searchArgs : []), "--", query], { timeoutMs, cwd }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0, timedOut: false }));
   const seconds = () => Number((ms / 1000).toFixed(2));
   const failed = (error: string, extra: { timedOut?: true } = {}): Answer => ({ refs: [], assets: [], mode: null, seconds: seconds(), error, ...extra });
   if (timedOut) return failed(`akm ${system} timed out after ${+(timeoutMs / 1000).toFixed(1)}s`, { timedOut: true });
   if (code !== 0) return failed(`akm ${system} exited ${code}: ${(stderr.trim() || stdout.trim()).slice(-300)}`);
   type Hit = { ref?: unknown; type?: unknown; name?: unknown; description?: unknown; path?: unknown; estimatedTokens?: unknown };
-  let out: { hits?: Hit[]; items?: Hit[]; searchMode?: unknown; warnings?: unknown };
+  let out: { hits?: Hit[]; items?: Hit[]; searchMode?: unknown; warnings?: unknown; project?: unknown };
   try {
     out = JSON.parse(stdout);
   } catch {
     return failed(`akm ${system} printed no JSON: ${stdout.slice(0, 200)}`);
   }
+  if (cwd !== undefined && (typeof out.project !== "object" || out.project === null)) return failed(`akm ${system} did not apply the project: its answer has no "project"`);
   const said = typeof out.searchMode === "string" ? out.searchMode : null;
   const results = (system === "search" ? out.hits : out.items) ?? [];
   // No searchMode and no results is an answer that searched nothing: curate abstains on purpose when the input is not a task, such as a tool envelope.
