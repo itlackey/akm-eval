@@ -13,7 +13,6 @@ import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import {
   AKM_ARM_OPTIONS,
-  CONCURRENT_TRIALS,
   type AkmArm,
   type Cells,
   akmArm,
@@ -21,7 +20,6 @@ import {
   akmSummary,
   assetsSha256,
   completionOf,
-  dockerNetworkWarning,
   jobRecord,
   parseAkm,
   parseAkmEnv,
@@ -181,8 +179,6 @@ async function main(): Promise<void> {
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   await announceCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
-  const wide = dockerNetworkWarning(NAME, concurrency ?? CONCURRENT_TRIALS);
-  if (wide) console.warn(wide);
 
   const packs = mkdtempSync(join(tmpdir(), "akm-eval-akm-pack-"));
   try {

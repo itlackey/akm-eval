@@ -1036,25 +1036,13 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(done.err + done.out + seen).not.toContain("sk-real-openai-key");
   }, 60_000);
 
-  test("warns once on stderr above eight concurrent trials that each needs a Docker network, by the width a resumed run started with, and says nothing at eight or by default", () => {
-    const { run, summary, folder } = repo();
-    const said = (n: number) => `terminal-bench: ${n} concurrent trials each need a Docker network; the daemon's default address pools allow about 30 in all. Raise default-address-pools in /etc/docker/daemon.json for more (see evals/agent-ab/README.md).`;
-    const lines = (done: { err: string }) => done.err.split("\n").filter((line) => line.includes("Docker network"));
-    const wide = run(["--limit", "2", "--concurrency", "16", "--label", "wide"], { UV_FAKE_MISSING: "1" }); // stops one trial short
-    expect(wide.code).toBe(1);
-    expect(lines(wide)).toEqual([said(16)]);
-    expect(wide.out).not.toContain("Docker network");
-    expect(summary("wide").job.n_concurrent_trials).toBe(16);
-    // The resumed run keeps the 16 it started with, so it says the same without being told.
-    const resumed = run(["--resume", folder("wide")]);
-    expect(resumed.code, resumed.err).toBe(0);
-    expect(lines(resumed)).toEqual([said(16)]);
-    expect(summary("wide")).toMatchObject({ status: "complete", resumed: true, job: { n_concurrent_trials: 16 } });
-    for (const [label, args] of [["eight", ["--concurrency", "8"]], ["default", []]] as [string, string[]][]) {
-      const done = run(["--limit", "1", ...args, "--label", label]);
-      expect(done.code, done.err).toBe(0);
-      expect(done.err + done.out, label).not.toContain("Docker network");
-    }
+  test("refuses a width above the free subnets of Docker's address pools, since each trial has a network of its own", () => {
+    const { run } = repo();
+    const wide = run(["--limit", "2", "--concurrency", "1000", "--label", "wide"]);
+    expect(wide.code).not.toBe(0);
+    expect(wide.err).toContain("1000 concurrent trials each need a Docker network");
+    const done = run(["--limit", "1", "--label", "default"]);
+    expect(done.code, done.err).toBe(0);
   }, 120_000);
 
   test("a run on a custom corpus records its folder from the repository root and rescore reads the library there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {

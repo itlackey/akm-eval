@@ -19,7 +19,6 @@ import {
   buildFingerprint,
   checkoutBuild,
   completionOf,
-  dockerNetworkWarning,
   findPlugin,
   hostEnv,
   jobConfig,
@@ -1082,11 +1081,4 @@ test("forwards explicitly selected model reasoning effort to both Harbor arms", 
   expect(settings.modelReasoningEffort).toBe("none");
   const cfg = jobConfig({ name: "no-thinking", model: settings.model, modelReasoningEffort: settings.modelReasoningEffort, jobsDir: "/jobs", attempts: 1, librariesDir: "/libraries", datasets: [] }) as any;
   for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["shredder-eval/qwen"].options).toEqual({ reasoningEffort: "none" });
-});
-
-
-test("a run of more than eight simultaneous trials is warned that each needs a Docker network, and one of eight or fewer is not", () => {
-  for (const n of [1, 4, 8]) expect(dockerNetworkWarning("agent-ab", n), String(n)).toBeUndefined();
-  expect(dockerNetworkWarning("agent-ab", 9)).toBe("agent-ab: 9 concurrent trials each need a Docker network; the daemon's default address pools allow about 30 in all. Raise default-address-pools in /etc/docker/daemon.json for more (see evals/agent-ab/README.md).");
-  expect(dockerNetworkWarning("terminal-bench", 16)).toStartWith("terminal-bench: 16 concurrent trials each need a Docker network;");
 });

@@ -60,7 +60,7 @@ uv run --no-project --python 3.12 --with "harbor==$(bun lib/harbor/pin.ts harbor
 
 The write path (a bare entry stamps `project: <name>` on `akm remember`) is left out on purpose: it does not depend on the model, and akm's own tests cover it.
 
-The first 28 tasks are the first run's (reports/0.10.261111-beta), byte for byte, and later task sets only append, so its trials can be pooled with a later run's of the same arms. The library grew since, though (28 memories and a shorter skill then), so those 28 tasks now ask their questions among more notes.
+The first 28 tasks are the first run's (reports/0.10.261111-beta), byte for byte (since 0.3 their images also install `curl`, so Harbor skips its own per-trial install), and later task sets only append, so its trials can be pooled with a later run's of the same arms. The library grew since, though (28 memories and a shorter skill then), so those 28 tasks now ask their questions among more notes.
 
 ## Metrics
 
