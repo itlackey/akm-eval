@@ -1,0 +1,1431 @@
+{
+  "eval": "project-intent",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "0.10.261111-beta-project-intent",
+  "date": "2026-11-07T15:19:12.315Z",
+  "git_commit": "996a657",
+  "model": "openai/fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261111-beta",
+  "akm_bin": "akm-cli@0.10.261111-beta",
+  "akm_build": null,
+  "akm_build_fingerprint": "16e104a984159223775193b774da4b99308bdaf7db540f647e807f259a3be671",
+  "akm_env": {
+    "AKM_EVAL_SEMANTIC_SEARCH": "1"
+  },
+  "akm_install": {
+    "from": "release",
+    "plugin_from": "release",
+    "plugin_version": "0.10.261110-beta",
+    "packages": [],
+    "dependency_tree_sha256": "2e8795640c735c44eb908d3b0270119ed42b5f7b2e955e518a4de3325008b083",
+    "locked": false,
+    "observed": {
+      "akm_version": [
+        "0.10.261111-beta"
+      ],
+      "plugin_akm_cli": [
+        "0.10.261111-beta"
+      ],
+      "assets_indexed": [
+        29
+      ],
+      "env": {
+        "AKM_BUNDLE_DIR": "/opt/akm/bundle",
+        "AKM_CONFIG_DIR": "/opt/akm/config",
+        "AKM_DATA_DIR": "/opt/akm/data",
+        "AKM_CACHE_DIR": "/opt/akm/cache",
+        "AKM_STATE_DIR": "/opt/akm/state",
+        "AKM_OPENCODE_CLI": "/usr/local/bin/akm",
+        "AKM_AUTO_FEEDBACK": "0",
+        "AKM_AUTO_LEARNING": "0",
+        "AKM_AUTO_MEMORY": "0",
+        "AKM_INDEX_ON_SESSION_END": "0",
+        "AKM_CURATE_TIMEOUT": "15",
+        "AKM_PENDING_PROPOSAL_TIMEOUT": "5",
+        "AKM_EVAL_SEMANTIC_SEARCH": "1"
+      },
+      "dependency_trees": [
+        "2e8795640c735c44eb908d3b0270119ed42b5f7b2e955e518a4de3325008b083"
+      ],
+      "lockfiles": {
+        "akm_cli": null,
+        "plugin": "1a54eb0dbd1fc7732c7afaec7bbcbdba8da822568520856d7b2090b42174b7cd"
+      },
+      "search_mode": [
+        "semantic"
+      ],
+      "embeddings_indexed": [
+        41
+      ]
+    }
+  },
+  "pins": {
+    "akm_cli": "0.10.261111-beta",
+    "akm_plugin": "0.10.261110-beta",
+    "opencode": "1.18.34",
+    "harbor": "0.24.0"
+  },
+  "limit": null,
+  "n_tasks": 28,
+  "attempts": 4,
+  "arms": {
+    "none": null,
+    "bare": {
+      "orchid": {
+        "paths": [
+          "/work/orchid"
+        ]
+      },
+      "quill": {
+        "paths": [
+          "/work/quill"
+        ]
+      }
+    },
+    "explicit": {
+      "orchid": {
+        "paths": [
+          "/work/orchid"
+        ],
+        "filters": {
+          "project": [
+            "orchid",
+            ""
+          ]
+        }
+      },
+      "quill": {
+        "paths": [
+          "/work/quill"
+        ],
+        "filters": {
+          "project": [
+            "quill",
+            ""
+          ]
+        }
+      }
+    }
+  },
+  "harbor_exit": 0,
+  "status": "complete",
+  "aborted_reason": null,
+  "completion": {
+    "none": {
+      "expected": 112,
+      "completed": 102,
+      "failed": 10,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "bare": {
+      "expected": 112,
+      "completed": 101,
+      "failed": 11,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "explicit": {
+      "expected": 112,
+      "completed": 98,
+      "failed": 14,
+      "missing": 0,
+      "unexpected": 0
+    }
+  },
+  "libraries_sha256": "db01f6ae54fce1674889b69ae8cdc63f616b6d04e4f960ded872c57a3f0cade8",
+  "tasks_sha256": {
+    "alerts--orchid": "1c19ad005e0552b041d2567058433b260a5b425e034e4dc3139dc472678df1cf",
+    "alerts--quill": "fddeca5276ee8708bc2e12a0f2053a53ccd691f304f2e7189b8b4a98cd04c326",
+    "backup--orchid": "44dcc92f5237d561c1981ac1a764258740efe7ba5f821fdbe999a77e86e850f9",
+    "backup--quill": "e4e33f62f1b515a56185dc08a6d38d52917cb78cd3b6ee594fb3aa8af26c2a20",
+    "config--orchid": "b3ae54e50dbe0f5f0083744a4e2aaa9134a30cb2d6e2b8ea25c729d37d4b5dcf",
+    "drain--orchid": "b8ea27b3d721c09adb9f6654e38a63c57f07d789d3083e55d2bd51ed57e10af0",
+    "drain--quill": "e47897e1235fae9146ef3f98d27ceed7f04d26d21f35965acc17b7c04c103529",
+    "exitcode--quill": "68c331d5f2b83752c020eb6a6527459a248ec028c79fae312ddfb544b58cccc0",
+    "lockfile--quill": "90398d9d9d5ddd355092181dd0322af14e2901bd2a459fed68eb428f7fda56e5",
+    "mirror--orchid": "4b69cfb8a19fcd44309fcee5bd04b5108c84e7245df915243ac0a3e028b2a4b8",
+    "mirror--quill": "952e254396a035062727a855f1a8429ae90082ce58516263c51f92391fa8ed23",
+    "pool--orchid": "9b522448aab892d824ba976dcc2793976c768ef7c1be0ecef8eb4bc71cbf2772",
+    "pool--quill": "024bb39a4e9565200b35bd57f0711875e1fb196fcabfe167e8218e7bd3e020a3",
+    "port--orchid": "139d3245a110952a80936406dd9c32a37d8a1628d4eff38aa8cd3bc23421cbc0",
+    "port--quill": "38c680058f3e1fe816e08d5e21a83e484cd7bfbb38ec70b14225bb02bbf77ce0",
+    "region--orchid": "f6ab0b546688fbbada94995af8e62a7e92403ef631c2eadd08836bc2e2b1d39c",
+    "region--quill": "ffea52bcfcdb93ec6a42c1572ec20cc883752642fc5a56bfb2a5ba1b80f5e8d0",
+    "replicas--orchid": "a2e42347408788e9a82ae0895597450890127d4b3cd8ee0e663f3a40f4ce88cf",
+    "replicas--quill": "3a1476b127018edfaac3cee17b318076e32ac721599f6a1b40df93c25837ea2e",
+    "retention--orchid": "99fd5c907c3aba0641d7e73b28192fb9a17cc59cf30a1d68652db038cd6f7699",
+    "retention--quill": "8f8d4cf5994dd8d4711cd585284765a14e09494400449f27513d990a2a2f93b7",
+    "rewind--orchid": "1be9761f16439ba9005f0c3d6760d16e8c047a338948fa3915c47382cb2f634b",
+    "schedule--orchid": "8a32b924eb07d7d1d20fa4b09a62cd5751c353cf72d8e098e6d46fdd897abeab",
+    "schedule--quill": "d181950e869d507badc35b22e78499192d1ab42fa89be9866d8619487f409127",
+    "tags--orchid": "4f57b6e900261a4870e247a6a626c46267e7acdd64dcbfc7d6d8ea147221eda6",
+    "tags--quill": "4eb98237bd095cb70a86efd00aa20b4baa062332620a1d87e0345ffab5efc708",
+    "vault--orchid": "ee7c900317f75daf1b31fbede861a9ae3e7ab93e82e9613867b203af8b906179",
+    "vault--quill": "25cc623feb56dd7ba3855597266601a3093f0683e6fe24465ffab29cb3d051b4"
+  },
+  "arms_sha256": "5e6a9435b1e4949c537a785cda4b43c631648a2b547c9bc7cd9d81323f849707",
+  "assets_sha256": "a5a15e0323a40832051140f65883603db8ea57cbb58ee009e2e47b328e91e635",
+  "engine": {
+    "model": "openai/fast/qwen3.6-35b-a3b",
+    "endpoint": "<MODEL_BASE_URL>"
+  },
+  "config": {
+    "n_attempts": 4,
+    "n_concurrent_trials": 4,
+    "environment": {
+      "type": "docker",
+      "delete": true
+    },
+    "agents": [
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          },
+          "arm": "none"
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          },
+          "arm": "bare",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ]
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          },
+          "arm": "explicit",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ],
+              "filters": {
+                "project": [
+                  "orchid",
+                  ""
+                ]
+              }
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ],
+              "filters": {
+                "project": [
+                  "quill",
+                  ""
+                ]
+              }
+            }
+          }
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "alerts--orchid",
+          "alerts--quill",
+          "backup--orchid",
+          "backup--quill",
+          "config--orchid",
+          "drain--orchid",
+          "drain--quill",
+          "exitcode--quill",
+          "lockfile--quill",
+          "mirror--orchid",
+          "mirror--quill",
+          "pool--orchid",
+          "pool--quill",
+          "port--orchid",
+          "port--quill",
+          "region--orchid",
+          "region--quill",
+          "replicas--orchid",
+          "replicas--quill",
+          "retention--orchid",
+          "retention--quill",
+          "rewind--orchid",
+          "schedule--orchid",
+          "schedule--quill",
+          "tags--orchid",
+          "tags--quill",
+          "vault--orchid",
+          "vault--quill"
+        ]
+      }
+    ]
+  },
+  "n_errored": 0,
+  "metrics": {
+    "arms": {
+      "none": {
+        "pass_rate": 0.616,
+        "conflict_pass_rate": 0.625,
+        "general_pass_rate": 0.563,
+        "passed": 69,
+        "scored": 112,
+        "errored": 0,
+        "other_project_rate": 0.094,
+        "akm_called_rate": 0.634,
+        "tokens_per_trial": 116429,
+        "tokens_per_correct": 188986
+      },
+      "bare": {
+        "pass_rate": 0.714,
+        "conflict_pass_rate": 0.719,
+        "general_pass_rate": 0.688,
+        "passed": 80,
+        "scored": 112,
+        "errored": 0,
+        "other_project_rate": 0.01,
+        "akm_called_rate": 0.661,
+        "tokens_per_trial": 112699,
+        "tokens_per_correct": 157779
+      },
+      "explicit": {
+        "pass_rate": 0.696,
+        "conflict_pass_rate": 0.677,
+        "general_pass_rate": 0.813,
+        "passed": 78,
+        "scored": 112,
+        "errored": 0,
+        "other_project_rate": 0,
+        "akm_called_rate": 0.679,
+        "tokens_per_trial": 125401,
+        "tokens_per_correct": 180063
+      }
+    },
+    "comparisons": {
+      "bare-none": {
+        "value": 0.098,
+        "lo": -0.054,
+        "hi": 0.25,
+        "n": 28,
+        "sign_p": 0.0963
+      },
+      "explicit-none": {
+        "value": 0.08,
+        "lo": -0.071,
+        "hi": 0.223,
+        "n": 28,
+        "sign_p": 0.238
+      },
+      "explicit-bare": {
+        "value": -0.018,
+        "lo": -0.161,
+        "hi": 0.125,
+        "n": 28,
+        "sign_p": 1
+      }
+    }
+  },
+  "job": {
+    "n_attempts": 4,
+    "n_concurrent_trials": 4,
+    "environment": {
+      "type": "docker",
+      "delete": true
+    },
+    "agents": [
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          },
+          "arm": "none"
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          },
+          "arm": "bare",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ]
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/fast/qwen3.6-35b-a3b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/fast/qwen3.6-35b-a3b",
+            "provider": {
+              "openai": {
+                "models": {
+                  "fast/qwen3.6-35b-a3b": {
+                    "limit": {
+                      "context": 32768,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "akm_plugin_version": "0.10.261110-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          },
+          "arm": "explicit",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ],
+              "filters": {
+                "project": [
+                  "orchid",
+                  ""
+                ]
+              }
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ],
+              "filters": {
+                "project": [
+                  "quill",
+                  ""
+                ]
+              }
+            }
+          }
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "alerts--orchid",
+          "alerts--quill",
+          "backup--orchid",
+          "backup--quill",
+          "config--orchid",
+          "drain--orchid",
+          "drain--quill",
+          "exitcode--quill",
+          "lockfile--quill",
+          "mirror--orchid",
+          "mirror--quill",
+          "pool--orchid",
+          "pool--quill",
+          "port--orchid",
+          "port--quill",
+          "region--orchid",
+          "region--quill",
+          "replicas--orchid",
+          "replicas--quill",
+          "retention--orchid",
+          "retention--quill",
+          "rewind--orchid",
+          "schedule--orchid",
+          "schedule--quill",
+          "tags--orchid",
+          "tags--quill",
+          "vault--orchid",
+          "vault--quill"
+        ]
+      }
+    ]
+  },
+  "report": {
+    "arms": [
+      "none",
+      "bare",
+      "explicit"
+    ],
+    "by_arm": {
+      "none": {
+        "trials": 112,
+        "scored": 112,
+        "passed": 69,
+        "errored": 0,
+        "timeouts": 5,
+        "agent_exits": 5,
+        "pass_rate": {
+          "value": 0.616,
+          "lo": 0.536,
+          "hi": 0.696,
+          "n": 28
+        },
+        "conflict_pass_rate": {
+          "value": 0.625,
+          "lo": 0.542,
+          "hi": 0.708,
+          "n": 24
+        },
+        "general_pass_rate": {
+          "value": 0.563,
+          "lo": 0.313,
+          "hi": 0.875,
+          "n": 4
+        },
+        "other_project": {
+          "trials": 96,
+          "count": 9,
+          "rate": 0.094
+        },
+        "akm_called": {
+          "trials": 112,
+          "called": 71,
+          "rate": 0.634
+        },
+        "curated_read": 12,
+        "tokens": {
+          "trials": 112,
+          "input": 12970023,
+          "cache": 5826926,
+          "output": 70028,
+          "per_trial": 116429,
+          "per_correct": 188986
+        }
+      },
+      "bare": {
+        "trials": 112,
+        "scored": 112,
+        "passed": 80,
+        "errored": 0,
+        "timeouts": 2,
+        "agent_exits": 8,
+        "pass_rate": {
+          "value": 0.714,
+          "lo": 0.634,
+          "hi": 0.795,
+          "n": 28
+        },
+        "conflict_pass_rate": {
+          "value": 0.719,
+          "lo": 0.635,
+          "hi": 0.802,
+          "n": 24
+        },
+        "general_pass_rate": {
+          "value": 0.688,
+          "lo": 0.5,
+          "hi": 0.875,
+          "n": 4
+        },
+        "other_project": {
+          "trials": 96,
+          "count": 1,
+          "rate": 0.01
+        },
+        "akm_called": {
+          "trials": 112,
+          "called": 74,
+          "rate": 0.661
+        },
+        "curated_read": 9,
+        "tokens": {
+          "trials": 112,
+          "input": 12551719,
+          "cache": 5898607,
+          "output": 70612,
+          "per_trial": 112699,
+          "per_correct": 157779
+        }
+      },
+      "explicit": {
+        "trials": 112,
+        "scored": 112,
+        "passed": 78,
+        "errored": 0,
+        "timeouts": 6,
+        "agent_exits": 8,
+        "pass_rate": {
+          "value": 0.696,
+          "lo": 0.616,
+          "hi": 0.777,
+          "n": 28
+        },
+        "conflict_pass_rate": {
+          "value": 0.677,
+          "lo": 0.583,
+          "hi": 0.76,
+          "n": 24
+        },
+        "general_pass_rate": {
+          "value": 0.813,
+          "lo": 0.75,
+          "hi": 0.938,
+          "n": 4
+        },
+        "other_project": {
+          "trials": 96,
+          "count": 0,
+          "rate": 0
+        },
+        "akm_called": {
+          "trials": 112,
+          "called": 76,
+          "rate": 0.679
+        },
+        "curated_read": 12,
+        "tokens": {
+          "trials": 112,
+          "input": 13968440,
+          "cache": 6897922,
+          "output": 76501,
+          "per_trial": 125401,
+          "per_correct": 180063
+        }
+      }
+    },
+    "comparisons": [
+      {
+        "a": "bare",
+        "b": "none",
+        "delta": {
+          "value": 0.098,
+          "lo": -0.054,
+          "hi": 0.25,
+          "n": 28,
+          "ci": [
+            -0.054,
+            0.25
+          ],
+          "resampled": "tasks and attempts"
+        },
+        "better": {
+          "a": 13,
+          "b": 5,
+          "same": 10
+        },
+        "sign_test": {
+          "n": 18,
+          "p": 0.0963
+        }
+      },
+      {
+        "a": "explicit",
+        "b": "none",
+        "delta": {
+          "value": 0.08,
+          "lo": -0.071,
+          "hi": 0.223,
+          "n": 28,
+          "ci": [
+            -0.071,
+            0.223
+          ],
+          "resampled": "tasks and attempts"
+        },
+        "better": {
+          "a": 12,
+          "b": 6,
+          "same": 10
+        },
+        "sign_test": {
+          "n": 18,
+          "p": 0.238
+        }
+      },
+      {
+        "a": "explicit",
+        "b": "bare",
+        "delta": {
+          "value": -0.018,
+          "lo": -0.161,
+          "hi": 0.125,
+          "n": 28,
+          "ci": [
+            -0.161,
+            0.125
+          ],
+          "resampled": "tasks and attempts"
+        },
+        "better": {
+          "a": 8,
+          "b": 9,
+          "same": 11
+        },
+        "sign_test": {
+          "n": 17,
+          "p": 1
+        }
+      }
+    ],
+    "tasks": [
+      {
+        "task": "alerts--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "4/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "alerts--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "1/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "backup--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "2/4",
+          "bare": "2/4",
+          "explicit": "2/4"
+        }
+      },
+      {
+        "task": "backup--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "2/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "config--orchid",
+        "kind": "general",
+        "cells": {
+          "none": "2/4",
+          "bare": "2/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "drain--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "3/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "drain--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "1/4",
+          "bare": "4/4",
+          "explicit": "2/4"
+        }
+      },
+      {
+        "task": "exitcode--quill",
+        "kind": "general",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "lockfile--quill",
+        "kind": "general",
+        "cells": {
+          "none": "1/4",
+          "bare": "2/4",
+          "explicit": "4/4"
+        }
+      },
+      {
+        "task": "mirror--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "4/4",
+          "explicit": "2/4"
+        }
+      },
+      {
+        "task": "mirror--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "4/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "pool--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "3/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "pool--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "3/4",
+          "explicit": "4/4"
+        }
+      },
+      {
+        "task": "port--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "2/4",
+          "bare": "3/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "port--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "2/4",
+          "bare": "3/4",
+          "explicit": "4/4"
+        }
+      },
+      {
+        "task": "region--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "2/4",
+          "bare": "3/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "region--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "3/4",
+          "explicit": "4/4"
+        }
+      },
+      {
+        "task": "replicas--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "4/4",
+          "bare": "4/4",
+          "explicit": "4/4"
+        }
+      },
+      {
+        "task": "replicas--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "1/4",
+          "bare": "2/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "retention--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "3/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "retention--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "2/4",
+          "bare": "2/4",
+          "explicit": "1/4"
+        }
+      },
+      {
+        "task": "rewind--orchid",
+        "kind": "general",
+        "cells": {
+          "none": "2/4",
+          "bare": "3/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "schedule--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "2/4",
+          "bare": "3/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "schedule--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "2/4",
+          "bare": "3/4",
+          "explicit": "3/4"
+        }
+      },
+      {
+        "task": "tags--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "2/4",
+          "bare": "2/4",
+          "explicit": "1/4"
+        }
+      },
+      {
+        "task": "tags--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "2/4",
+          "explicit": "2/4"
+        }
+      },
+      {
+        "task": "vault--orchid",
+        "kind": "conflict",
+        "cells": {
+          "none": "3/4",
+          "bare": "2/4",
+          "explicit": "1/4"
+        }
+      },
+      {
+        "task": "vault--quill",
+        "kind": "conflict",
+        "cells": {
+          "none": "1/4",
+          "bare": "4/4",
+          "explicit": "2/4"
+        }
+      }
+    ]
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "project-intent",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.1"
+    },
+    "scorer": {
+      "version": "0.1"
+    },
+    "cases": {
+      "alerts--orchid": {
+        "input_sha256": "c6cd40b4f9d5435921338a08d37cf75640b6abc3e48d03607d0925f41ab79956",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "alerts--quill": {
+        "input_sha256": "e0bf4d9ad83e510097a62cdad1240561c250d281488d72eb7f0a6eba95a836ab",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "backup--orchid": {
+        "input_sha256": "ccaf77a58caebe94a850ac2acaaa8605089a9ab1eff01c580aeba8153b7697c6",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "backup--quill": {
+        "input_sha256": "ae576ae4b3a821de61241429ca8f8b5438f09740a8d1440d8df667d73101e454",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "config--orchid": {
+        "input_sha256": "f688cb53e2e1099e7d74f76740c5e7792e0e2bfba228b23fa0a120a6cd32afb8",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "drain--orchid": {
+        "input_sha256": "9413cce646a64c6f25aa7066cf1711e323a5390fb6a2ddc2c77cefbccea39664",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "drain--quill": {
+        "input_sha256": "0dbce6291905c70f84ef02e24dc166d257427a94b015aa246e7c825c077c0f7a",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "exitcode--quill": {
+        "input_sha256": "c3ddc5c15834c35577603b15a7db79e4a7eecb5cae22f4cd842f6cd1df1cc7ff",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "lockfile--quill": {
+        "input_sha256": "48bbb38cf8d592135346ba914f71c09dee4b61087f8ff248e163adb64c1bd4e3",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "mirror--orchid": {
+        "input_sha256": "6a62a8f6eff26acbb80ccbd9ed50f3cb2e3bb2414c650c8c6666050ac42574b3",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "mirror--quill": {
+        "input_sha256": "3d5ba57472a574fe529030b425a93895edb5898b1f8452ae925102f181eb3527",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "pool--orchid": {
+        "input_sha256": "92abea29042aef64853264e4c78f45fe8fe19335c2e540caf8f834f992a30d4c",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "pool--quill": {
+        "input_sha256": "73b21c4b8f33366bdc5204ed34e55c7ea25e1a45dbbecaec2b42986408830fb5",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "port--orchid": {
+        "input_sha256": "8869f5d35e3a8ca267b296e0a0537c4f27dfde3355b0e48896e1b502a7410ba0",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "port--quill": {
+        "input_sha256": "88544e59cf630aa087b8257b7b4caabde368190f139c43eb344dcdf2a4f85750",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "region--orchid": {
+        "input_sha256": "9de9fa19440c430e8e4c579eaf53ef5e2fabcb6fc5a3c81290e33f8e7ae159d7",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "region--quill": {
+        "input_sha256": "d66fa787fa0ed30e9afcffdc02e449334d3789e333f8b2b5d76ecf84461a8c48",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "replicas--orchid": {
+        "input_sha256": "6f180864de2c1051144bf60aa5f944a49659f664f6868e04d5b35f555c170335",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "replicas--quill": {
+        "input_sha256": "baba7927af286711ea4bd443d6f44a164135859100b2e362998864ac0af4cb34",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "retention--orchid": {
+        "input_sha256": "2afe9dbb23494ac89660bd330570c7caa7dcd066368b81e648ea107493498966",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "retention--quill": {
+        "input_sha256": "049ae93ccae970d9feeed5fc9614772acdd02a0344d14fb6090ba4b1748236d1",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "rewind--orchid": {
+        "input_sha256": "5d594a596ad74534242dd47f3621f3f2d22c490923fe6a9b90d5fff1291c6b8d",
+        "label_sha256": "88adff1976e42ea677db0725e672ae204c932b83cd54792d63e0d5d30c8ba3dd"
+      },
+      "schedule--orchid": {
+        "input_sha256": "fc9e9c3a027ff78f9adb3a893f152be3c229fb75ecb07caa5abf147b7a9e4ec4",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "schedule--quill": {
+        "input_sha256": "f86a92fde9ee8b5f0798f5daffd6929999092219cf4a13c32a4b7fc080fb2409",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "tags--orchid": {
+        "input_sha256": "32673c0251f47e7d595129654ab02cf824049da50fbf8b9f39a78b131bcdc04c",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "tags--quill": {
+        "input_sha256": "abb067ebf7d9ec91c69e15bf4b441f9cef4940e769bde7adb2ca68fdef874dea",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "vault--orchid": {
+        "input_sha256": "c4b5644b099e87e7f8948295d73d264da597e6f57a403b3910182afa5c92f043",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      },
+      "vault--quill": {
+        "input_sha256": "ea5558e4ba990f94e1c47d80a879322e98bd043dae4f4557f000bc40d69b8480",
+        "label_sha256": "7ec659a445a5162d91557297033cf83572ddc9a50d7a2b4d0573a7e3614ab5e0"
+      }
+    },
+    "akm": {
+      "version": "0.10.261111-beta",
+      "bin": "akm-cli@0.10.261111-beta",
+      "build": null,
+      "build_fingerprint": "16e104a984159223775193b774da4b99308bdaf7db540f647e807f259a3be671"
+    },
+    "config": {
+      "redacted": {
+        "n_concurrent_trials": 4,
+        "environment": {
+          "type": "docker",
+          "delete": true
+        },
+        "agents": [
+          {
+            "import_path": "akm_opencode:AkmOpenCode",
+            "model_name": "openai/fast/qwen3.6-35b-a3b",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/fast/qwen3.6-35b-a3b",
+                "provider": {
+                  "openai": {
+                    "models": {
+                      "fast/qwen3.6-35b-a3b": {
+                        "limit": {
+                          "context": 32768,
+                          "output": 4096
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "setup_cache_dir": ".cache/harbor-setup",
+              "akm_cli_version": "0.10.261111-beta",
+              "akm_plugin_version": "0.10.261110-beta",
+              "libraries_dir": "libraries",
+              "akm_env": {
+                "AKM_EVAL_SEMANTIC_SEARCH": "1"
+              },
+              "arm": "none"
+            }
+          },
+          {
+            "import_path": "akm_opencode:AkmOpenCode",
+            "model_name": "openai/fast/qwen3.6-35b-a3b",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/fast/qwen3.6-35b-a3b",
+                "provider": {
+                  "openai": {
+                    "models": {
+                      "fast/qwen3.6-35b-a3b": {
+                        "limit": {
+                          "context": 32768,
+                          "output": 4096
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "setup_cache_dir": ".cache/harbor-setup",
+              "akm_cli_version": "0.10.261111-beta",
+              "akm_plugin_version": "0.10.261110-beta",
+              "libraries_dir": "libraries",
+              "akm_env": {
+                "AKM_EVAL_SEMANTIC_SEARCH": "1"
+              },
+              "arm": "bare",
+              "projects": {
+                "orchid": {
+                  "paths": [
+                    "/work/orchid"
+                  ]
+                },
+                "quill": {
+                  "paths": [
+                    "/work/quill"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "import_path": "akm_opencode:AkmOpenCode",
+            "model_name": "openai/fast/qwen3.6-35b-a3b",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/fast/qwen3.6-35b-a3b",
+                "provider": {
+                  "openai": {
+                    "models": {
+                      "fast/qwen3.6-35b-a3b": {
+                        "limit": {
+                          "context": 32768,
+                          "output": 4096
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "setup_cache_dir": ".cache/harbor-setup",
+              "akm_cli_version": "0.10.261111-beta",
+              "akm_plugin_version": "0.10.261110-beta",
+              "libraries_dir": "libraries",
+              "akm_env": {
+                "AKM_EVAL_SEMANTIC_SEARCH": "1"
+              },
+              "arm": "explicit",
+              "projects": {
+                "orchid": {
+                  "paths": [
+                    "/work/orchid"
+                  ],
+                  "filters": {
+                    "project": [
+                      "orchid",
+                      ""
+                    ]
+                  }
+                },
+                "quill": {
+                  "paths": [
+                    "/work/quill"
+                  ],
+                  "filters": {
+                    "project": [
+                      "quill",
+                      ""
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "opencode": {
+        "model": "openai/fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": null,
+        "enableThinking": null,
+        "timeoutMs": null
+      }
+    },
+    "eval_settings": {
+      "attempts": 4
+    },
+    "completion": {
+      "selected": [
+        "alerts--orchid",
+        "alerts--quill",
+        "backup--orchid",
+        "backup--quill",
+        "config--orchid",
+        "drain--orchid",
+        "drain--quill",
+        "exitcode--quill",
+        "lockfile--quill",
+        "mirror--orchid",
+        "mirror--quill",
+        "pool--orchid",
+        "pool--quill",
+        "port--orchid",
+        "port--quill",
+        "region--orchid",
+        "region--quill",
+        "replicas--orchid",
+        "replicas--quill",
+        "retention--orchid",
+        "retention--quill",
+        "rewind--orchid",
+        "schedule--orchid",
+        "schedule--quill",
+        "tags--orchid",
+        "tags--quill",
+        "vault--orchid",
+        "vault--quill"
+      ],
+      "scored": [
+        "alerts--orchid",
+        "alerts--quill",
+        "backup--orchid",
+        "backup--quill",
+        "config--orchid",
+        "drain--orchid",
+        "drain--quill",
+        "exitcode--quill",
+        "lockfile--quill",
+        "mirror--orchid",
+        "mirror--quill",
+        "pool--orchid",
+        "pool--quill",
+        "port--orchid",
+        "port--quill",
+        "region--orchid",
+        "region--quill",
+        "replicas--orchid",
+        "replicas--quill",
+        "retention--orchid",
+        "retention--quill",
+        "rewind--orchid",
+        "schedule--orchid",
+        "schedule--quill",
+        "tags--orchid",
+        "tags--quill",
+        "vault--orchid",
+        "vault--quill"
+      ],
+      "errored": []
+    }
+  }
+}
