@@ -60,7 +60,7 @@ For a case that expects a lesson, the lesson (description, `when_to_use` and bod
 
 Matching ignores case and punctuation; a word matches the start of a word, a number only itself, `*` up to three words, and `=word` that word only. Negations are read by the rule in `lib/negation.ts`, shared with extract. A phrase that rests on a negation the rule cannot read is listed in the row's `ambiguous` and counted, with the verdict unchanged: read those lessons. The checks are a lexical floor, not a semantic guarantee; each public case holds a `good`, a `bad` and a `reversed` example lesson that the tests score.
 
-A `knowledge-update` case is `right` when a pending proposal sits on `knowledge/<the memory's name>` and its frontmatter holds every key of the case's `keeps` with the same value; the keys it lost are in the row's `missing`. It is `missed` when akm queued no such proposal (a skip, a judge's rejection, the model answering NOOP). The memory has the metadata that makes akm promote it, and the feedback is recorded before distill runs, so which keys survive depends on the merge the model under test writes and on akm restoring what it drops. These cases count in `by_class` (`knowledge-update`) and `outcomes.knowledge` only: none of the metrics below changes, and a run of the 96 earlier cases scores as before.
+A `knowledge-update` case is `right` when a pending proposal sits on `knowledge/<the memory's name>` and its frontmatter holds every key of the case's `keeps` with the same value; the keys it lost are in the row's `missing`. It is `missed` when akm queued no such proposal (a skip, a judge's rejection, the model answering NOOP). The memory has the metadata that makes akm promote it, and the feedback is recorded before distill runs, so which keys survive depends on the merge the model under test writes and on akm restoring what it drops. The check is stricter than akm's restore: a key counts as lost when it is absent or when the model changed its value, but akm restores only absent keys, so a changed value is a loss that depends on the model. Whether the class separates the old akm from the fixed one is measured by running it on both versions, because a model that copies the frontmatter passes on both. These cases count in `by_class` (`knowledge-update`) and `outcomes.knowledge` only: none of the metrics below changes, and a run of the 96 earlier cases scores as before.
 
 A case that expects none is right when nothing is queued (a skip or a rejection counts). An update (gate reason `distill-update`) is never counted as a lesson. A `lesson-update` case is `right` when one pending update sits on the existing lesson's ref, keeps every line, its added lines state the new facts, make no forbidden claim or contradiction and are not the memory pasted in, and no new lesson is queued.
 
@@ -92,7 +92,7 @@ The cases stand. The 0 of 40 on every published round from 0.9.32 to 0.10.261022
 
 - akm's error messages name its endpoint; the eval writes `<MODEL_BASE_URL>` in its place, so `samples.jsonl` can be shared.
 - `served_models` lists the model names the responses gave, to spot a gateway that split a run.
-- The public cases hold no feedback; a case of your own can.
+- The public lesson and update cases hold no feedback; the knowledge-update cases hold two positives each, and a case of your own can hold any.
 
 ## Licence
 

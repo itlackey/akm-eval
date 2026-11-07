@@ -890,6 +890,14 @@ describe("the public cases check themselves", () => {
   });
 });
 
+describe("the public knowledge-update cases", () => {
+  test("each records two or more positive feedbacks, which is what makes akm promote the memory", () => {
+    const cases = loadCases(PUBLIC).filter((c) => c.expect === "knowledge");
+    expect(cases.length).toBeGreaterThan(0);
+    for (const c of cases) expect((c.feedback ?? []).filter((f) => f.signal === "positive").length, c.id).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe("the public update cases check themselves", () => {
   for (const c of loadCases(PUBLIC).filter((c) => c.expect === "update")) {
     describe(c.id, () => {

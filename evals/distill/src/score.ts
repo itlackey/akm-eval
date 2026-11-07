@@ -50,7 +50,7 @@ export interface Case {
    * that the proposal must still have, with their values. They are keys the model's merge may leave out and akm does not own (`team`, `project`, a list).
    */
   keeps?: Record<string, unknown>;
-  /** Feedback recorded about the memory before distill runs (`akm feedback`), in order. Optional: the public cases have none. */
+  /** Feedback recorded about the memory before distill runs (`akm feedback`), in order. Optional: the public lesson and update cases have none; the knowledge-update cases carry two positives. */
   feedback?: { signal: "positive" | "negative"; reason?: string }[];
 }
 
