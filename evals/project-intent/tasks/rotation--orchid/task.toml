@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/rotation--orchid"
+version = "1.0.0"
+description = "How long one on-call shift lasts (orchid)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "orchid"
+gold_ref = "memories/rotation-f297"
+library_tokens = ["8"]
+other_ref = "memories/rotation-56e1"
+other_tokens = ["21"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

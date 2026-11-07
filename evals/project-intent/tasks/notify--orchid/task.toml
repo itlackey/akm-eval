@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/notify--orchid"
+version = "1.0.0"
+description = "Where our release notes are mailed (orchid)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "orchid"
+gold_ref = "memories/notify-989f"
+library_tokens = ["shiplog@halyard.example"]
+other_ref = "memories/notify-ced6"
+other_tokens = ["shiplog@tern.example"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

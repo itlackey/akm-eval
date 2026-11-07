@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/bucket--orchid"
+version = "1.0.0"
+description = "The bucket our build artifacts go to (orchid)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "orchid"
+gold_ref = "memories/bucket-0c70"
+library_tokens = ["artifacts-4k2m"]
+other_ref = "memories/bucket-2886"
+other_tokens = ["artifacts-9q7x"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

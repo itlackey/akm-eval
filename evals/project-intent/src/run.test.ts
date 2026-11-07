@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { libraryProblems, nudges, specOf } from "../../agent-ab/src/lib.ts";
 import { taskNames } from "../../agent-ab/src/inputs.ts";
 import { ARMS_FILE, jobConfig, loadProjectTrials, readArms } from "./collect.ts";
@@ -16,15 +17,23 @@ const EVAL_DIR = resolve(import.meta.dir, "..");
 const TASKS = join(EVAL_DIR, "tasks");
 const LIBRARIES = join(EVAL_DIR, "libraries");
 const toml = (task: string) => Bun.TOML.parse(readFileSync(join(TASKS, task, "task.toml"), "utf8")) as { metadata: Record<string, any>; environment: { workdir: string } };
+/** The first run's published summary (28 tasks, 0.10.261111-beta): later task sets only append, so its trials can be pooled with theirs. */
+const FIRST_RUN = JSON.parse(readFileSync(join(EVAL_DIR, "..", "..", "reports", "0.10.261111-beta", "project-intent", "2026-11-07-0.10.261111-beta-project-intent", "summary.json"), "utf8")).tasks_sha256 as Record<string, string>;
 const frontmatter = (ref: string) => readFileSync(join(LIBRARIES, "teams", `${ref}.md`), "utf8").split("---")[1];
 
 describe("the tasks", () => {
   const names = taskNames(TASKS);
 
-  test("28 tasks: 24 conflict tasks (twelve questions in each of the two projects) and 4 that need only unscoped notes", () => {
-    expect(names).toHaveLength(28);
-    expect(names.filter((t) => kindOf(join(TASKS, t)) === "conflict")).toHaveLength(24);
-    expect(names.filter((t) => kindOf(join(TASKS, t)) === "general")).toEqual(["config--orchid", "exitcode--quill", "lockfile--quill", "rewind--orchid"]);
+  test("80 tasks: 68 conflict tasks (thirty-four questions in each of the two projects) and 12 that need only unscoped notes; the first 28 are unchanged", () => {
+    expect(names).toHaveLength(80);
+    expect(names.filter((t) => kindOf(join(TASKS, t)) === "conflict")).toHaveLength(68);
+    const general = names.filter((t) => kindOf(join(TASKS, t)) === "general");
+    expect(general).toHaveLength(12);
+    expect(general.filter((t) => t in FIRST_RUN)).toEqual(["config--orchid", "exitcode--quill", "lockfile--quill", "rewind--orchid"]);
+    expect(Object.keys(FIRST_RUN)).toHaveLength(28);
+    for (const [t, sha] of Object.entries(FIRST_RUN)) expect(sha256Dir(join(TASKS, t))).toBe(sha);
+    for (const t of names) expect(readFileSync(join(TASKS, t, "task.toml"), "utf8")).toContain(`workdir = "/work/${t.split("--")[1]}"`);
+    expect(new Set(names.map((t) => t.split("--")[0])).size).toBe(46); // 34 questions, each in both directories, and 12 general tasks, each in one
   });
 
   test("each verifier's answer is in its gold note, and the task does not point the agent at akm", () => {

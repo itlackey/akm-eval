@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/costcenter--quill"
+version = "1.0.0"
+description = "The cost center our services bill to (quill)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "quill"
+gold_ref = "memories/costcenter-b8ce"
+library_tokens = ["cc-9035"]
+other_ref = "memories/costcenter-f7e6"
+other_tokens = ["cc-4471"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "teams"
