@@ -20,8 +20,15 @@ export const PINS = { akm_cli: "0.10.261003-beta", akm_plugin: "0.10.261002-beta
 /** The pins of one run, as it was made: the akm under test replaces the pinned akm-cli, and a checkout that holds the plugin replaces the plugin. */
 export type Pins = Record<keyof typeof PINS, string>;
 
-/** Compatible published plugins: each depends on the CLI release named here. Other releases retain the default plugin. */
-export const RELEASE_PLUGINS: Record<string, string> = { [PINS.akm_cli]: PINS.akm_plugin, "0.9.26": "0.9.26202610051302" };
+/**
+ * Compatible published plugins: each depends on the CLI release named here. Other releases retain the default plugin.
+ * Rule: each beta plugin release pins the akm beta released with it, so add an entry for every new akm beta, keyed by that akm.
+ */
+export const RELEASE_PLUGINS: Record<string, string> = {
+  [PINS.akm_cli]: PINS.akm_plugin,
+  "0.9.26": "0.9.26202610051302",
+  "0.10.261111-beta": "0.10.261110-beta",
+};
 
 export const CONCURRENT_TRIALS = 4;
 const SETUP_TIMEOUT_SEC = 2700; // the akm arm installs akm and the plugin first. Both arms get the same.
