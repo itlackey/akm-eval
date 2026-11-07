@@ -36,7 +36,7 @@ import { endpointHost, redactConfig } from "../../../lib/provenance.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { taskNames } from "../../agent-ab/src/inputs.ts";
 import { selectTasks } from "../../agent-ab/src/run.ts";
-import { ARMS_FILE, NAME, attemptsFor, collect } from "./collect.ts";
+import { ARMS_FILE, ATTEMPTS, NAME, attemptsFor, collect } from "./collect.ts";
 import { MEASUREMENT, casesIn } from "./measurement.ts";
 import { type ProjectTrial, formatReport, makeRow, summarize } from "./score.ts";
 
@@ -44,7 +44,7 @@ const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 
 /** The akm of a run without --akm: the first release with projects, and the first plugin release that runs akm in the session's directory (it depends on exactly this CLI). */
-export const DEFAULT_ARM: AkmArm = { ...releaseArm("0.10.261111-beta"), plugin: { version: "0.10.261110-beta", tarball: null } };
+export const DEFAULT_ARM: AkmArm = releaseArm("0.10.261111-beta");
 
 const USAGE = `Usage: evals/project-intent/run [--corpus public|custom] [--cases DIR] [--limit N] [--concurrency N] [--label NAME] [--model NAME] [--semantic] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
@@ -53,7 +53,7 @@ Harbor, on the model in MODEL_NAME. Settings come from .env at the repository ro
 
 ${corpusUsage}
             custom is --cases DIR only: a folder with tasks/, libraries/ and projects.json, laid out as the public one.
-  --limit   run N tasks, once per arm, spread over the task families. Without it every task runs 3 times per arm.
+  --limit   run N tasks, once per arm, spread over the task families. Without it every task runs ${ATTEMPTS} times per arm.
   --concurrency  simultaneous trials (default 4); use 1 to run one at a time.
   --model   the model: a line of models.json, or a model as the gateway names it, as opencode takes it. Default: MODEL_NAME in .env.
   --label   names the results folder: <UTC date>-<label>. Default: the model name.

@@ -27,7 +27,7 @@ export const NAME = "project-intent";
 export const ARMS_FILE = "projects.json";
 
 /** Attempts per task and arm in a full run. A run with --limit makes one, to check a setup. */
-export const ATTEMPTS = 3;
+export const ATTEMPTS = 4;
 export const attemptsFor = (limit?: number): number => (limit === undefined ? ATTEMPTS : 1);
 
 export type Arms = Record<string, Record<string, unknown> | null>;

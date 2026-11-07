@@ -33,6 +33,19 @@ test("paired answer scores keep unequal denominators and do not invent a zero fo
   expect(scores({ eval: "new-test", metrics: { future: 1 } })).toEqual([]);
 });
 
+test("a project-intent run's primary score is the bare arm, with both differences to none and their intervals", () => {
+  const arm = (pass_rate: number, passed: number) => ({ pass_rate, passed, scored: 4, other_project_rate: 0.5, tokens_per_correct: 900 });
+  const result = scores({ eval: "project-intent", metrics: {
+    arms: { none: arm(0.25, 1), bare: arm(0.75, 3), explicit: arm(1, 4) },
+    comparisons: { "bare-none": { value: 0.5, lo: 0.1, hi: 0.9 }, "explicit-none": { value: 0.75, lo: 0.5, hi: 1 }, "explicit-bare": { value: 0.25 } },
+  } });
+  expect(result[0]).toMatchObject({ label: "Pass rate · bare", value: 0.75, numerator: 3, denominator: 4 });
+  expect(result.find(score => score.label === "Pass-rate gain · bare − none · CI low")?.value).toBe(0.1);
+  expect(result.find(score => score.label === "Tokens per correct outcome · explicit")).toMatchObject({ value: 900, unit: "count", lower_is_better: true });
+  expect(result.some(score => score.label.includes("explicit − bare"))).toBe(false);
+  expect(testInfo("project-intent").documentation).toContain("/evals/project-intent");
+});
+
 test("friendly test names retain a link to each test's scoring rules", () => {
   expect(testInfo("reflect").name).toBe("Asset repair");
   expect(testInfo("agent-ab").documentation).toContain("/evals/agent-ab");

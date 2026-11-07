@@ -112,6 +112,13 @@ selected input set. To confirm identical inputs, compare `assets_sha256` and `ma
 in the two `summary.json` files; `scripts/compare/run` shows settings, not input digests.
 Unknown measurements display —, distinct from recorded zeroes.
 
+**Project knowledge** (`project-intent`) runs three akm arms and no control, so
+it has no **AKM impact** row, and its timing and token totals cover all three
+arms. Its primary score is the `bare` arm's pass rate. Its test metrics are each
+arm's pass rate, other-project rate and tokens per correct outcome, and the
+`bare − none` and `explicit − none` gains with their recorded 95% paired
+bootstrap bounds.
+
 **Paired gain** comes from the recorded shared-case comparison. It need not
 match the subtraction of overall arm scores: LongMemEval's full semantic run has
 424/500 and 401/499 marginal accuracy; its paired gain uses 499 shared cases.

@@ -34,6 +34,54 @@ Set how many days a service's logs are kept.
 quaystone retain <service> --days <n>
 ```
 
+## scale
+
+Set how many replicas of a service run.
+
+```sh
+quaystone scale <service> --replicas <n>
+```
+
+## alert
+
+Send a service's alerts to a chat channel.
+
+```sh
+quaystone alert <service> --route <channel>
+```
+
+## backup
+
+Set the daily time (UTC, `HH:MM`) a service's data is backed up.
+
+```sh
+quaystone backup <service> --window <HH:MM>
+```
+
+## tag
+
+Set the prefix of a service's release tags.
+
+```sh
+quaystone tag <service> --prefix <prefix>
+```
+
+## region
+
+Pin a service to a region.
+
+```sh
+quaystone region <service> --set <region>
+```
+
+## drain
+
+Take a service out of its pool, waiting a grace period (seconds) for open requests.
+
+```sh
+quaystone drain <service> --grace <seconds>
+```
+
 ## rewind
 
 Roll a service back to an earlier release. Release ids look like `r482`.

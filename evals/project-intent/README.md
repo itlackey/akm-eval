@@ -13,7 +13,7 @@ agent-ab compares opencode alone with opencode plus the akm plugin, in a two-arm
 ## Run
 
 ```
-evals/project-intent/run --model NAME                      # 10 tasks x 3 arms x 3 attempts = 90 trials
+evals/project-intent/run --model NAME                      # 28 tasks x 3 arms x 4 attempts = 336 trials
 evals/project-intent/run --model NAME --limit 2            # 2 tasks, once per arm: a setup check
 evals/project-intent/run --model NAME --akm ~/code/akm     # an akm checkout (packed, as in agent-ab)
 ```
@@ -36,18 +36,18 @@ So `bare` minus `none` is the name convention, and `explicit` minus `bare` is th
 
 ## The tasks
 
-The library `libraries/teams` is one bundle for every task: a skill for the made-up `quaystone` CLI and ten memories.
+The library `libraries/teams` is one bundle for every task: a skill for the made-up `quaystone` CLI and 28 memories.
 
-- **Conflict tasks (8).** Four questions (the pool a service ships to, the health port, the log retention, the image mirror), each answered by two memories with the same description and tags, one with `project: orchid` and one with `project: quill`, as a bare entry would have stamped them. The memories' names and bodies do not say which project they belong to. Each question runs once in `/work/orchid` and once in `/work/quill`, so an agent that always takes the same note passes half of them.
-- **General tasks (2).** The answer is in a memory with no `project` key (the hold time after a rewind, the lock file's first line), so a project's filter must keep it: the `""` in `explicit`'s filter.
+- **Conflict tasks (24).** Twelve questions (the pool a service ships to, the health port, the log retention, the image mirror, the replica count, the alert channel, the backup window, the release tag prefix, the region, the drain grace period, the vault path, the nightly cron schedule), each answered by two memories with the same description and tags, one with `project: orchid` and one with `project: quill`, as a bare entry would have stamped them. The memories' names and bodies do not say which project they belong to. Each question runs once in `/work/orchid` and once in `/work/quill`, so an agent that always takes the same note passes half of them.
+- **General tasks (4, two per directory).** The answer is in a memory with no `project` key (the hold time after a rewind, the lock file's first line, the config file's path, the exit code of a locked pool), so a project's filter must keep it: the `""` in `explicit`'s filter.
 
-The instruction gives the working directory and the question, and never mentions akm, a library, a skill or a project; `run.test.ts` checks that with agent-ab's checks, that each gold note holds the verifier's answer and the other project's note the other answer, and that each working directory is inside its project's `paths`. A task's verifier writes `reward.json`: `reward` is 1 when a line of the answer file is exactly the expected answer and the other project's value is nowhere in it, and `other_project` is 1 when the other project's value is in the file. Harbor's oracle agent scores 10 of 10 and its nop agent 0 of 10:
+The instruction gives the working directory and the question, and never mentions akm, a library, a skill or a project; `run.test.ts` checks that with agent-ab's checks, that each gold note holds the verifier's answer and the other project's note the other answer, and that each working directory is inside its project's `paths`. A task's verifier writes `reward.json`: `reward` is 1 when a line of the answer file is exactly the expected answer and the other project's value is nowhere in it, and `other_project` is 1 when the other project's value is in the file. Harbor's oracle agent scores 28 of 28 and its nop agent 0 of 28:
 
 ```
 uv run --no-project --python 3.12 --with "harbor==$(bun lib/harbor/pin.ts harbor)" harbor run -p evals/project-intent/tasks -a oracle -o evals/project-intent/results/check -y
 ```
 
-The write path (a bare entry stamps `project: <name>` on `akm remember`) is not measured here: it does not depend on the model, and akm's own tests cover it.
+The write path (a bare entry stamps `project: <name>` on `akm remember`) is left out on purpose: it does not depend on the model, and akm's own tests cover it.
 
 ## Metrics
 
@@ -71,7 +71,7 @@ The owner's rule is that a feature must improve results at about equal tokens, o
 
 ## Limits
 
-- Ten tasks and three attempts: an interval over ten tasks is wide, and a difference of one or two tasks is within it. A served model need not be deterministic, so attempts can disagree; read the per-task table.
+- Size. 28 tasks and 4 attempts were sized with lib/harbor's paired bootstrap on simulated runs (conflict tasks passing between 0.1 and 0.9 in `none`, general tasks at 0.8 in both arms): the `bare - none` interval is about 0.29 wide (±0.14), and a rise of 0.25 in the conflict tasks' pass rate (about 0.2 over all tasks) puts its lower end above 0 in about 80% of runs, 0.2 in about 60%. A smaller effect is likely to read as unproven. A served model need not be deterministic, so attempts can disagree; read the per-task table.
 - The projects are named after their directories (`/work/orchid`), and the memories carry `project:` in frontmatter, which `akm show` prints. An agent without a project can still match the two; that is the realistic case, and the difference measures what the project adds to it.
 - The arms share one library, so `none` sees exactly the knowledge the other arms see, only unranked by project and unfiltered.
 - One model per run. Tokens come from opencode's stream as Harbor reads it, so a side call opencode makes outside the session is not counted, in any arm.
@@ -79,6 +79,8 @@ The owner's rule is that a feature must improve results at about equal tokens, o
 ## What the summary reports
 
 `summary.json`: `status`, `aborted_reason`, `completion` (per arm: `expected`, `completed`, `failed`, `missing`, `unexpected`), `arms` (each label with its `projects`), `metrics` (per arm `pass_rate`, `conflict_pass_rate`, `general_pass_rate`, `passed`, `scored`, `errored`, `other_project_rate`, `akm_called_rate`, `tokens_per_trial`, `tokens_per_correct`; per comparison `value`, `lo`, `hi`, `n`, `sign_p`), `report` (the full figures and the per-task table), `pins`, `akm_version`, `akm_bin`, `akm_install`, `engine`, `config`, `job`, `libraries_sha256`, `tasks_sha256`, `arms_sha256`, `assets_sha256` and the `manifest`. `samples.jsonl`: one line per task with its kind, the arms and every trial (reward, `other_project`, exception, akm tools called, tokens, time). A run that did not finish everything is `aborted`, exits 1, and is no result.
+
+To publish a run, copy its `summary.json` and `samples.jsonl` to `reports/<akm version>/project-intent/<run>/` and add its row to `reports/README.md`, as for the other evals. The ledger lists it under Project knowledge: the `bare` arm's pass rate is the primary score, beside each arm's pass rate, other-project rate and tokens per correct outcome and the two gains over `none` with their intervals (`scripts/ledger/src/presentation.ts`).
 
 ## Licence
 

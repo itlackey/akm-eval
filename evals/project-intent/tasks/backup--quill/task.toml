@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/backup--quill"
+version = "1.0.0"
+description = "When our services' data is backed up (quill)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "quill"
+gold_ref = "memories/backup-window-a90b"
+library_tokens = ["04:15"]
+other_ref = "memories/backup-window-58e2"
+other_tokens = ["02:30"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

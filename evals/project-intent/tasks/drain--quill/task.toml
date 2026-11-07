@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/drain--quill"
+version = "1.0.0"
+description = "How long we wait when draining a service (quill)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "quill"
+gold_ref = "memories/drain-grace-c215"
+library_tokens = ["240"]
+other_ref = "memories/drain-grace-6b80"
+other_tokens = ["90"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

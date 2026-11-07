@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/tags--orchid"
+version = "1.0.0"
+description = "The prefix of our release tags (orchid)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "orchid"
+gold_ref = "memories/tag-prefix-2c47"
+library_tokens = ["lmn"]
+other_ref = "memories/tag-prefix-e8d1"
+other_tokens = ["tsx"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "teams"

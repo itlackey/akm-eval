@@ -1,0 +1,29 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/region--quill"
+version = "1.0.0"
+description = "The region our services are pinned to (quill)"
+authors = []
+keywords = []
+
+[metadata]
+tools = "fictional"
+kind = "conflict"
+project = "quill"
+gold_ref = "memories/home-region-1d3e"
+library_tokens = ["ap-south-7"]
+other_ref = "memories/home-region-94fa"
+other_tokens = ["eu-north-4"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "teams"
