@@ -2,7 +2,7 @@
 // the scorer.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { sha256Dir } from "../../../lib/harbor/harbor.ts";
@@ -16,6 +16,7 @@ import { type ProjectTrial, buildReport, makeRow } from "./score.ts";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const TASKS = join(EVAL_DIR, "tasks");
 const LIBRARIES = join(EVAL_DIR, "libraries");
+const CURL_LAYER = "RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*\n\n";
 const toml = (task: string) => Bun.TOML.parse(readFileSync(join(TASKS, task, "task.toml"), "utf8")) as { metadata: Record<string, any>; environment: { workdir: string } };
 /** The first run's published summary (28 tasks, 0.10.261111-beta): later task sets only append, so its trials can be pooled with theirs. */
 const FIRST_RUN = JSON.parse(readFileSync(join(EVAL_DIR, "..", "..", "reports", "0.10.261111-beta", "project-intent", "2026-11-07-0.10.261111-beta-project-intent", "summary.json"), "utf8")).tasks_sha256 as Record<string, string>;
@@ -31,7 +32,19 @@ describe("the tasks", () => {
     expect(general).toHaveLength(12);
     expect(general.filter((t) => t in FIRST_RUN)).toEqual(["config--orchid", "exitcode--quill", "lockfile--quill", "rewind--orchid"]);
     expect(Object.keys(FIRST_RUN)).toHaveLength(28);
-    for (const [t, sha] of Object.entries(FIRST_RUN)) expect(sha256Dir(join(TASKS, t))).toBe(sha);
+    // Since 0.3 every Dockerfile also installs curl; with that one line taken out, the first run's tasks are byte for byte as they were.
+    const scratch = mkdtempSync(join(tmpdir(), "pi-first-"));
+    try {
+      for (const [t, sha] of Object.entries(FIRST_RUN)) {
+        cpSync(join(TASKS, t), join(scratch, t), { recursive: true });
+        const dockerfile = join(scratch, t, "environment", "Dockerfile");
+        writeFileSync(dockerfile, readFileSync(dockerfile, "utf8").replace(CURL_LAYER, ""));
+        expect(sha256Dir(join(scratch, t))).toBe(sha);
+      }
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+    for (const t of names) expect(readFileSync(join(TASKS, t, "environment", "Dockerfile"), "utf8")).toContain(CURL_LAYER);
     for (const t of names) expect(readFileSync(join(TASKS, t, "task.toml"), "utf8")).toContain(`workdir = "/work/${t.split("--")[1]}"`);
     expect(new Set(names.map((t) => t.split("--")[0])).size).toBe(46); // 34 questions, each in both directories, and 12 general tasks, each in one
   });

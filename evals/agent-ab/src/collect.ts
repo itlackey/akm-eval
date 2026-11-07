@@ -18,6 +18,7 @@ import {
   sha256Dir,
   stagePackages,
 } from "../../../lib/harbor/harbor.ts";
+import { singleService } from "../../../lib/harbor/network.ts";
 
 export const NAME = "agent-ab";
 
@@ -27,7 +28,7 @@ export const attemptsFor = (limit?: number): number => (limit === undefined ? AT
 
 /** The Harbor job: the two arms on the same tasks. See lib/harbor/harbor.ts. The akm arm seeds the library each task names. */
 export function jobConfig(o: { name: string; model: string; modelLimits?: ModelLimits; modelReasoningEffort?: string; concurrency?: number; tasksDir: string; tasks: string[]; librariesDir: string; attempts: number; jobsDir: string; arm?: AkmArm; packagesDir?: string | null; akmEnv?: Record<string, string> }): Record<string, unknown> {
-  return harborJob({ name: o.name, model: o.model, modelLimits: o.modelLimits, modelReasoningEffort: o.modelReasoningEffort, concurrency: o.concurrency, jobsDir: o.jobsDir, attempts: o.attempts, librariesDir: o.librariesDir, datasets: [{ path: o.tasksDir, task_names: o.tasks }], arm: o.arm, packagesDir: o.packagesDir, akmEnv: o.akmEnv });
+  return harborJob({ name: o.name, model: o.model, modelLimits: o.modelLimits, modelReasoningEffort: o.modelReasoningEffort, concurrency: o.concurrency, jobsDir: o.jobsDir, attempts: o.attempts, librariesDir: o.librariesDir, datasets: [{ path: o.tasksDir, task_names: o.tasks }], arm: o.arm, packagesDir: o.packagesDir, akmEnv: o.akmEnv, sharedNetwork: singleService(o.tasksDir) });
 }
 
 /** What a run of Harbor left, with the digests of the run's own copy of the tasks and the libraries, made before Harbor started. */

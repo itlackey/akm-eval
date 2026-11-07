@@ -13,7 +13,6 @@ import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, announceCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import {
   AKM_ARM_OPTIONS,
-  CONCURRENT_TRIALS,
   type AkmArm,
   type Completion,
   type Pins,
@@ -22,7 +21,6 @@ import {
   akmSummary,
   assetsSha256,
   completionOf,
-  dockerNetworkWarning,
   jobRecord,
   loadRunTrials,
   parseAkm,
@@ -315,17 +313,6 @@ function corpusProblem(c: ResolvedCorpus): string | undefined {
   return existsSync(libraryOf(c)) ? undefined : `the ${c.name} library is missing (${where}).${c.rewrite ? " Make it with: ./generate-assets --only retrieval" : ""}`;
 }
 
-/** The concurrency of the run `--resume` carries on, from its job.json, or undefined when there is none to read (runCorpus then says what is wrong). */
-function savedConcurrency(resume: string | undefined): number | undefined {
-  if (resume === undefined) return undefined;
-  try {
-    const n = JSON.parse(readFileSync(join(resolve(resume), "job.json"), "utf8")).n_concurrent_trials;
-    return Number.isInteger(n) && n > 0 ? n : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 async function main(): Promise<void> {
   let values: { model?: string; corpus?: string; cases?: string; limit?: string; attempts?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; resume?: string; concurrency?: string; help?: boolean };
   try {
@@ -359,9 +346,6 @@ async function main(): Promise<void> {
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   await announceCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
-  // A resumed run keeps the concurrency it started with (runCorpus refuses another), so that is the width to warn about.
-  const wide = dockerNetworkWarning(NAME, concurrency ?? savedConcurrency(values.resume) ?? CONCURRENT_TRIALS);
-  if (wide) console.warn(wide);
 
   const packs = mkdtempSync(join(tmpdir(), "akm-eval-akm-pack-")); // where a checkout is packed. Each run keeps a copy of the tarballs
   try {

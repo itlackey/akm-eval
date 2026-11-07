@@ -20,7 +20,7 @@ evals/agent-ab/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 ```
 
 - `--limit N` runs N tasks across the families, once per arm. Without it every task runs 3 times per arm (36 trials, about 30 minutes, four at a time).
-- `--concurrency N` selects simultaneous trials (default 4). Use `--concurrency 1` to run one trial at a time; the selected width is saved in the job and summary. Pick it before the full run, and see "Concurrency and Docker networks" for more than 8.
+- `--concurrency N` selects simultaneous trials (default 4). Use `--concurrency 1` to run one trial at a time; the selected width is saved in the job and summary. Pick it before the full run, and see "Concurrency and Docker networks".
 - `--semantic` enables AKM hybrid search with its pinned bge-small-en-v1.5 embedder. Setup checks every asset has an embedding and verifies a query reports `searchMode: "semantic"`. The choice and setup proof are saved in the run artifacts.
 - `--model NAME` is the model, resolved as in the other evals (a `models.json` line, or the gateway in `MODEL_BASE_URL` with `MODEL_API_KEY`) and given to opencode as `openai/<id>`. `OPENAI_BASE_URL` and `OPENAI_API_KEY` stand in for empty `MODEL_*` values.
 - `--akm` is the akm of the akm arm: an exact npm release (`akm-cli@0.10.261003-beta`, the default) or the folder of an akm checkout, packed with `npm pack` and installed from the tarball. A checkout that holds the plugin (a `package.json` named `akm-opencode`) has it packed too; otherwise the pinned plugin is used. The default CLI comes with plugin `0.10.261002-beta`, `akm-cli@0.9.26` with plugin `0.9.26202610051302`, and `akm-cli@0.10.261111-beta` with plugin `0.10.261110-beta` (`RELEASE_PLUGINS`; this plugin runs akm in process, in the session directory); each plugin depends on its exact CLI. Both of the older pairs and the new plugin have committed dependency locks; `akm-cli@0.10.261111-beta` has none, because `npm ci` drops its `better-sqlite3` on the containers' Node 22 without a compiler, so it resolves in its first preparation (`akm_install.locked: false`). `AKM_BIN` is not read.
@@ -47,7 +47,9 @@ Harbor gets only the model's variables and what it, uv and Docker read.
 
 ## Concurrency and Docker networks
 
-Every trial creates a Docker network, and the daemon's default address pools allow about 30 in all, shared with every other network on the host. Sixteen trials at once used them up in a real run, and the trials that got no network failed in setup, before the agent started; a run with `--concurrency` above 8 prints a warning. To run more at once, give the daemon a larger pool in `/etc/docker/daemon.json`, a range none of your networks uses (this one holds 256 networks), and restart Docker:
+Agent A/B and project-intent put all their trials on one external Docker network, `akm-eval-trials` (created when missing, never deleted), so a run creates no network of its own however wide it is. That is only for tasks with a single `main` service: a task folder with its own `docker-compose.yaml` puts the whole job back on one network per trial, and so does Terminal-Bench, whose tasks are Harbor's. Trials on the shared network can reach each other.
+
+A job with a network per trial needs one subnet from the daemon's address pools each, and the pools are shared with every other network on the host (29 usable on a default install). The run counts the free ones and refuses a `--concurrency` above that. After Harbor exits it removes this job's trial networks that have no containers left, which an interrupted run leaves behind. To run more at once, give the daemon a larger pool in `/etc/docker/daemon.json`, a range none of your networks uses (this one holds 256 networks), and restart Docker; with `default-address-pools` set there, the count is skipped:
 
 ```json
 { "default-address-pools": [{ "base": "10.200.0.0/16", "size": 24 }] }

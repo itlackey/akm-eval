@@ -1,0 +1,5 @@
+# Every trial of a single-service eval joins this one network instead of creating its own (see network.ts).
+networks:
+  default:
+    name: akm-eval-trials
+    external: true

@@ -10,6 +10,7 @@ import { dirtyFingerprint } from "../akm/akm.ts";
 import { fail } from "../cli.ts";
 import { type ModelEntry, type ModelLimits, type ModelSettings, loadModels, resolveModel } from "../models.ts";
 import { credentialField, sha256File, sha256Text } from "../provenance.ts";
+import { SHARED_NETWORK_COMPOSE, networkPlan, prepareNetworks, sweepNetworks } from "./network.ts";
 import { AGENT_EXIT, type Arm, type Trial } from "./report.ts";
 import type { RunTrial } from "./score.ts";
 import { TIMEOUT_ERRORS, loadTrials } from "./trials.ts";
@@ -32,16 +33,6 @@ export const RELEASE_PLUGINS: Record<string, string> = {
 
 export const CONCURRENT_TRIALS = 4;
 const SETUP_TIMEOUT_SEC = 2700; // the akm arm installs akm and the plugin first. Both arms get the same.
-const WIDE_RUN = 8; // more trials at once than this get the warning of dockerNetworkWarning
-
-/**
- * The warning for a run of `concurrency` simultaneous trials, or undefined when it needs none. Every Harbor trial creates a Docker network,
- * and the daemon's default address pools hold about thirty in all: a run of sixteen reached that limit. `name` is the eval's, as its messages start.
- */
-export function dockerNetworkWarning(name: string, concurrency: number): string | undefined {
-  if (concurrency <= WIDE_RUN) return undefined;
-  return `${name}: ${concurrency} concurrent trials each need a Docker network; the daemon's default address pools allow about 30 in all. Raise default-address-pools in /etc/docker/daemon.json for more (see evals/agent-ab/README.md).`;
-}
 
 /** A positive integer flag, or undefined when the flag is not given. */
 export function positive(flag: string, value: string | undefined): number | undefined {
@@ -377,6 +368,8 @@ export function jobConfig(o: {
   packagesDir?: string | null;
   akmEnv?: Record<string, string>;
   akm?: { env?: Record<string, string>; kwargs?: Record<string, unknown> };
+  /** Trials share one Docker network instead of one each: only for tasks that have a single `main` service. */
+  sharedNetwork?: boolean;
 }): Record<string, unknown> {
   const arm = o.arm ?? releaseArm();
   // The same model does opencode's side jobs, such as titling a session, so the run calls one model only.
@@ -394,7 +387,7 @@ export function jobConfig(o: {
     jobs_dir: o.jobsDir,
     n_attempts: o.attempts,
     n_concurrent_trials: o.concurrency ?? CONCURRENT_TRIALS,
-    environment: { type: "docker", delete: true },
+    environment: { type: "docker", delete: true, ...(o.sharedNetwork ? { extra_docker_compose: [SHARED_NETWORK_COMPOSE] } : {}) },
     agents: [
       { import_path: "eval_opencode:EvalOpenCode", ...both, kwargs: { version: PINS.opencode, opencode_config: opencodeConfig, setup_cache_dir: resolve(import.meta.dir, "../../.cache/harbor-setup") } },
       {
@@ -465,6 +458,8 @@ export function sha256Dir(dir: string, except: string[] = []): string {
 
 /** Runs Harbor in a Python environment that has exactly the pinned release, and copies what it prints to the log. */
 export async function runHarbor(configFile: string, logFile: string, env: Record<string, string>, options: { resume?: string } = {}): Promise<number> {
+  const plan = networkPlan(JSON.parse(readFileSync(configFile, "utf8")));
+  prepareNetworks(plan);
   const log = createWriteStream(logFile, { flags: options.resume ? "a" : "w" });
   const command = options.resume ? ["jobs", "resume", "--job-path", options.resume] : ["run", "-c", configFile, "--yes"];
   const proc = Bun.spawn(["uv", "run", "--no-project", "--python", "3.12", "--with", `harbor==${PINS.harbor}`, "harbor", ...command], {
@@ -488,6 +483,7 @@ export async function runHarbor(configFile: string, logFile: string, env: Record
   } finally {
     process.off("SIGINT", stop); process.off("SIGTERM", stop);
     await new Promise((done) => log.end(done));
+    sweepNetworks(plan);
   }
 }
 

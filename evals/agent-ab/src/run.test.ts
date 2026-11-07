@@ -573,19 +573,12 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(done.err + done.out + seen).not.toContain("sk-real-openai-key");
   }, 60_000);
 
-  test("warns once on stderr above eight concurrent trials that each needs a Docker network, and says nothing at eight or by default", () => {
-    const { run, summary } = repo();
-    const wide = run(["--limit", "1", "--concurrency", "16", "--label", "wide"]);
-    expect(wide.code, wide.err).toBe(0);
-    const said = "agent-ab: 16 concurrent trials each need a Docker network; the daemon's default address pools allow about 30 in all. Raise default-address-pools in /etc/docker/daemon.json for more (see evals/agent-ab/README.md).";
-    expect(wide.err.split("\n").filter((line) => line.includes("Docker network"))).toEqual([said]);
-    expect(wide.out).not.toContain("Docker network");
-    expect(summary("wide").job.n_concurrent_trials).toBe(16);
-    for (const [label, args] of [["eight", ["--concurrency", "8"]], ["default", []]] as [string, string[]][]) {
-      const done = run(["--limit", "1", ...args, "--label", label]);
-      expect(done.code, done.err).toBe(0);
-      expect(done.err + done.out, label).not.toContain("Docker network");
-    }
+  test("puts the trials on the shared Docker network, so a wide run is not refused for want of subnets", () => {
+    const { run, summary, folder } = repo();
+    const done = run(["--limit", "1", "--concurrency", "1000", "--label", "wide"]);
+    expect(done.code, done.err).toBe(0);
+    expect(summary("wide").job.n_concurrent_trials).toBe(1000);
+    expect(JSON.parse(readFileSync(join(folder("wide"), "job.json"), "utf8")).environment.extra_docker_compose).toHaveLength(1);
   }, 60_000);
 
   test("a change to the library, to a selected task, to the tasks selected or to the attempts changes assets_sha256, and a rerun does not", () => {

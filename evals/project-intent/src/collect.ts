@@ -17,6 +17,7 @@ import {
   sha256Dir,
   stagePackages,
 } from "../../../lib/harbor/harbor.ts";
+import { singleService } from "../../../lib/harbor/network.ts";
 import type { ModelLimits } from "../../../lib/models.ts";
 import { sha256File } from "../../../lib/provenance.ts";
 import type { ProjectTrial } from "./score.ts";
@@ -50,7 +51,7 @@ export function readArms(assets: string): Arms {
  * the shared job sets (model, opencode, config, setup time, akm and plugin); each adds its `arm` label and its `projects`.
  */
 export function jobConfig(o: { name: string; model: string; modelLimits?: ModelLimits; modelReasoningEffort?: string; concurrency?: number; tasksDir: string; tasks: string[]; librariesDir: string; attempts: number; jobsDir: string; arms: Arms; arm?: AkmArm; packagesDir?: string | null; akmEnv?: Record<string, string> }): Record<string, unknown> {
-  const job = harborJob({ name: o.name, model: o.model, modelLimits: o.modelLimits, modelReasoningEffort: o.modelReasoningEffort, concurrency: o.concurrency, jobsDir: o.jobsDir, attempts: o.attempts, librariesDir: o.librariesDir, datasets: [{ path: o.tasksDir, task_names: o.tasks }], arm: o.arm, packagesDir: o.packagesDir, akmEnv: o.akmEnv });
+  const job = harborJob({ name: o.name, model: o.model, modelLimits: o.modelLimits, modelReasoningEffort: o.modelReasoningEffort, concurrency: o.concurrency, jobsDir: o.jobsDir, attempts: o.attempts, librariesDir: o.librariesDir, datasets: [{ path: o.tasksDir, task_names: o.tasks }], arm: o.arm, packagesDir: o.packagesDir, akmEnv: o.akmEnv, sharedNetwork: singleService(o.tasksDir) });
   const akm = (job.agents as { import_path: string; kwargs: Record<string, unknown> }[]).find((a) => a.import_path === "akm_opencode:AkmOpenCode");
   if (!akm) throw new Error("the shared Harbor job has no akm agent");
   const agents = Object.entries(o.arms).map(([label, projects]) => ({ ...akm, kwargs: { ...akm.kwargs, arm: label, ...(projects ? { projects } : {}) } }));
