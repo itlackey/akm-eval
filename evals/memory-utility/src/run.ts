@@ -18,7 +18,8 @@ import { loadCases, type Case } from "./inputs.ts";
 import { collect, configFor, pending, type Options } from "./collect.ts";
 import { ARMS, PROMPT, readerSettings } from "./protocol.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { makeRow, summarize } from "./score.ts";
+import { makeRow, summarize, type Row } from "./score.ts";
+import { loadLessons, lessonsVerdict, type LessonsFixture } from "./lessons.ts";
 import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, NOTES_BUDGET, PRIMARY_BUDGET, HALVES_SALT, SPLIT_SALT, SPLITS, isHeldout, isLmeCase, lmeCases, preregistrationDifferences, type LmeCase, type Split } from "./lme.ts";
 import { lmeCollect, lmePending, type LmeOptions } from "./lme-collect.ts";
 import { makeLmeRow, isLmeRow } from "./lme-score.ts";
@@ -39,6 +40,8 @@ const usage = `Usage: evals/memory-utility/run [options]
   --timeout-ms N       Per AKM command / reader request timeout (default 120000). \`akm improve\` may take 30 s per note if more.
   --seed TEXT          Reproducible counterbalanced arm order (default 1).
   --repeat N           Separate independent collections (default one).
+  --lessons            The third arm reads the notes plus distill's lessons (assets/lessons.json, built by build-lessons) instead of native inference output.
+                       No inference runs. The 24 cases only. See README, "The lessons condition".
   --resume DIR         Carry on a stopped run in its folder: asks only the cases that are not scored. The manifest has to match.
 
 LongMemEval cases (judged, several budgets): --split selects them, and the options below need it.
@@ -121,10 +124,11 @@ async function main() {
   const { values: v } = parseArgs({ strict: true, options: {
     help: { type: "boolean", short: "h" }, model: { type: "string" }, akm: { type: "string" }, ...CORPUS_OPTIONS, ...JUDGE_OPTIONS, limit: { type: "string" }, label: { type: "string" },
     semantic: { type: "boolean" }, "config-patch": { type: "string" }, "context-tokens": { type: "string" }, "search-limit": { type: "string" }, "timeout-ms": { type: "string" }, seed: { type: "string" }, repeat: { type: "string" },
-    resume: { type: "string" }, split: { type: "string" }, haystack: { type: "string" }, budgets: { type: "string" }, "sample-seed": { type: "string" },
+    resume: { type: "string" }, lessons: { type: "boolean" }, split: { type: "string" }, haystack: { type: "string" }, budgets: { type: "string" }, "sample-seed": { type: "string" },
   } });
   if (v.help) { console.log(usage); return; }
   checkSplitFlags(v);
+  if (v.lessons && v.split !== undefined) fail("--lessons is for the 24 cases, not --split");
   const lme = v.split !== undefined, split = v.split as Split;
   if (v.resume !== undefined && v.repeat !== undefined) fail("--resume carries on one run, so it does not go with --repeat");
   const budgets = lme ? parseBudgets(v.budgets) : [], haystack = positive(v.haystack, DEFAULT_HAYSTACK, "--haystack");
@@ -155,18 +159,25 @@ async function main() {
     if (result.code !== 0) fail("AKM version probe failed"); version = result.stdout.trim(); useConfigForm(version);
   } finally { removeSandbox(probe); }
   console.log(`Reader/inference destination: ${new URL(model.baseUrl).origin} (no corpus is published). Read README before interpreting scores.`);
+  if (v.lessons && !v.semantic) console.log("note: --lessons without --semantic retrieves by keyword; the pass rule was written for the semantic run.");
   if (judge) console.log(`Judge destination: ${new URL(judge.baseUrl).origin}`);
   const collectorCommit = gitCommit(REPO_ROOT), collectorFingerprint = dirtyFingerprint(REPO_ROOT);
   for (const corpus of corpora) {
     const { name: corpusName, folder } = corpus;
     // ---- the cases of this corpus, and what differs between the two kinds ----
-    let plan: Plan;
+    let plan: Plan, lessons: LessonsFixture | undefined;
     if (lo && judge) plan = await lmePlan(corpus, { split, limit, haystack, sampleSeed }, o, lo, judge, model);
     else {
       const cases = loadCases(folder).slice(0, positive(v.limit, Number.MAX_SAFE_INTEGER, "--limit"));
-      plan = { cases, pending: (c, i) => pending(c as Case, i, o.seed), collect: (c, raw, checkpoint) => collect(c as Case, raw, o, checkpoint), row: (c, raw) => makeRow(c as Case, raw),
-        header: `memory-utility (${corpusName}) | ${cases.length} cases × 3 arms | ${model.name} | AKM ${version} | ${o.semantic ? "semantic" : "keyword"} | ${o.contextTokens} estimated context tokens | one sequential case at a time`,
-        evalSettings: { context_tokens_estimated: o.contextTokens }, summaryExtra: {}, progress: (row: any) => ARMS.map(a => `${a}=${row.raw.arms[a].state}`).join(" ") };
+      if (v.lessons) {
+        try { lessons = loadLessons(folder, cases); } catch (e) { fail((e as Error).message); }
+        if (lessons!.akm_version !== version) fail(`the lessons were built with akm ${lessons!.akm_version} and this run uses ${version}: the lessons condition is pinned to the build that wrote them. Rebuild with build-lessons or use that build.`);
+        if (lessons!.model !== model.name) console.log(`note: the lessons were written by ${lessons!.model}; this run's reader is ${model.name}.`);
+      }
+      const oc: Options = { ...o, ...(lessons ? { lessons } : {}) };
+      plan = { cases, pending: (c, i) => pending(c as Case, i, o.seed), collect: (c, raw, checkpoint) => collect(c as Case, raw, oc, checkpoint), row: (c, raw) => makeRow(c as Case, raw),
+        header: `memory-utility (${corpusName}) | ${cases.length} cases × 3 arms${lessons ? " (third arm: notes + distill lessons)" : ""} | ${model.name} | AKM ${version} | ${o.semantic ? "semantic" : "keyword"} | ${o.contextTokens} estimated context tokens | one sequential case at a time`,
+        evalSettings: { context_tokens_estimated: o.contextTokens, treatment: lessons ? "lessons" : "inference", ...(lessons ? { lessons_outputs_sha256: lessons.outputs_sha256, lessons_akm_version: lessons.akm_version, lessons_model: lessons.model } : {}) }, summaryExtra: lessons ? { treatment: "lessons" } : {}, progress: (row: any) => ARMS.map(a => `${a}=${row.raw.arms[a].state}`).join(" ") };
     }
     const cases = plan.cases, selected = cases.map(c => c.id), digests = caseDigests(MEASUREMENT, cases);
     const evalSettings = { ...plan.evalSettings, search_limit: o.searchLimit, search_mode: o.semantic ? "semantic" : "keyword", reader_settings_sha256: sha256Json(readerSettings(model.chat)), reader_endpoint_sha256: endpointDigest(model.baseUrl), embedding_settings_sha256: sha256Json(redactConfig(config.embedding ?? null)), embedding_endpoint_sha256: endpointDigest(config.embedding?.endpoint), embedding_model: config.embedding?.model ?? config.embedding?.localModel ?? null, prompt_sha256: sha256Json(lme ? READER_INSTRUCTION : PROMPT), corpus_input_sha256: sha256Json(Object.fromEntries(Object.entries(digests).map(([id, d]) => [id, d.input_sha256]))), corpus_labels_sha256: sha256Json(Object.fromEntries(Object.entries(digests).map(([id, d]) => [id, d.label_sha256]))), ordering: "six counterbalanced permutations; seed offsets case ordinal" };
@@ -175,7 +186,7 @@ async function main() {
       akm: { version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
       engines: { ...engineSettings(config).engines, reader: { model: model.name, endpoint: "<MODEL_BASE_URL>", endpoint_sha256: endpointDigest(model.baseUrl), temperature: readerSettings(model.chat).temperature, enableThinking: null, timeoutMs: o.timeoutMs },
         ...(judge ? { judge: { model: judge.name, endpoint: "<MODEL_BASE_URL>", endpoint_sha256: endpointDigest(judge.baseUrl), temperature: judge.chat?.temperature ?? 0, enableThinking: null, timeoutMs: 900_000, ...(judge.chat ? { chat: judge.chat } : {}) } } : {}) },
-      settings: { strategy: "bakeoff-memory-inference", config_patch_sha256: o.overrides.configPatch?.sha256 ?? null, timeout_ms: o.timeoutMs, seed: o.seed }, eval_settings: evalSettings, completion });
+      settings: { strategy: lessons ? "lessons-fixture" : "bakeoff-memory-inference", config_patch_sha256: o.overrides.configPatch?.sha256 ?? null, timeout_ms: o.timeoutMs, seed: o.seed }, eval_settings: evalSettings, completion });
     const { kept, retried } = v.resume === undefined ? { kept: new Map<string, any>(), retried: new Set<string>() } : resumableRaws(resolve(v.resume), manifestOf({ selected, scored: [], errored: [] }));
     await repeatRuns(v.repeat ? positive(v.repeat, 1, "--repeat") : undefined, baseLabel, async label => {
       const resultParent = corpusName === "public" ? join(REPO_ROOT, "evals/memory-utility/results") : join(REPO_ROOT, "private/memory-utility/results");
@@ -194,7 +205,7 @@ async function main() {
           git_commit: collectorCommit, collector_fingerprint: collectorFingerprint, model: model.name, akm_version: version, ...build, config_form: writtenConfigForm(),
           limit: v.limit ? Number(v.limit) : null, seed: o.seed, timeout_ms: o.timeoutMs, search_mode: evalSettings.search_mode, config: redactConfig(config), reader_settings: readerSettings(model.chat),
           assets_sha256: sha256Json(digests), status, aborted_reason: abortedReason, wall_seconds: (performance.now() - start) / 1000, resumed: v.resume !== undefined, ...plan.summaryExtra,
-          ...MEASUREMENT.summarize(rows), manifest: manifestOf({ selected, scored: rows.filter(r => !MEASUREMENT.errored(r) && !MEASUREMENT.unfinished?.(r)).map(r => r.id), errored: rows.filter(r => MEASUREMENT.errored(r)).map(r => r.id) }) };
+          ...MEASUREMENT.summarize(rows), ...(lessons ? { lessons: lessonsVerdict(MEASUREMENT.summarize(rows), rows as Row[], lessons) } : {}), manifest: manifestOf({ selected, scored: rows.filter(r => !MEASUREMENT.errored(r) && !MEASUREMENT.unfinished?.(r)).map(r => r.id), errored: rows.filter(r => MEASUREMENT.errored(r)).map(r => r.id) }) };
         // The 24 public cases keep a row per case from the start. The LongMemEval rows are large, so they are written as each case ends and all together at the end.
         if (!lme || final) writeRows();
         writeFileSync(join(dir, "summary.json.tmp"), JSON.stringify(redactActors(summary), null, 2) + "\n");
@@ -221,6 +232,7 @@ async function main() {
       finally { process.off("SIGINT", interrupt); process.off("SIGTERM", terminate); clearRunning(dir); }
       const result = save(true); console.log(`Results: ${dir}`);
       if (lme) printLme(result as any);
+      if (lessons) { const l = (result as any).lessons; console.log(`lessons - source: ${points(l.difference)} pp [${l.ci95 ? `${points(l.ci95[0])}, ${points(l.ci95[1])}` : "n/a"}] p=${l.p_value ?? "n/a"} | tokens per correct: source ${l.tokens_per_correct.source ?? "n/a"}, lessons ${l.tokens_per_correct.lessons ?? "n/a"} | verdict: ${l.verdict}`); }
       return result;
     });
   }

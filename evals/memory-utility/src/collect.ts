@@ -10,6 +10,7 @@ import { sha256Json } from "../../../lib/provenance.ts";
 import type { Case } from "./inputs.ts";
 import { ARMS, armOrder, pack, promptFor, sourceFiles, READER_DEFAULTS, type ArmName, type Document } from "./protocol.ts";
 import type { Raw, RawArm } from "./score.ts";
+import type { LessonsFixture } from "./lessons.ts";
 
 export interface Options {
   endpoint: Endpoint;
@@ -20,6 +21,8 @@ export interface Options {
   searchLimit: number;
   timeoutMs: number;
   seed: string;
+  /** The lessons condition: the third arm reads the notes plus these distill lessons (a fixture) instead of native inference output. */
+  lessons?: LessonsFixture;
 }
 export function configFor(o: Options): Record<string, any> {
   const config = patchedConfig(bakeoffConfig(o.endpoint.baseUrl, o.endpoint.model, !!o.endpoint.apiKey, o.provider), o.overrides);
@@ -33,7 +36,7 @@ export function configFor(o: Options): Record<string, any> {
 }
 export function place(s: Sandbox, files: Record<string, string>): void {
   for (const [file, text] of Object.entries(files)) {
-    if (!/^memories\/[a-zA-Z0-9._-]+\.md$/.test(file)) throw new Error(`unexpected memory path: ${file}`);
+    if (!/^(memories|lessons)\/[a-zA-Z0-9._-]+\.md$/.test(file)) throw new Error(`unexpected memory path: ${file}`);
     const path = join(s.dir, "bundle", file);
     mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text);
   }
@@ -110,6 +113,15 @@ export async function runInference(raw: Pick<Raw, "source" | "post_inference" | 
     try { checkpoint(); } finally { removeSandbox(generator); }
   }
 }
+/** The lessons condition: no inference. The third arm's library is the source notes plus the case's fixture lessons, which akm's distill wrote earlier. */
+export function useLessons(raw: Pick<Raw, "source" | "post_inference" | "inference">, id: string, f: LessonsFixture, checkpoint: () => void = () => {}): void {
+  const files = f.cases[id]?.files;
+  if (!files) throw new Error(`no lessons entry for case ${id}`);
+  raw.post_inference = { ...raw.source, ...files };
+  raw.inference.outcome = Object.keys(files).length ? "output" : "no-change";
+  raw.inference.report = { lessons_fixture: { outputs_sha256: f.outputs_sha256, akm_version: f.akm_version, files: Object.keys(files) } };
+  checkpoint();
+}
 /**
  * Search the question in the indexed sandbox and `akm show` each hit, in rank order. Search and show must not change the corpus, and in
  * semantic mode the search must have been semantic. `arm.search` keeps akm's answer with the sandbox folder written as <sandbox>.
@@ -133,7 +145,7 @@ export async function retrieve(s: Sandbox, question: string, o: Options, arm: { 
 /** Persist after each phase/arm. All future-question labels stay in the caller, never in the inference sandbox. */
 export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => void = () => {}): Promise<Raw> {
   const config = configFor(o);
-  await runInference(raw, config, o, checkpoint);
+  if (o.lessons) useLessons(raw, c.id, o.lessons, checkpoint); else await runInference(raw, config, o, checkpoint);
   for (const name of raw.order) {
     const arm = raw.arms[name];
     if (name === "inferred" && raw.inference.outcome === "error") {

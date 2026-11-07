@@ -19,6 +19,8 @@ not isolate child files alone. The controls have the same output schema, tools
 
 ## Run
 
+(The lessons condition, `--lessons`, has its own section below.)
+
 Use the repository's [Docker/native setup](../../README.md). The reader and
 native inference use `--model`/`models.json`/`.env`; the reader uses Chat
 Completions directly while AKM uses its native engine and prompts. They have
@@ -163,6 +165,40 @@ not a model a server knows; the summary records its `model`. The reader and the 
 their `models.json` lines (see the [repository README](../../README.md)). Native inference sends the `bakeoff` engine's thinking-off
 setting, which some servers ignore (LM Studio does); there, pass a `--config-patch` file holding
 `{ "engines": { "bakeoff": { "reasoningEffort": "none" } } }`. Its digest is in the manifest, so `--resume` needs the same file.
+
+## The lessons condition (`--lessons`, akm#1405 D4)
+
+Does `akm improve`'s distill earn its place? The question is whether a lesson that distill wrote from the notes helps the reader answer a later
+question, beyond the notes themselves. `--lessons` replaces the third arm (`inferred` in the saved files, so compare and the ledger read it
+unchanged) with the **source notes plus the lessons distill wrote from them**; `none` and `source` are as before and no native inference runs.
+
+| Arm | Library the reader searches |
+|---|---|
+| `none` | no memory |
+| `source` | the original notes |
+| `inferred` (here: lessons) | the original notes **and** distill's pending lessons, as `lessons/<name>.md` |
+
+**Why alongside, not instead.** Distill never removes a note: a lesson is queued for review and, accepted, sits next to the memory. So
+"distill on" is notes + lessons and "distill off" is the notes, and `lessons - source` is exactly what turning distill off costs or saves. A
+lessons-only arm would test a library nobody has, and would mix the lessons' value with losing the notes. The arm shares one fixed token budget
+with the notes, so a lesson that crowds out a note shows up as a loss, and the second pass-rule leg (tokens per correct answer) charges its size.
+
+**The fixtures come from akm's own distill, once.** `evals/memory-utility/build-lessons --model ID [--akm CMD]` puts each case's notes in a
+sandbox and runs `akm improve memories/<note> --strategy distill-only` on each note, as the distill eval does (the model under test is the
+engine; temperature 0, thinking off). The **pending** lessons are written to `assets/lessons.json`; accepted nothing, hand-written nothing. A
+note that distill refused to write a lesson for gets none (the case's `notes` says `none` or `rejected`), and a failed distill command stops the
+build. The file holds the akm version and model that wrote it, a digest of each case's notes and a digest of its own outputs. A run refuses
+the fixture when the outputs digest does not match (edited), when a case's notes changed, or when the run's akm version differs from the one
+that wrote the lessons; the digests are in the run's manifest (`lessons_outputs_sha256`, `lessons_akm_version`, `lessons_model`), so the
+run is reproducible from the committed file. `--config-patch` and `--semantic` apply to the answer libraries as in any run.
+
+**Pass rule, written before any run.** Primary metric: failure-inclusive exact accuracy over all 24 cases, `lessons - source` (paired, exact
+McNemar test, Fay-Lumbard 95% interval). Lessons are **earned** when the interval is above 0 **and** the reader's prompt tokens per correct
+answer with lessons are not higher than with the notes alone. They are **harmful** when the interval is below 0; anything else is **not
+shown**; a run with errored or unfinished cases is **incomplete**. The verdict, the interval, the tokens per correct answer and the number of
+cases that have any lesson are `summary.json` `lessons`. Read it with these limits: 24 cases is a small sample (a difference of a few cases
+leaves the interval around 0), a case with no lesson ties by construction (the reader still answers twice at temperature 0, so a model server
+that is not deterministic adds noise to those ties), and the lessons come from the same model that reads them.
 
 ## What is collected
 
