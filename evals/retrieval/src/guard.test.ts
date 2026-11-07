@@ -150,6 +150,7 @@ describe("the sentinel guard on rows", () => {
   test("a build that refuses the flag: the call is unsupported, not an errored call, and a semantic column does not abort the run", () => {
     expect(isUnknownFlag(REFUSED)).toBe(true);
     expect(isUnknownFlag("akm search exited 70: boom")).toBe(false);
+    expect(isUnknownFlag('akm search exited 2: {"code":"INVALID_FLAG_VALUE","error":"Unknown scope key \\"team\\" in --filter"}')).toBe(true);
     const raw: Raw = { search: answer([], REFUSED), curate: answer([NEW, OLD]), semantic_search: answer([], REFUSED), semantic_curate: answer([NEW, OLD]) };
     const row = makeRow(FILTER, raw);
     expect(row.search).toMatchObject({ unsupported: true, error: REFUSED });

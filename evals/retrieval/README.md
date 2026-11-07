@@ -55,7 +55,7 @@ Two separate, optional sets for selecting on frontmatter (akm#1437, akm#1412): m
 
 ```
 evals/retrieval/split /tmp/selection-split              # not in a gitignored folder: akm indexes no ignored file
-evals/retrieval/run --cases /tmp/selection-split        # today's hard filter: --filter channel=publishing
+evals/retrieval/run --cases /tmp/selection-split        # today's hard filter: --filter team=publishing
 evals/retrieval/run --cases /tmp/selection-split --selection-flag prefer --akm "bun ~/code/akm-wt/src/cli.ts"
 ```
 
@@ -84,7 +84,7 @@ A candidate wins at about equal tokens when, against the no-selection and hard-f
 4. `out_tokens` and `load_tokens_k` stay within 5% of the baseline's; a candidate that wins by returning fewer results or more fails;
 5. between ties, the option with less machinery wins.
 
-Keys are the frontmatter keys `team` and `project`, selected as `team` and `project` (needs an akm with #1453). Several values of one key need an akm with #1448 (a match is either); before it a repeated key keeps its last value, so the `both` and `multi-value` queries are meaningful only there.
+Keys are the frontmatter keys `team` and `project`, selected as `team` and `project` (needs an akm with #1453).
 
 ## Refs
 
