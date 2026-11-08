@@ -47,8 +47,8 @@ const inputOf = (c: Case, library?: unknown): unknown => ({ query: c.query, libr
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.5",
-  scoringVersion: "0.7",
+  version: "0.6",
+  scoringVersion: "0.8",
   loadCases: (root, summary) => {
     const folder = setFolder(root, summary);
     const cases = casesOf(parseQueries(readFileSync(join(folder, "queries.jsonl"), "utf8"), join(folder, "queries.jsonl")), parseQrels(readFileSync(join(folder, "qrels.jsonl"), "utf8"), join(folder, "qrels.jsonl")), readMetadata(folder));

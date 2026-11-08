@@ -127,7 +127,7 @@ export function parseQrels(text: string, where = "qrels"): Qrel[] {
   });
 }
 
-/** Explicit same-file identities recorded by the label author; no ref aliases are inferred. */
+/** Explicit identities recorded by the label author (the same file under two refs, or a memory and its `.derived` twin, which akm returns as one result); no ref aliases are inferred. */
 export const aliasesOf = (qrels: Qrel[]): Record<string, string> => Object.fromEntries(qrels.filter(r => r.alias_of !== undefined).map(r => [r.ref, r.alias_of as string]));
 
 /** Query id to the refs it bans. */
@@ -182,13 +182,14 @@ export function mixedJudgesWarning(qrels: Qrel[], where = "qrels.jsonl"): string
   return `${where} holds grades from ${what}${unrecorded > 0 ? `, and ${unrecorded} rows that record no judge` : ""}. Grades of different judges or prompts do not mix cleanly: compare only runs on the same qrels, and grade the set again with one judge before you trust a difference.`;
 }
 
-/** Query id to ref to grade. A pair that appears twice keeps its last grade. */
+/** Query id to ref to grade. A pair that appears twice keeps its last grade; refs that share an alias (a memory and its `.derived` twin) are one asset and take the highest grade of their pairs. */
 export function gradesByQuery(qrels: Qrel[]): Map<string, Record<string, number>> {
   const aliases = aliasesOf(qrels);
   const by = new Map<string, Record<string, number>>();
-  for (const r of qrels) {
+  for (const r of lastRows(qrels)) {
     const grades = by.get(r.id) ?? {};
-    grades[aliases[r.ref] ?? r.ref] = r.grade;
+    const key = aliases[r.ref] ?? r.ref;
+    grades[key] = Math.max(grades[key] ?? r.grade, r.grade);
     by.set(r.id, grades);
   }
   return by;
