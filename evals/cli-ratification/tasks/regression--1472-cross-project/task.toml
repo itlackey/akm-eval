@@ -1,9 +1,9 @@
 schema_version = "1.4"
 
 [task]
-name = "akm-eval/regression--1472-selection"
+name = "akm-eval/regression--1472-cross-project"
 version = "1.0.0"
-description = "akm#1472: the project selection akm reports for a lookup that overrides the directory's project"
+description = "akm#1472 route: a lookup for the other project from this project's directory"
 authors = []
 keywords = []
 
@@ -25,4 +25,4 @@ timeout_sec = 720.0
 workdir = "/work/orchid"
 
 [environment.env]
-AKM_TASK_STASH = "regression--1472-selection"
+AKM_TASK_STASH = "regression--1472-cross-project"

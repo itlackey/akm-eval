@@ -130,3 +130,9 @@ def test_the_prompt_template_is_harbors_own_and_wraps_the_task_card(tmp_path):
     template.write_text("WRAPPER\n\n{{ instruction }}")
     agent = make(tmp_path, prompt_template_path=str(template))
     assert agent.render_instruction("the card") == "WRAPPER\n\nthe card"
+
+
+def test_web_tools_can_be_denied_with_harbors_own_option(tmp_path):
+    agent = make(tmp_path, disable_web_search=True)
+    command = agent._build_register_config_command()
+    assert "webfetch" in command and "plugin" not in command

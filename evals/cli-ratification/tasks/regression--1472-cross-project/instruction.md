@@ -1,0 +1,1 @@
+You are working in /work/orchid, but this request is for the Quill project. Find Quill's release tag prefix for the gantry service, looking only at notes marked for Quill, and write it to tag.txt. Leave the existing files intact. In REPORT.md, say how you made the lookup.

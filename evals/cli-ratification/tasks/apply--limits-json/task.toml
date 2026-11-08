@@ -12,7 +12,7 @@ family = "apply"
 project = "orchid"
 # Values that must appear in the output of an akm call, before the answer is written, for the answer to be AKM-mediated; and patterns of
 # akm commands, one of which must have run. The trace is read on the host (src/trace.ts); the agent never sees this file.
-evidence = ["250m", "512Mi", "89"]
+evidence = ["250m", "512Mi", "885"]
 commands = []
 
 [verifier]

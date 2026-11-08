@@ -67,7 +67,7 @@ export function jobConfig(o: { name: string; model: string | null; modelLimits?:
       const { model_name: _model, ...agent } = akm;
       return { ...agent, import_path: "akm_cli:AkmCli", kwargs: { ...bare, arm: label, projects: PROJECTS, script: spec.script } };
     }
-    return { ...akm, import_path: "akm_cli:AkmCli", kwargs: { ...kwargs, arm: label, projects: PROJECTS, prompt_template_path: join(o.promptsDir, spec.prompt.replace(/^prompts\//, "")) } };
+    return { ...akm, import_path: "akm_cli:AkmCli", kwargs: { ...kwargs, arm: label, projects: PROJECTS, disable_web_search: true, prompt_template_path: join(o.promptsDir, spec.prompt.replace(/^prompts\//, "")) } };
   });
   return { ...job, agents };
 }

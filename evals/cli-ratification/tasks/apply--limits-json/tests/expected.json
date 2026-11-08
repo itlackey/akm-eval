@@ -10,7 +10,7 @@
       "exact": {
         "cpu": "250m",
         "memory": "512Mi",
-        "timeout_secs": 89
+        "timeout_secs": 885
       }
     },
     {
@@ -28,10 +28,11 @@
         "app/tallow.conf": "500d66474e5a26b77bdbc80a7556e1766f598e3a220d93d9732eb86e97f2da17"
       },
       "bundle": {
-        "knowledge/limits-04ab.md": "85450ed9389c10a659241be9660364023ef5736627b96b5f8209824eda2d3861",
-        "knowledge/limits-1a2c.md": "4c4453d2a91415c46fa4b2a3103ef45683399a7775394a20c6144a5797baa653",
+        "knowledge/limits-04ab.md": "4648b86644c2f19125812d7c0efc72b16d5d3432f41b3c5d4bb3375d54fcb31c",
+        "knowledge/limits-1a2c.md": "dc6dd30730c4c76789fb183fac5f2c885a3718229ae7fbe75401bd75f48d0e38",
         "knowledge/limits-file-format-981e.md": "d2209d3f9d65d4487acd4fddbc03d3247c7af149362e6d26c7ab6a2cd5a96fe1"
-      }
+      },
+      "bodies": {}
     }
   ]
 }

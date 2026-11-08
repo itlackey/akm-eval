@@ -212,8 +212,8 @@ describe("reading a Harbor job folder", () => {
   test("refuses a trial of some other agent", () => {
     const dir = job({ x__1: { result: result("oracle") }, y__1: { result: result("akm-opencode-") } });
     try {
-      expect(() => readTrial(join(dir, "x__1"), "x__1")).toThrow("neither opencode nor akm-opencode");
-      expect(() => readTrial(join(dir, "y__1"), "y__1")).toThrow("neither opencode nor akm-opencode");
+      expect(() => readTrial(join(dir, "x__1"), "x__1")).toThrow("neither opencode, akm-opencode nor akm-cli");
+      expect(() => readTrial(join(dir, "y__1"), "y__1")).toThrow("neither opencode, akm-opencode nor akm-cli");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

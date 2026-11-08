@@ -107,7 +107,7 @@ export function readTrial(dir: string, trial: string): Trial | null {
   const r = JSON.parse(readFileSync(file, "utf8"));
   const agent: unknown = r.agent_info?.name;
   const arm: Arm | null = agent === "akm-opencode" || agent === "akm-cli" || (typeof agent === "string" && /^akm-(opencode|cli)-[a-z0-9-]+$/.test(agent)) ? "akm" : agent === "opencode" ? "control" : null;
-  if (arm === null) throw new Error(`${file} is a trial of agent ${JSON.stringify(agent)}, which is neither opencode nor akm-opencode`);
+  if (arm === null) throw new Error(`${file} is a trial of agent ${JSON.stringify(agent)}, which is neither opencode, akm-opencode nor akm-cli`);
   const streamFile = join(dir, "agent", "opencode.txt");
   const stream = existsSync(streamFile) ? readFileSync(streamFile, "utf8") : null;
   const calls = stream === null ? null : toolCalls(stream, arm === "akm");

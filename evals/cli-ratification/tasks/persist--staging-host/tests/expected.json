@@ -24,9 +24,10 @@
       "workspace": {
         "README.md": "a0cbfc16242319fe08f39a8f8cb0acd6d87af9f970f4d7f5b1d67fdec264554a"
       },
-      "bundle": {
-        "memories/staging-host-82a6.md": "4261bd9ea2fbd2bed1dad1d1f8968e9cde6aa43de6387e72ac053e1536eb482a",
-        "memories/staging-host-447f.md": "9b83eeb9c9118519e69ea3fc138a18e8584df070b7ff6bced535af5dde17a838"
+      "bundle": {},
+      "bodies": {
+        "memories/staging-host-82a6.md": "72318251e56feec05d283455b0f7831891e5583ba1d300fac9d668de29d26668",
+        "memories/staging-host-447f.md": "67e87f53a64e319308cdf68a3d3ca50ed9589b1b578a28a623e8f8532296f629"
       }
     }
   ]

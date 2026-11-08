@@ -24,7 +24,8 @@
       },
       "bundle": {
         "workflows/pannier-release.md": "68f45d0cb212a0cf1cca706f5c2da464d14abb054e6745b6e8bb8fd807e171c8"
-      }
+      },
+      "bodies": {}
     }
   ]
 }

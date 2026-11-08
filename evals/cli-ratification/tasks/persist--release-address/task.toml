@@ -13,7 +13,7 @@ project = "orchid"
 # Values that must appear in the output of an akm call, before the answer is written, for the answer to be AKM-mediated; and patterns of
 # akm commands, one of which must have run. The trace is read on the host (src/trace.ts); the agent never sees this file.
 evidence = []
-commands = ["akm\\s+(remember|import|index)"]
+commands = ["akm\\s+(remember|import|index|clone|proposal)"]
 
 [verifier]
 timeout_sec = 300.0

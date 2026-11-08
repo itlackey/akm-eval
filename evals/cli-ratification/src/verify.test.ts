@@ -105,7 +105,6 @@ function solve(box: Box): void {
     if (c.type === "json-file") box.write(c.file, `${JSON.stringify(c.exact)}\n`);
     if (c.type === "lines-file") box.write(c.file, `${c.lines.join("\n")}\n`);
     if (c.type === "text-file") box.write(c.file, `${c.text}\n`);
-    if (c.type === "selection-file") box.write(c.file, JSON.stringify({ name: c.project, path: `/work/${c.project}`, prefer: { project: c.project } }));
     if (c.type === "jsonl-file") box.write(c.file, `${c.refs.map((ref: string) => JSON.stringify({ ref, content: "x" })).join("\n")}\n`);
     if (c.type === "persisted") {
       const rel = `memories/decision-${card.id.split("--")[1]}.md`;
@@ -245,12 +244,30 @@ describe("the other families' failing cases", () => {
     expect(attempt(id, (b) => b.state.runs.push({ ...b.state.runs[0], id: "run-2" })).reward).toBe(0);
   });
 
-  test("regression: the selection akm printed for the configured project, and a pretty-printed array for JSON Lines", () => {
-    expect(attempt("regression--1472-selection", (b) => b.write("selection.json", JSON.stringify({ name: "orchid", prefer: { project: "orchid" } }))).reward).toBe(0);
-    expect(attempt("regression--1472-selection", (b) => b.write("selection.json", JSON.stringify({ name: "orchid", filters: { project: ["quill"] } }))).reward).toBe(1);
+  test("regression: a cross-project answer with the other project's prefix, and a pretty-printed array for JSON Lines", () => {
+    const c = card("regression--1472-cross-project").checks[0] as any;
+    expect(attempt("regression--1472-cross-project", (b) => b.write("tag.txt", "wrong-\n")).reward).toBe(0);
+    const other = (card("regression--1472-cross-project").checks[1] as any).tokens[0];
+    expect(attempt("regression--1472-cross-project", (b) => b.write("tag.txt", `${other}\n`)).reward).toBe(0);
+    expect(attempt("regression--1472-cross-project", () => {}).reward).toBe(1);
+    expect(c.text).toMatch(/-$/);
     const array = attempt("regression--1473-pack", (b) => b.write("context.jsonl", JSON.stringify([{ ref: "memories/x", content: "x" }], null, 2)));
     expect(array.checks["1-jsonl-file:context.jsonl"].detail).toContain("not a JSON value on its own");
     expect(attempt("regression--1473-pack", (b) => b.write("context.jsonl", `${JSON.stringify({ ref: "memories/other", content: "x" })}\n`)).reward).toBe(0);
+  });
+
+  test("persist: recording the decision with `remember --supersedes` edits the old note's metadata and still passes; changing its text does not", () => {
+    for (const id of ["persist--staging-host", "persist--canary-share", "persist--release-address"]) {
+      const old = Object.keys(card(id).library).find((p) => p.startsWith("memories/") && !p.startsWith("memories/decision")) as string;
+      const demote = (b: Box) => put(join(b.bundle, old), readFileSync(join(b.bundle, old), "utf8").replace("---\n", "---\nbeliefState: superseded\nsupersededBy: memories/decision\n"));
+      const ok = attempt(id, demote);
+      expect(failed(ok)).toEqual([]);
+      expect(ok.reward).toBe(1);
+      const edited = attempt(id, (b) => put(join(b.bundle, old), `${readFileSync(join(b.bundle, old), "utf8")}Also: changed.\n`));
+      expect(failed(edited)).toEqual(["preserved"]);
+      expect(edited.checks[Object.keys(edited.checks).find((k) => k.endsWith("preserved")) as string].detail).toContain("the text changed");
+      expect(failed(attempt(id, (b) => rmIf(join(b.bundle, old))))).toContain("preserved");
+    }
   });
 });
 

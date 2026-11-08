@@ -24,9 +24,10 @@
       "workspace": {
         "README.md": "09edf64012e75fc2222447f4909e67d6ba914c2ce634513e6f4f162b80e2ba67"
       },
-      "bundle": {
-        "memories/canary-share-f56e.md": "6d8ba55771c05ae0972cc18a7503769c342e1a7434247a96842b57e57923748c",
-        "memories/canary-share-a276.md": "75a04c79f60eef8ed04ae5954fcdb96e6d64908a7e21580b94cb61b316ca14a2"
+      "bundle": {},
+      "bodies": {
+        "memories/canary-share-f56e.md": "0ff78f0d02aef97fed0bbd7c874ee486677678ca1ddd90f8dc351c6043027a5f",
+        "memories/canary-share-a276.md": "0ff78f0d02aef97fed0bbd7c874ee486677678ca1ddd90f8dc351c6043027a5f"
       }
     }
   ]

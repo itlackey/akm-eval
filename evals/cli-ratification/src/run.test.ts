@@ -28,7 +28,7 @@ describe("the cards", () => {
   const cards = CARDS();
 
   test("fourteen: three in each of the first four families, and the two regression cards", () => {
-    expect(cards.map((c) => c.id)).toEqual(["apply--service-json", "apply--deploy-env", "apply--limits-json", "persist--canary-share", "persist--staging-host", "persist--release-address", "repair--stale-index", "repair--excluded-type", "repair--project-filter", "resume--release-3", "resume--release-4", "resume--release-last", "regression--1472-selection", "regression--1473-pack"]);
+    expect(cards.map((c) => c.id)).toEqual(["apply--service-json", "apply--deploy-env", "apply--limits-json", "persist--canary-share", "persist--staging-host", "persist--release-address", "repair--stale-index", "repair--excluded-type", "repair--project-filter", "resume--release-3", "resume--release-4", "resume--release-last", "regression--1472-cross-project", "regression--1473-pack"]);
     const count = (f: string) => cards.filter((c) => c.family === f).length;
     expect([count("apply"), count("persist"), count("repair"), count("resume"), count("regression")]).toEqual([3, 3, 3, 3, 2]);
     expect(new Set(cards.map((c) => c.project))).toEqual(new Set(["orchid", "quill"]));
@@ -161,6 +161,7 @@ describe("the Harbor job", () => {
       expect(a.kwargs.akm_cli_version).toBe("0.10.261111-beta");
       expect(Object.keys(a.kwargs).filter((k) => /plugin/i.test(k))).toEqual([]);
       expect(a.kwargs.script).toBeUndefined();
+      expect(a.kwargs.disable_web_search).toBe(true); // opencode's webfetch and websearch are off
       expect(a.kwargs.opencode_config.plugin).toBeUndefined();
     }
     expect(j.agents[0].kwargs.prompt_template_path).toBe(join(EVAL_DIR, "prompts", "minimal.md"));

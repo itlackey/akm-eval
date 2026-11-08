@@ -31,6 +31,7 @@ export const settings = (root = process.env.VERIFY_ROOT ?? "", cmd = process.env
 };
 
 const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+const sha256Text = (text) => createHash("sha256").update(text).digest("hex");
 const read = (file) => (existsSync(file) ? readFileSync(file, "utf8") : null);
 const word = (token) => new RegExp(`(?<![\\w-])${String(token).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`, "i");
 
@@ -128,7 +129,7 @@ const CHECKS = {
     return found.length ? bad(`${c.file} holds ${JSON.stringify(found)}`) : ok();
   },
 
-  /** The files the task gave, still as they were: the workspace's and the bundle's. */
+  /** The files the task gave, still as they were: the workspace's and the bundle's. `bodies` are notes whose text must stay but whose metadata may change (a correction demotes the note it supersedes). */
   preserved(c, ctx) {
     const problems = [];
     for (const [rel, sum] of Object.entries(c.workspace ?? {})) {
@@ -140,6 +141,11 @@ const CHECKS = {
       const f = join(ctx.bundle, rel);
       if (!existsSync(f)) problems.push(`bundle ${rel} is gone`);
       else if (sha256(f) !== sum) problems.push(`bundle ${rel} changed (sha256 ${sha256(f).slice(0, 12)}, wanted ${sum.slice(0, 12)})`);
+    }
+    for (const [rel, sum] of Object.entries(c.bodies ?? {})) {
+      const f = join(ctx.bundle, rel);
+      if (!existsSync(f)) problems.push(`bundle ${rel} is gone`);
+      else if (sha256Text(readFileSync(f, "utf8").replace(/^---\n[\s\S]*?\n---\n/, "")) !== sum) problems.push(`bundle ${rel}: the text changed`);
     }
     return problems.length ? bad(problems.join("; ")) : ok();
   },
@@ -222,22 +228,6 @@ const CHECKS = {
     if (missing.length) return bad(`${c.file} lacks ${JSON.stringify(missing)}`);
     if (c.max_chars && text.length > c.max_chars) return bad(`${c.file} is ${text.length} characters, over ${c.max_chars}`);
     return ok();
-  },
-
-  /** The project selection akm printed for the lookup, as the agent copied it: it names the project the lookup was for. */
-  "selection-file"(c, ctx) {
-    const text = read(join(ctx.workdir, c.file));
-    if (text === null) return bad(`${c.file} is missing`);
-    let sel;
-    try {
-      sel = JSON.parse(text);
-    } catch (e) {
-      return bad(`${c.file} is not JSON: ${e.message}`);
-    }
-    const filters = sel?.filters?.project;
-    const named = sel?.name === c.project;
-    const filtered = (Array.isArray(filters) ? filters : [filters]).includes(c.project);
-    return named || filtered ? ok() : bad(`${c.file} shows name ${JSON.stringify(sel?.name)}, filters ${JSON.stringify(sel?.filters ?? null)}, prefer ${JSON.stringify(sel?.prefer ?? null)}: not ${c.project}`);
   },
 };
 

@@ -1,5 +1,5 @@
 {
-  "card": "regression--1472-selection",
+  "card": "regression--1472-cross-project",
   "family": "regression",
   "project": "orchid",
   "workdir": "/work/orchid",
@@ -10,9 +10,11 @@
       "text": "swift-"
     },
     {
-      "type": "selection-file",
-      "file": "selection.json",
-      "project": "quill"
+      "type": "absent",
+      "file": "tag.txt",
+      "tokens": [
+        "kestrel-"
+      ]
     },
     {
       "type": "preserved",
@@ -22,7 +24,8 @@
       "bundle": {
         "memories/tag-prefix-96fd.md": "1821566ad1664f61fe05a87ffafeee8c4047653da5aa97634c92efb92a8f8600",
         "memories/tag-prefix-93a7.md": "83ee1989b40e92ab1dc45211cfca4f83b9ba896eb2b1726cd55428b8a2b51774"
-      }
+      },
+      "bodies": {}
     }
   ]
 }

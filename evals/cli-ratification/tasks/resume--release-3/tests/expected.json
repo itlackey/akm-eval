@@ -24,7 +24,8 @@
       },
       "bundle": {
         "workflows/sconce-release.md": "6e02a02e897d1271d993d56a8778e46bf26162b38cf8e17284c982dd7abf8c27"
-      }
+      },
+      "bodies": {}
     }
   ]
 }

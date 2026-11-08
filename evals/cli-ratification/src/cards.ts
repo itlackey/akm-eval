@@ -155,7 +155,7 @@ function applyServiceJson(): Card {
 function applyDeployEnv(): Card {
   const d = new Draw("apply-deploy-env");
   const s = d.pick(SERVICES);
-  const [no, nq] = [d.int(2, 5), d.int(6, 9)];
+  const [no, nq] = [d.int(120, 199), d.int(200, 299)];
   const win = () => `${String(d.int(0, 5)).padStart(2, "0")}:${d.pick(["00", "15", "30", "45"])}`;
   const [wo, wq] = [win(), win()];
   const channel = `#ops-${d.pick(WORDS)}`;
@@ -185,7 +185,7 @@ function applyDeployEnv(): Card {
 function applyLimitsJson(): Card {
   const d = new Draw("apply-limits-json");
   const s = d.pick(SERVICES);
-  const lim = () => ({ cpu: `${d.pick([250, 500, 750, 1000, 1500])}m`, memory: `${d.pick([128, 256, 512, 1024, 2048])}Mi`, timeout_secs: d.int(10, 90) });
+  const lim = () => ({ cpu: `${d.pick([250, 500, 750, 1000, 1500])}m`, memory: `${d.pick([128, 256, 512, 1024, 2048])}Mi`, timeout_secs: d.int(100, 900) });
   const [lo, lq] = [lim(), lim()];
   const [h1, h2, h3] = [d.hex(), d.hex(), d.hex()];
   const doc = (l: ReturnType<typeof lim>) => `Resource limits of the ${s} service.\n\nIts CPU is capped at ${l.cpu}. Its memory is capped at ${l.memory}. A request that runs longer than ${l.timeout_secs} seconds is cut off.`;
@@ -221,7 +221,7 @@ function persistCard(o: { id: string; project: "orchid" | "quill"; seed: string;
   const [h1, h2] = [d.hex(), d.hex()];
   const library = files(
     note({ name: `${o.topic.replace(/ /g, "-")}-${h1}`, description: `${o.topic} of the ${s} service`, project: o.project, body: o.stale(s, d) }),
-    note({ name: `${o.topic.replace(/ /g, "-")}-${h2}`, description: `${o.topic} of the ${d.pick(SERVICES)} service`, project: o.project === "orchid" ? "quill" : "orchid", body: o.stale(s, d) }),
+    note({ name: `${o.topic.replace(/ /g, "-")}-${h2}`, description: `${o.topic} of the ${s} service`, project: o.project === "orchid" ? "quill" : "orchid", body: o.stale(s, d) }),
   );
   const query = `${s} ${o.topic}`;
   const card: Card = {
@@ -231,11 +231,11 @@ function persistCard(o: { id: string; project: "orchid" | "quill"; seed: string;
     workspace: files(["README.md", READMEs(o.project, s)]),
     library, planted: {},
     checks: [],
-    evidence: [], commands: ["akm\\s+(remember|import|index)"],
+    evidence: [], commands: ["akm\\s+(remember|import|index|clone|proposal)"],
     solve: "",
   };
   card.checks = persistChecks(o.project, value, query, { tags: o.tag ? [o.tag] : [] });
-  card.solve = solve(o.project, `akm remember ${JSON.stringify(o.decision(s, value))} --tag ${o.tag ?? "decision"} --name ${o.id.replace(/^persist--/, "")}-${d.hex()} >/dev/null\n`);
+  card.solve = solve(o.project, `akm remember ${JSON.stringify(o.decision(s, value))} --tag ${o.tag ?? "decision"} --supersedes memories/${o.topic.replace(/ /g, "-")}-${h1} --name ${o.id.replace(/^persist--/, "")}-${d.hex()} >/dev/null\n`);
   return card;
 }
 
@@ -262,7 +262,7 @@ function repairStaleIndex(): Card {
   return {
     id: "repair--stale-index", family: "repair", project: "orchid",
     description: `A note filed today is missing from search`,
-    instruction: `You are working in /work/orchid. The note about the ${s} gateway's key rotation was filed today, but a search for “${s} key rotation” finds nothing. Make that search find it. Do not change or delete any note. In REPORT.md, say what was wrong.`,
+    instruction: `You are working in /work/orchid. The note about the ${s} gateway's key rotation was filed today, but a search for “${s} key rotation” does not find it. Make that search find it. Do not change or delete any note. In REPORT.md, say what was wrong.`,
     workspace: files(["README.md", READMEs("orchid", s)]),
     library: { ...library, ".plant.sh": `#!/bin/bash\n# The note is filed straight into the bundle after the last index.\nset -euo pipefail\ncat > "$AKM_BUNDLE_DIR/${path}" <<'NOTE'\n${text}NOTE\n` },
     planted,
@@ -349,8 +349,12 @@ function resumeCard(o: { id: string; project: "orchid" | "quill"; steps: number;
 
 // ---- regression cards ----------------------------------------------------------------------------------------------------------
 
-/** akm#1472: with a flag that overrides the project, the selection akm prints was the configured one, not the applied one. */
-function regressionSelection(): Card {
+/**
+ * A cross-project lookup from another project's directory, the situation akm#1472 is about (a flag that overrides the project made
+ * akm print the configured selection). The card checks the outcome only: the display defect is deterministic, and akm's own contract
+ * test is what detects it. The trace shows which route the agent took.
+ */
+function regressionCrossProject(): Card {
   const d = new Draw("regression-1472-selection");
   const s = d.pick(SERVICES);
   const [po, pq] = [`${d.pick(WORDS)}-`, `${d.pick(WORDS)}-`];
@@ -360,14 +364,14 @@ function regressionSelection(): Card {
     note({ name: `tag-prefix-${h2}`, description: `Release tag prefix of the ${s} service`, project: "quill", body: `The release tag prefix of the ${s} service is \`${pq}\`.` }),
   );
   return {
-    id: "regression--1472-selection", family: "regression", project: "orchid",
-    description: `akm#1472: the project selection akm reports for a lookup that overrides the directory's project`,
-    instruction: `You are working in /work/orchid, but this request is for the Quill project. Find Quill's release tag prefix for the ${s} service, looking only at notes marked for Quill, and write it to tag.txt. Also write selection.json: the project selection that akm reports it applied to that lookup, copied from akm's own output (the project part of its JSON). Leave the existing files intact. In REPORT.md, say how you made the lookup.`,
+    id: "regression--1472-cross-project", family: "regression", project: "orchid",
+    description: `akm#1472 route: a lookup for the other project from this project's directory`,
+    instruction: `You are working in /work/orchid, but this request is for the Quill project. Find Quill's release tag prefix for the ${s} service, looking only at notes marked for Quill, and write it to tag.txt. Leave the existing files intact. In REPORT.md, say how you made the lookup.`,
     workspace: files(["README.md", READMEs("orchid", s)]),
     library, planted: {},
-    checks: [{ type: "text-file", file: "tag.txt", text: pq }, { type: "selection-file", file: "selection.json", project: "quill" }],
+    checks: [{ type: "text-file", file: "tag.txt", text: pq }, { type: "absent", file: "tag.txt", tokens: [po] }],
     evidence: [pq], commands: [],
-    solve: solve("orchid", `# --project alone prints the selection of that project; the filter flag on top is what #1472 is about, and the verifier takes either\nout=$(akm search "${s} release tag prefix" --project quill --filter project=quill --format json)\nprintf '%s' "$out" | node -pe 'JSON.stringify(JSON.parse(require("fs").readFileSync(0,"utf8")).project)' > selection.json\nakm show "$(printf '%s' "$out" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).hits[0].ref')" --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).content' | grep -oE '\`[^\`]+\`' | tr -d '\`' | head -1 > tag.txt\n`),
+    solve: solve("orchid", `out=$(akm search "${s} release tag prefix" --project quill --filter project=quill --format json)\nakm show "$(printf '%s' "$out" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).hits[0].ref')" --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).content' | grep -oE '\`[^\`]+\`' | tr -d '\`' | head -1 > tag.txt\n`),
   };
 }
 
@@ -391,7 +395,7 @@ function regressionPack(): Card {
     workspace: files(["README.md", READMEs("orchid", s)]),
     library, planted: {},
     checks: [{ type: "jsonl-file", file: "context.jsonl", refs: [`memories/${gold}`], max_chars: 8000 }],
-    evidence: [], commands: ["akm\\s+curate"],
+    evidence: [], commands: ["akm\\s+(curate|show)"],
     solve: solve("orchid", `akm curate "${topic}" --pack 1500 --format jsonl > raw.out\n# a build that ignores --format prints one pretty-printed array; either shape becomes one object per line\nnode -e 'const t=require("fs").readFileSync("raw.out","utf8");let r;try{r=JSON.parse(t)}catch{r=t.split("\\n").filter(Boolean).map((l)=>JSON.parse(l))}for(const x of Array.isArray(r)?r:[r])console.log(JSON.stringify({ref:x.ref,content:x.content}))' > context.jsonl\nrm raw.out\n`),
   };
 }
@@ -405,7 +409,7 @@ export const CARDS = (): Card[] => [
   resumeCard({ id: "resume--release-3", project: "orchid", steps: 3, failAt: 2 }),
   resumeCard({ id: "resume--release-4", project: "quill", steps: 4, failAt: 3 }),
   resumeCard({ id: "resume--release-last", project: "orchid", steps: 3, failAt: 3 }),
-  regressionSelection(), regressionPack(),
+  regressionCrossProject(), regressionPack(),
 ];
 
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -413,9 +417,13 @@ const hidden = (path: string) => path.split("/").some((p) => p.startsWith("."));
 
 /** What only the verifier knows: the checks, and the hashes of the files the agent must leave as they are. */
 export function expectedOf(c: Card) {
-  const bundle = Object.fromEntries(Object.entries({ ...c.library, ...c.planted }).filter(([p]) => !hidden(p)).map(([p, t]) => [p, sha256(t)]));
+  const given = Object.entries({ ...c.library, ...c.planted }).filter(([p]) => !hidden(p));
+  // A persist card seeds notes holding the old value. Recording the decision may legitimately edit their metadata (`remember --supersedes`
+  // demotes the note it corrects), so only their text is held to account.
+  const bundle = Object.fromEntries(given.filter(() => c.family !== "persist").map(([p, t]) => [p, sha256(t)]));
+  const bodies = Object.fromEntries(given.filter(() => c.family === "persist").map(([p, t]) => [p, sha256(t.replace(/^---\n[\s\S]*?\n---\n/, ""))]));
   const workspace = Object.fromEntries(Object.entries(c.workspace).map(([p, t]) => [p, sha256(t)]));
-  const known = Object.fromEntries(Object.keys(bundle).map((p) => [p, true]));
+  const known = Object.fromEntries(given.map(([p]) => [p, true]));
   const checks = c.checks.map((k) => (k.type === "persisted" ? { ...k, known } : k));
-  return { card: c.id, family: c.family, project: c.project, workdir: `/work/${c.project}`, checks: [...checks, { type: "preserved", workspace, bundle }] };
+  return { card: c.id, family: c.family, project: c.project, workdir: `/work/${c.project}`, checks: [...checks, { type: "preserved", workspace, bundle, bodies }] };
 }

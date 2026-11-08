@@ -1,5 +1,5 @@
 ---
-description: release notes address of the ferrule service
+description: release notes address of the fescue service
 tags: [deployment]
 project: quill
 ---

@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { type CliTrial, type Family, buildReport, errored, formatReport, makeRow, summarize } from "./score.ts";
 import type { Trace } from "./trace.ts";
 
-const trace = (o: Partial<Trace> = {}): Trace => ({ calls: 6, akm_calls: 3, help_calls: 1, help_chars: 200, doc_reads: 0, akm_chars: 900, invalid: 0, repeated: 0, first_useful_calls: 3, first_useful_seconds: 4, ...o });
+const trace = (o: Partial<Trace> = {}): Trace => ({ calls: 6, akm_calls: 3, help_calls: 1, help_chars: 200, doc_reads: 0, akm_chars: 900, invalid: 0, repeated: 0, first_useful_calls: 3, first_useful_seconds: 4, leakage: [], ...o });
 let n = 0;
 const trial = (task: string, family: Family, arm: string, o: Partial<CliTrial> = {}): CliTrial => ({
   task, arm: "akm", trial: `${task}__${String(n++).padStart(3, "0")}`, reward: 1, error: null, akm: { "akm (shell)": 3 }, tools: 6, tokens: { input: 1000, cache: 500, output: 100 }, costUsd: null, seconds: 60, timed_out: false, agent_exit: false,
@@ -74,6 +74,12 @@ describe("the other figures", () => {
     });
     const c = buildReport(rows).by_arm.minimal.calls;
     expect(c).toMatchObject({ traced: 3, to_first_useful_median: 2, no_useful_operation: 1, invalid: 2, repeated: 1, help_calls: 3, over_budget: 1, tool_calls: 5 + 45 + 6 });
+  });
+
+  test("leakage is counted per trial for triage", () => {
+    const rows = grid({ "apply--a": [{ trace: trace({ leakage: ["curl (call 2)", "npm (call 5)"] }) }, {}], "apply--b": [{}, {}] });
+    expect(buildReport(rows).by_arm.minimal.leakage).toEqual({ trials: 1, hits: 2, by_trial: [{ task: "apply--a", trial: expect.any(String), hits: ["curl (call 2)", "npm (call 5)"] }] });
+    expect(buildReport(rows).by_arm.guidance.leakage.hits).toBe(0);
   });
 
   test("a task with no scored trial in an arm has no verdict", () => {

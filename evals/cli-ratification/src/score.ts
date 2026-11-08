@@ -88,7 +88,7 @@ export interface ArmReport {
   akm_called: { trials: number; called: number };
   /**
    * Every measured input and output token, failed and errored trials included, divided by the successful outcomes; null when there was no
-   * success (undefined, not infinite). Cached and missing usage are shown apart and are not in the sum.
+   * success (undefined, not infinite). Harbor counts cached input in the input total, so the sum includes it; the cached share and the trials with no usage are shown apart.
    */
   tokens: { trials: number; missing: number; input: number; cache: number; output: number; per_success: number | null };
   /** Over scored trials with a trace. */
@@ -106,6 +106,8 @@ export interface ArmReport {
     invalid: number;
     repeated: number;
   };
+  /** Trials whose trace shows a reach outside the container (web tools, curl, wget, npm, git clone, akm upgrade, akm import of a URL): each is leakage for triage. */
+  leakage: { trials: number; hits: number; by_trial: { task: string; trial: string; hits: string[] }[] };
   /** The trials that failed or errored, for classifying before anything is changed: the checks that failed, or the exception. */
   failures: { task: string; trial: string; error: string | null; failed_checks: string[] | null; mediated: boolean | null }[];
 }
@@ -182,6 +184,7 @@ function armReport(trials: CliTrial[]): ArmReport {
       invalid: sum(traces.map((t) => t.invalid)),
       repeated: sum(traces.map((t) => t.repeated)),
     },
+    leakage: { trials: traces.filter((t) => t.leakage.length).length, hits: sum(traces.map((t) => t.leakage.length)), by_trial: ok.filter((t) => t.trace?.leakage.length).map((t) => ({ task: t.task, trial: t.trial, hits: (t.trace as Trace).leakage })) },
     failures: trials.filter((t) => t.reward !== 1).map((t) => ({ task: t.task, trial: t.trial, error: t.error, failed_checks: t.failed_checks, mediated: t.mediated })),
   };
 }
@@ -241,15 +244,15 @@ export function formatReport(r: Report): string[] {
   const lines: string[] = [];
   for (const a of r.arms) {
     const x = r.by_arm[a];
-    lines.push(`  ${a.padEnd(w)} ${x.trials} trials, ${x.scored} scored, ${x.errored} errored, ${x.timeouts} timed out   outcome pass ${x.passed}/${x.scored}   ${ci(x.pass_rate)}`);
-    for (const [f, y] of Object.entries(x.by_family)) lines.push(`  ${"".padEnd(w)} ${f.padEnd(11)} pass ${y.passed}/${y.scored}, through akm ${y.mediated}, without ${y.unmediated}, no trace ${y.unknown}`);
-    lines.push(`  ${"".padEnd(w)} tokens ${n(x.tokens.input)} input (${n(x.tokens.cache)} cached), ${n(x.tokens.output)} output, ${x.tokens.missing} trials without usage; per success ${n(x.tokens.per_success)}`);
+    lines.push(`  ${a.padEnd(w)} ${x.trials} trials, ${x.scored} scored, ${x.errored} errored, ${x.timeouts} timed out   outcome pass ${x.passed}/${x.scored}`);
+    for (const [f, y] of Object.entries(x.by_family)) lines.push(`  ${"".padEnd(w)} ${f.padEnd(11)} pass ${y.passed}/${y.scored}, through akm ${y.mediated} (read from the agent-writable stream), without ${y.unmediated}, no trace ${y.unknown}`);
+    lines.push(`  ${"".padEnd(w)} tokens ${n(x.tokens.input)} input (of which ${n(x.tokens.cache)} cached), ${n(x.tokens.output)} output, ${x.tokens.missing} trials without usage; per success ${n(x.tokens.per_success)}`);
     const c = x.calls;
-    lines.push(`  ${"".padEnd(w)} calls to first useful operation: median ${n(c.to_first_useful_median)} (${c.no_useful_operation} of ${c.traced} had none); help ${c.help_calls} calls / ${n(c.help_chars)} chars, shipped files read ${c.doc_reads}; invalid ${c.invalid}, repeated ${c.repeated}; akm printed ${n(c.akm_chars)} chars; ${c.over_budget} trials over ${TOOL_ACTIONS} tool calls`);
+    lines.push(`  ${"".padEnd(w)} calls to first useful operation: median ${n(c.to_first_useful_median)} (${c.no_useful_operation} of ${c.traced} had none); help ${c.help_calls} calls / ${n(c.help_chars)} chars, shipped files read ${c.doc_reads}; invalid ${c.invalid}, repeated ${c.repeated}; leakage hits ${x.leakage.hits} in ${x.leakage.trials} trials; akm printed ${n(c.akm_chars)} chars; ${c.over_budget} trials over ${TOOL_ACTIONS} tool calls`);
   }
+  // Fourteen single attempts: the printed report gives the counts and the token change, not an interval or a p-value (summary.json keeps them).
   for (const c of r.comparisons) {
-    const s = c.sign_test;
-    lines.push(`  ${`${c.a} - ${c.b}`.padEnd(2 * w + 3)} ${ci(c.delta, true)}; ${c.a} better on ${c.better.a}, ${c.b} on ${c.better.b}, same on ${c.better.same}${s && s.n ? `; sign test p = ${s.p}` : ""}${c.tokens_per_success_change === null ? "" : `; tokens per success ${c.tokens_per_success_change >= 0 ? "+" : ""}${(c.tokens_per_success_change * 100).toFixed(0)}%${c.tokens_per_success_change > 0.1 ? " (above the 10% review line)" : ""}`}`);
+    lines.push(`  ${`${c.a} - ${c.b}`.padEnd(2 * w + 3)} ${c.a} better on ${c.better.a} cards, ${c.b} on ${c.better.b}, same on ${c.better.same}${c.tokens_per_success_change === null ? "" : `; tokens per success ${c.tokens_per_success_change >= 0 ? "+" : ""}${(c.tokens_per_success_change * 100).toFixed(0)}%${c.tokens_per_success_change > 0.1 ? " (above the 10% review line)" : ""}`}`);
   }
   lines.push("", `  ${"task".padEnd(30)}${"family".padEnd(12)}${r.arms.map((a) => a.padEnd(w + 1)).join("")}`);
   for (const t of r.tasks) lines.push(`  ${t.task.padEnd(30)}${t.family.padEnd(12)}${r.arms.map((a) => (t.cells[a] ?? "").padEnd(w + 1)).join("")}`);

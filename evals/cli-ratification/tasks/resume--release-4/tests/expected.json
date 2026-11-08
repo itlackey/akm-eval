@@ -25,7 +25,8 @@
       },
       "bundle": {
         "workflows/oriel-release.md": "c1374c09a25785b5624b5ed0a2e46462878579c59a2f7110c9e6e7632267c646"
-      }
+      },
+      "bodies": {}
     }
   ]
 }
