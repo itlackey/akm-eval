@@ -1,6 +1,6 @@
 ---
 description: Generalized principle inferred from the mise en place memory — front-load irreversible or time-pressured prep in any multi-step process, not only cooking
-derivedFrom: memory:mise-en-place-workflow
+derivedFrom: mise-en-place-workflow
 ---
 Generalization inferred from repeated observation of the mise en place memory:
 the underlying pattern isn't specific to cooking, it's about any process with a
