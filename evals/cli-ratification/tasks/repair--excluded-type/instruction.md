@@ -1,0 +1,1 @@
+You are working in /work/quill. A search for “sconce runbook” finds nothing, although the library holds notes about it. Make that search find the sconce runbook again. Do not change or delete any note. In REPORT.md, say what was wrong.

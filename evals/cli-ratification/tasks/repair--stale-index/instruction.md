@@ -1,0 +1,1 @@
+You are working in /work/orchid. The note about the wicket gateway's key rotation was filed today, but a search for “wicket key rotation” finds nothing. Make that search find it. Do not change or delete any note. In REPORT.md, say what was wrong.

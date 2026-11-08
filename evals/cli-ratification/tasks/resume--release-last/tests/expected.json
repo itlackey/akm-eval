@@ -1,0 +1,30 @@
+{
+  "card": "resume--release-last",
+  "family": "resume",
+  "project": "orchid",
+  "workdir": "/work/orchid",
+  "checks": [
+    {
+      "type": "receipts",
+      "file": "/work/orchid/.pannier-release/receipts.log",
+      "lines": [
+        "seal",
+        "publish",
+        "verify"
+      ]
+    },
+    {
+      "type": "workflow-completed",
+      "ref": "workflows/pannier-release"
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "6ccf771522be014332fab0b54e231b6dd6ca5b49b99239cbb901d520ebd1c75b"
+      },
+      "bundle": {
+        "workflows/pannier-release.md": "68f45d0cb212a0cf1cca706f5c2da464d14abb054e6745b6e8bb8fd807e171c8"
+      }
+    }
+  ]
+}

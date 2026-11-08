@@ -1,0 +1,1 @@
+You are working in /work/orchid. The team has just decided that the oriel service's canary share is 37 percent. Record this decision so that anyone working on this project later can find it. In REPORT.md, say where you recorded it.

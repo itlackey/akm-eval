@@ -1,0 +1,34 @@
+{
+  "card": "repair--project-filter",
+  "family": "repair",
+  "project": "orchid",
+  "workdir": "/work/orchid",
+  "checks": [
+    {
+      "type": "lookup",
+      "query": "spandrel deploy checklist",
+      "ref": "knowledge/deploy-checklist-6395"
+    },
+    {
+      "type": "project-config",
+      "paths": {
+        "orchid": [
+          "/work/orchid"
+        ],
+        "quill": [
+          "/work/quill"
+        ]
+      }
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "50e15aa22697c5cc25774e1fd3cad5b343f65dd1e615073ee734c268d92d68ba"
+      },
+      "bundle": {
+        "knowledge/deploy-checklist-6395.md": "03fe1cadece048e2fa550da7fd95b1ad59029923ede4268fab545ddd29597b5f",
+        "knowledge/deploy-checklist-7ab1.md": "cfbe09ca2f989a6b8205ed011934f94d7d6ccb435354d50f425e9313ee9289fe"
+      }
+    }
+  ]
+}

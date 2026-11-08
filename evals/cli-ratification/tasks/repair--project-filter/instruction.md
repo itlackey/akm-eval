@@ -1,0 +1,1 @@
+You are working in /work/orchid. A search for “spandrel deploy checklist” from this directory finds nothing, though the library holds this project's checklist. Make that search work from here again. Do not change or delete any note, and keep this directory registered as the Orchid project. In REPORT.md, say what was wrong.

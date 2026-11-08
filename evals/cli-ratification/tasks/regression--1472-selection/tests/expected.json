@@ -1,0 +1,28 @@
+{
+  "card": "regression--1472-selection",
+  "family": "regression",
+  "project": "orchid",
+  "workdir": "/work/orchid",
+  "checks": [
+    {
+      "type": "text-file",
+      "file": "tag.txt",
+      "text": "swift-"
+    },
+    {
+      "type": "selection-file",
+      "file": "selection.json",
+      "project": "quill"
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "fc92389cefc533fa39ae61d76e3ba651df04a4c8efa3d1fffbc07f341edeafbb"
+      },
+      "bundle": {
+        "memories/tag-prefix-96fd.md": "1821566ad1664f61fe05a87ffafeee8c4047653da5aa97634c92efb92a8f8600",
+        "memories/tag-prefix-93a7.md": "83ee1989b40e92ab1dc45211cfca4f83b9ba896eb2b1726cd55428b8a2b51774"
+      }
+    }
+  ]
+}

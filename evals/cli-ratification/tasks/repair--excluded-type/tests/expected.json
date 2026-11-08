@@ -1,0 +1,35 @@
+{
+  "card": "repair--excluded-type",
+  "family": "repair",
+  "project": "quill",
+  "workdir": "/work/quill",
+  "checks": [
+    {
+      "type": "lookup",
+      "query": "sconce runbook",
+      "ref": "memories/runbook-aa4b"
+    },
+    {
+      "type": "project-config",
+      "paths": {
+        "orchid": [
+          "/work/orchid"
+        ],
+        "quill": [
+          "/work/quill"
+        ]
+      }
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "b465065e399ccf68b26637ffbfd284288dd4f3f5a7864436cfa0e26d3e932092"
+      },
+      "bundle": {
+        "memories/runbook-aa4b.md": "bb8ea765da3c07a816bf1a522fe782bd51e4707babbb0449272fb3d638e4ac3d",
+        "memories/runbook-d59f.md": "93161992fd4f09d6b0fc8f01b6b76633245a49014c127c399ee6ca820ba511bd",
+        "knowledge/oncall-5629.md": "cca6262442e59a2ec753df5f411da5e79fc3a5280fc0d2be907d367407174e90"
+      }
+    }
+  ]
+}

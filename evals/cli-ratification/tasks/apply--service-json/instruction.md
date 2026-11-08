@@ -1,0 +1,1 @@
+You are working in /work/orchid. Prepare service.json for the corbel service using this project's approved listen port and deployment region. The file should contain only listen_port as an integer and region as a string. Leave the existing application files and shared knowledge intact. In REPORT.md, identify the source you relied on and anything uncertain.

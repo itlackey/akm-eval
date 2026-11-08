@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Writes the tasks and libraries of cli-ratification from src/cards.ts. See README.md.
+#
+#   evals/cli-ratification/generate [--check]
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+command -v bun > /dev/null || { echo "cli-ratification: bun is needed. See https://bun.sh" >&2; exit 2; }
+exec bun "$here/src/generate.ts" "$@"

@@ -28,7 +28,7 @@ const AKM_WORD = /(?:[\w.~$/{}-]*\/)?akm(?=[\s;&|)<>]|$)/;
  * `ls /opt/akm`, `cat akm.txt`, `which akm`) is not a call. A line of a here-document that starts with akm is counted,
  * since the pattern cannot tell it from a command. Not covered: a flag that takes its own word (`sudo -u root akm`).
  */
-const RUNS_AKM = new RegExp(COMMAND_START.source + WRAPPERS.source + AKM_WORD.source);
+export const RUNS_AKM = new RegExp(COMMAND_START.source + WRAPPERS.source + AKM_WORD.source);
 
 /**
  * The akm calls in an `opencode run --format=json` stream: the plugin's tools, which are named akm_*, and with
@@ -98,14 +98,15 @@ function between(from: unknown, to: unknown): number | null {
 
 /**
  * One trial folder of a Harbor job, or null when it holds no result. The arm is the agent's name, which Harbor keeps in result.json:
- * `akm-opencode-<label>` is an akm arm too, one of the several of evals/project-intent, which reads the label itself.
+ * `akm-opencode-<label>` is an akm arm too, one of the several of evals/project-intent, which reads the label itself; so is
+ * `akm-cli-<label>`, the plugin-free arms of evals/cli-ratification.
  */
 export function readTrial(dir: string, trial: string): Trial | null {
   const file = join(dir, "result.json");
   if (!existsSync(file)) return null;
   const r = JSON.parse(readFileSync(file, "utf8"));
   const agent: unknown = r.agent_info?.name;
-  const arm: Arm | null = agent === "akm-opencode" || (typeof agent === "string" && /^akm-opencode-[a-z0-9-]+$/.test(agent)) ? "akm" : agent === "opencode" ? "control" : null;
+  const arm: Arm | null = agent === "akm-opencode" || agent === "akm-cli" || (typeof agent === "string" && /^akm-(opencode|cli)-[a-z0-9-]+$/.test(agent)) ? "akm" : agent === "opencode" ? "control" : null;
   if (arm === null) throw new Error(`${file} is a trial of agent ${JSON.stringify(agent)}, which is neither opencode nor akm-opencode`);
   const streamFile = join(dir, "agent", "opencode.txt");
   const stream = existsSync(streamFile) ? readFileSync(streamFile, "utf8") : null;

@@ -1,0 +1,28 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/apply--deploy-env"
+version = "1.0.0"
+description = "Write deploy.env for fescue from the project's replicas and backup window and the shared alert channel"
+authors = []
+keywords = []
+
+[metadata]
+family = "apply"
+project = "quill"
+# Values that must appear in the output of an akm call, before the answer is written, for the answer to be AKM-mediated; and patterns of
+# akm commands, one of which must have run. The trace is read on the host (src/trace.ts); the agent never sees this file.
+evidence = ["7", "04:45", "#ops-wren"]
+commands = []
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 720.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "apply--deploy-env"

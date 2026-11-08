@@ -196,6 +196,19 @@ describe("reading a Harbor job folder", () => {
     }
   });
 
+  test("a plugin-free CLI arm (akm-cli-<label>) is an akm arm too", () => {
+    const stream = JSON.stringify({ type: "tool_use", part: { tool: "bash", callID: "c1", state: { input: { command: "akm search pool" } } } });
+    const dir = job({ m__1: { result: result("akm-cli-minimal"), stream }, n__1: { result: result("akm-cli-noop") } });
+    try {
+      const [m, n] = loadTrials(dir);
+      expect([m.arm, m.akm]).toEqual(["akm", { "akm (shell)": 1 }]);
+      expect([n.arm, n.akm]).toEqual(["akm", null]);
+      expect(() => readTrial(join(dir, "m__1"), "m__1")).not.toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("refuses a trial of some other agent", () => {
     const dir = job({ x__1: { result: result("oracle") }, y__1: { result: result("akm-opencode-") } });
     try {

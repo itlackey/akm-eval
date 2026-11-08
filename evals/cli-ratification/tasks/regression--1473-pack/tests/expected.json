@@ -1,0 +1,28 @@
+{
+  "card": "regression--1473-pack",
+  "family": "regression",
+  "project": "orchid",
+  "workdir": "/work/orchid",
+  "checks": [
+    {
+      "type": "jsonl-file",
+      "file": "context.jsonl",
+      "refs": [
+        "memories/drain-procedure-5f41"
+      ],
+      "max_chars": 8000
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "b6f46772a1437cdb29dc28995d1ff70668219a99ec2ad28d6c1abc01cbb5bbed"
+      },
+      "bundle": {
+        "memories/drain-procedure-5f41.md": "028c091d95e81a3517156bd729894c473dd3128e09ec117acae55ba40ea96b8a",
+        "memories/drain-procedure-24d7.md": "35e973fd136f0f00c5ec3b2efe501c8b3e726a8393af181cb57f7a6c2bde3902",
+        "memories/restart-order-c98d.md": "2d19edfbbb811a941c4fcb0a6fd6de0768d642f9ede3a4fc7dea93bfc3d92cbf",
+        "memories/oncall-9ee1.md": "85fa260d8d3d7b488a8dc6716830d4af4b49c082621df783d7850bed2d677692"
+      }
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "card": "apply--service-json",
+  "family": "apply",
+  "project": "orchid",
+  "workdir": "/work/orchid",
+  "checks": [
+    {
+      "type": "json-file",
+      "file": "service.json",
+      "exact": {
+        "listen_port": 8048,
+        "region": "rowan-central"
+      }
+    },
+    {
+      "type": "absent",
+      "file": "service.json",
+      "tokens": [
+        "3285",
+        "alder-west",
+        "9001",
+        "cedar-south"
+      ]
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "c90e7a5522ac8582b56744440f8b18bb18c8ac238d88723218b909fe470d5606",
+        "app/corbel.conf": "56211899f3d6cbe1b810f309e3e253a3194a8487e2450f0d0a23a7516e28094a",
+        "archive/service-2025-q4.json": "603f58f9c10720d706cf7720d384c719d4ae4b456da7c45f87466df1524fdeac"
+      },
+      "bundle": {
+        "memories/listen-port-dba1.md": "4f98a954ec3bd61486c25ee2b80ccb348b2195cc670c8346af559496de1bda4c",
+        "memories/listen-port-a9ed.md": "da12b0aab5333890e761bbd40c2d34b17b1590b5d02876d143df80eee0faf688",
+        "memories/deploy-region-af1d.md": "bc30a0ec08cdb64d5dd3fb47796773ecf4ff16498941314294d2fc0b7c566418",
+        "memories/deploy-region-0760.md": "66ebc72ac9f688ad10c03325a3ca044d53d635d1e586ba7b57bd5c7146a0ee59",
+        "memories/listen-port-bfb0.md": "899eeb18bdefb1f54d8bb015997d09c08e93c1ed6e87ce2dd6c5a179623c0575",
+        "knowledge/service-file-format-b659.md": "9bddc34a901450c9d4f9ac984a279a7024e51206150a33c259e2d147134486a7"
+      }
+    }
+  ]
+}
