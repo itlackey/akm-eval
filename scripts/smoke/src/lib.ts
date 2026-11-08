@@ -153,6 +153,7 @@ export const ENTRIES: Entry[] = [
   { dir: "evals/promotion", needs: "akm's embedding model, which akm downloads into .cache/models the first time (133 MB, from huggingface.co)" },
   { dir: "evals/agent-ab", skip: "needs Docker" },
   { dir: "evals/project-intent", skip: "needs Docker" },
+  { dir: "evals/cli-ratification", skip: "needs Docker" },
   { dir: "evals/bakeoff", limit: 5 },
   { dir: "evals/memory-utility", skip: "requires explicit no-change counters newer than the smoke pin; run its opt-in real.test.ts with supported AKM" },
   { dir: "benchmarks/terminal-bench", skip: "needs Docker" },

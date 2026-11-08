@@ -1,0 +1,41 @@
+{
+  "card": "apply--deploy-env",
+  "family": "apply",
+  "project": "quill",
+  "workdir": "/work/quill",
+  "checks": [
+    {
+      "type": "lines-file",
+      "file": "deploy.env",
+      "unquote": true,
+      "lines": [
+        "REPLICAS=232",
+        "BACKUP_WINDOW=04:45",
+        "ALERT_CHANNEL=#ops-wren"
+      ]
+    },
+    {
+      "type": "absent",
+      "file": "deploy.env",
+      "tokens": [
+        "120",
+        "02:30"
+      ]
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "f038ca4ac1eb711e3f4cd9c32eafd7720803334c1fe7ae371d53fee2ee1ba0ed",
+        "Makefile": "6158eee1af166b03366a6f988414b20255d16736867e24ef1e180cc6df6bb524"
+      },
+      "bundle": {
+        "memories/replicas-4518.md": "75760cafab7eb1d41f6688e093f07325040dd7978b8c4ff72ca54008af15f32a",
+        "memories/replicas-b878.md": "f65316d861985acc81ca0649f7a9ebb8f56382c1cedb16593de6aeb8c17e360b",
+        "memories/backup-window-2c7e.md": "11cae50b1b1622adf4ff2429c95c5bb04e425ba155312a6336f6c7d41d61e9fa",
+        "memories/backup-window-11a4.md": "d2eb701de6c39965ef3527340b2e3499bf853926cca4c331e9a3b20dee5dbc73",
+        "memories/alert-channel-621b.md": "838535c310bb8018b849046124d6cae6f86566889be91e86cac94a338f8ada24"
+      },
+      "bodies": {}
+    }
+  ]
+}

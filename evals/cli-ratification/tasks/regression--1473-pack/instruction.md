@@ -1,0 +1,1 @@
+You are working in /work/orchid. Assemble this project's knowledge about the wicket drain procedure into one context bundle of at most 1500 tokens, and save it as context.jsonl in JSON Lines: one JSON object per line, each with ref and content. Leave the existing files intact. In REPORT.md, say how you made it.

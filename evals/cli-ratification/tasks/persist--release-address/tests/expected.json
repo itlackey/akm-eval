@@ -1,0 +1,36 @@
+{
+  "card": "persist--release-address",
+  "family": "persist",
+  "project": "orchid",
+  "workdir": "/work/orchid",
+  "checks": [
+    {
+      "type": "persisted",
+      "value": "fescue-finch@example.com",
+      "project": "orchid",
+      "query": "fescue release notes address",
+      "types": [
+        "memories",
+        "knowledge"
+      ],
+      "tags": [
+        "decision"
+      ],
+      "known": {
+        "memories/release-notes-address-6f9a.md": true,
+        "memories/release-notes-address-7864.md": true
+      }
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "0c2fd68c5914049b1da51ad6fcb0625353ce1f4ca7c0b8bc92bbb3c8f0592bce"
+      },
+      "bundle": {},
+      "bodies": {
+        "memories/release-notes-address-6f9a.md": "735d98af5f5bf939700d603633e2d727d511ea5d957dfe60db481ef88d2ea9fc",
+        "memories/release-notes-address-7864.md": "2407f7c0a543d5f4a476ba937dbd17b5077b4678fbbca355f6c93fdca6e81991"
+      }
+    }
+  ]
+}

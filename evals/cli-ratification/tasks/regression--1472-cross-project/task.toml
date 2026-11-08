@@ -1,0 +1,28 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/regression--1472-cross-project"
+version = "1.0.0"
+description = "akm#1472 route: a lookup for the other project from this project's directory"
+authors = []
+keywords = []
+
+[metadata]
+family = "regression"
+project = "orchid"
+# Values that must appear in the output of an akm call, before the answer is written, for the answer to be AKM-mediated; and patterns of
+# akm commands, one of which must have run. The trace is read on the host (src/trace.ts); the agent never sees this file.
+evidence = ["swift-"]
+commands = []
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 720.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "regression--1472-cross-project"

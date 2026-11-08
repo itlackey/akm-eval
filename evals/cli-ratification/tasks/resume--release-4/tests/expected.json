@@ -1,0 +1,32 @@
+{
+  "card": "resume--release-4",
+  "family": "resume",
+  "project": "quill",
+  "workdir": "/work/quill",
+  "checks": [
+    {
+      "type": "receipts",
+      "file": "/work/quill/.oriel-release/receipts.log",
+      "lines": [
+        "verify",
+        "build",
+        "seal",
+        "rollout"
+      ]
+    },
+    {
+      "type": "workflow-completed",
+      "ref": "workflows/oriel-release"
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "495f4e7e6fe11b77a16f43d9f686ee19877d13fce6f50986df8bbe2a7bcec589"
+      },
+      "bundle": {
+        "workflows/oriel-release.md": "c1374c09a25785b5624b5ed0a2e46462878579c59a2f7110c9e6e7632267c646"
+      },
+      "bodies": {}
+    }
+  ]
+}

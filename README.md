@@ -2,7 +2,7 @@
 
 Evals and benchmarks for [akm](https://github.com/itlackey/akm), as a set of scripts. Each one runs akm on a set of cases, scores what akm returns, and saves the results. Compare saved runs with `scripts/compare` or explore published quality and performance in the ledger. Runs are single by default; repeats are optional.
 
-Most evals run against any OpenAI-compatible model, local or cloud. `evals/retrieval` and `benchmarks/skillret` call no model. `evals/agent-ab`, `evals/project-intent` and `benchmarks/terminal-bench` run opencode in Docker through Harbor.
+Most evals run against any OpenAI-compatible model, local or cloud. `evals/retrieval` and `benchmarks/skillret` call no model. `evals/agent-ab`, `evals/project-intent`, `evals/cli-ratification` and `benchmarks/terminal-bench` run opencode in Docker through Harbor.
 
 ## Evals and benchmarks
 
@@ -23,6 +23,7 @@ Every folder below has a `run` script. Every `run` takes `--corpus`, `--limit` a
 | `evals/promotion` | Of the promotions consolidate proposes, does the drain's judgment tier accept the good ones? | `--cases` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--timeout-ms` `--semantic` |
 | `evals/agent-ab` | Does the akm plugin change how often an agent completes tasks where retrieval is the only way in? | `--cases` `--repeat` `--concurrency` `--model` `--akm` `--akm-env` `--semantic` |
 | `evals/project-intent` | With a project registered for the agent's directory, does an agent that passes no selection flag use the right project's knowledge, at equal or fewer tokens? | `--cases` `--concurrency` `--model` `--akm` `--akm-env` `--semantic` |
+| `evals/cli-ratification` | Can a fresh agent with the real akm CLI and almost no instruction finish tasks whose result an independent verifier checks in the state it leaves? | `--check` `--cases` `--concurrency` `--model` `--akm` `--akm-env` `--semantic` |
 | `evals/bakeoff` | Does the model do what akm asks in the jobs no other eval measures? | `--cases` `--repeat` `--process` `--config-patch` `--model` `--akm` `--concurrency` `--timeout-ms` `--semantic` |
 | `evals/memory-utility` | Do original notes improve later answers, and does native inference add value beyond those notes? | `--cases` `--repeat` `--config-patch` `--model` `--akm` `--timeout-ms` `--semantic` `--context-tokens` `--search-limit` `--seed` `--resume` `--split` `--judge-model` `--haystack` `--budgets` `--sample-seed` |
 | `benchmarks/longmemeval` | How does akm do as a memory backend on LongMemEval, next to a full-context baseline? | `--cases` `--repeat` `--sample-seed` `--retrieval-only` `--semantic` `--resume` `--model` `--judge-model` `--akm` |

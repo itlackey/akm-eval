@@ -1,0 +1,31 @@
+{
+  "card": "resume--release-3",
+  "family": "resume",
+  "project": "orchid",
+  "workdir": "/work/orchid",
+  "checks": [
+    {
+      "type": "receipts",
+      "file": "/work/orchid/.sconce-release/receipts.log",
+      "lines": [
+        "notify",
+        "archive",
+        "publish"
+      ]
+    },
+    {
+      "type": "workflow-completed",
+      "ref": "workflows/sconce-release"
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "6ccf771522be014332fab0b54e231b6dd6ca5b49b99239cbb901d520ebd1c75b"
+      },
+      "bundle": {
+        "workflows/sconce-release.md": "6e02a02e897d1271d993d56a8778e46bf26162b38cf8e17284c982dd7abf8c27"
+      },
+      "bodies": {}
+    }
+  ]
+}

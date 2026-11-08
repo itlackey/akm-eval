@@ -1,0 +1,1 @@
+You are working in /work/orchid. Write limits.json for the tallow service from this project's resource limits. The file holds cpu (string), memory (string) and timeout_secs (integer), and nothing else. Leave the existing files intact. In REPORT.md, identify the source you relied on and anything uncertain.

@@ -1,0 +1,34 @@
+{
+  "card": "persist--staging-host",
+  "family": "persist",
+  "project": "quill",
+  "workdir": "/work/quill",
+  "checks": [
+    {
+      "type": "persisted",
+      "value": "heron-632.stage.internal",
+      "project": "quill",
+      "query": "tallow staging host",
+      "types": [
+        "memories",
+        "knowledge"
+      ],
+      "tags": [],
+      "known": {
+        "memories/staging-host-82a6.md": true,
+        "memories/staging-host-447f.md": true
+      }
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "a0cbfc16242319fe08f39a8f8cb0acd6d87af9f970f4d7f5b1d67fdec264554a"
+      },
+      "bundle": {},
+      "bodies": {
+        "memories/staging-host-82a6.md": "72318251e56feec05d283455b0f7831891e5583ba1d300fac9d668de29d26668",
+        "memories/staging-host-447f.md": "67e87f53a64e319308cdf68a3d3ca50ed9589b1b578a28a623e8f8532296f629"
+      }
+    }
+  ]
+}

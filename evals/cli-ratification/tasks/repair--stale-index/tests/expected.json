@@ -1,0 +1,25 @@
+{
+  "card": "repair--stale-index",
+  "family": "repair",
+  "project": "orchid",
+  "workdir": "/work/orchid",
+  "checks": [
+    {
+      "type": "lookup",
+      "query": "wicket key rotation",
+      "ref": "memories/key-rotation-3cfd"
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "b6f46772a1437cdb29dc28995d1ff70668219a99ec2ad28d6c1abc01cbb5bbed"
+      },
+      "bundle": {
+        "memories/key-storage-7df0.md": "9e64a0c2ecb4f9f209325eb6840c00820338dafeb87f19ebf5ebb5af5f9cb571",
+        "memories/gateway-port-123a.md": "7b9ea45b80e72ccdf92ce02b952b88131f56e8864d788eef630c3f88d3411398",
+        "memories/key-rotation-3cfd.md": "b25bf05a06ddeca973a5fcf29a5044c1a5bdb9e77f53104a6e5ef9919a17f7cc"
+      },
+      "bodies": {}
+    }
+  ]
+}

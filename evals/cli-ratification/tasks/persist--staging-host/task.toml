@@ -1,0 +1,28 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/persist--staging-host"
+version = "1.0.0"
+description = "Record the decision about the tallow service's staging host"
+authors = []
+keywords = []
+
+[metadata]
+family = "persist"
+project = "quill"
+# Values that must appear in the output of an akm call, before the answer is written, for the answer to be AKM-mediated; and patterns of
+# akm commands, one of which must have run. The trace is read on the host (src/trace.ts); the agent never sees this file.
+evidence = []
+commands = ["akm\\s+(remember|import|index|clone|proposal)"]
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 720.0
+
+[environment]
+workdir = "/work/quill"
+
+[environment.env]
+AKM_TASK_STASH = "persist--staging-host"

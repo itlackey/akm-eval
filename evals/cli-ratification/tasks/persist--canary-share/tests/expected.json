@@ -1,0 +1,34 @@
+{
+  "card": "persist--canary-share",
+  "family": "persist",
+  "project": "orchid",
+  "workdir": "/work/orchid",
+  "checks": [
+    {
+      "type": "persisted",
+      "value": "37",
+      "project": "orchid",
+      "query": "oriel canary share",
+      "types": [
+        "memories",
+        "knowledge"
+      ],
+      "tags": [],
+      "known": {
+        "memories/canary-share-f56e.md": true,
+        "memories/canary-share-a276.md": true
+      }
+    },
+    {
+      "type": "preserved",
+      "workspace": {
+        "README.md": "09edf64012e75fc2222447f4909e67d6ba914c2ce634513e6f4f162b80e2ba67"
+      },
+      "bundle": {},
+      "bodies": {
+        "memories/canary-share-f56e.md": "0ff78f0d02aef97fed0bbd7c874ee486677678ca1ddd90f8dc351c6043027a5f",
+        "memories/canary-share-a276.md": "0ff78f0d02aef97fed0bbd7c874ee486677678ca1ddd90f8dc351c6043027a5f"
+      }
+    }
+  ]
+}

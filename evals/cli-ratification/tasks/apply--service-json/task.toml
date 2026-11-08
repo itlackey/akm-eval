@@ -1,0 +1,28 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/apply--service-json"
+version = "1.0.0"
+description = "Write service.json for corbel from the project's approved port and region"
+authors = []
+keywords = []
+
+[metadata]
+family = "apply"
+project = "orchid"
+# Values that must appear in the output of an akm call, before the answer is written, for the answer to be AKM-mediated; and patterns of
+# akm commands, one of which must have run. The trace is read on the host (src/trace.ts); the agent never sees this file.
+evidence = ["8048", "rowan-central"]
+commands = []
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 720.0
+
+[environment]
+workdir = "/work/orchid"
+
+[environment.env]
+AKM_TASK_STASH = "apply--service-json"
