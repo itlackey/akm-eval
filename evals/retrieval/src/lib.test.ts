@@ -424,5 +424,13 @@ test("same-file ref classifications share relevance credit while raw refs remain
   expect(row.search.grades).toEqual([3, 3]);
   expect(row.search.scores).toMatchObject({ ndcg_10: 1, recall_10: 1, judged_10: 1, p_5: 0.2 });
   expect(gradesByQuery([...qrels, { id: "q", ref: "knowledge/guide", grade: 1, reason: "later review" }]).get("q"))
-    .toEqual({ "commands/guide": 1 });
+    .toEqual({ "commands/guide": 3 }); // refs of one alias take the highest grade of their pairs; a pair graded again replaces only its own earlier row
+});
+
+test("a memory and its .derived twin are one asset graded at the higher of their grades, whichever row comes last", () => {
+  const row = (ref: string, grade: number, alias_of?: string) => ({ id: "q", ref, grade, reason: "r", ...(alias_of ? { alias_of } : {}) });
+  for (const qrels of [
+    [row("memories/a", 3), row("memories/a.derived", 2, "memories/a")],
+    [row("memories/a.derived", 2, "memories/a"), row("memories/a", 3)],
+  ]) expect(gradesByQuery(qrels).get("q")).toEqual({ "memories/a": 3 });
 });

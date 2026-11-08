@@ -1,7 +1,7 @@
 ---
 inferred: true
 captureMode: background
-source: memory:client-nexus-exposure-review
+source: memories/client-nexus-exposure-review
 description: General rule for when economic nexus creates a sales-tax registration obligation without physical presence
 tags: ["tax", "nexus", "multi-state"]
 searchHints: ["economic nexus threshold", "sales tax registration without physical presence", "multi-state seller nexus"]
