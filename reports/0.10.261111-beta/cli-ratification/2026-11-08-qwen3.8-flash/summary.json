@@ -1,0 +1,970 @@
+{
+  "eval": "cli-ratification",
+  "mode": "pilot",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "qwen3.8-flash",
+  "date": "2026-11-08T01:51:40.254Z",
+  "git_commit": "21e01e8",
+  "model": "openai/opencode-zen/qwen3.8-flash",
+  "akm_version": "0.10.261111-beta",
+  "akm_bin": "akm-cli@0.10.261111-beta",
+  "akm_build": null,
+  "akm_build_fingerprint": "1951b22031a33baf13124731f4760a3078d3652a38154eea6dfb5349822d9d71",
+  "akm_env": {},
+  "akm_install": {
+    "from": "release",
+    "plugin_from": "release",
+    "plugin_version": "0.10.261110-beta",
+    "packages": [],
+    "dependency_tree_sha256": "daafbeab29ba13b3d0946dd322cfb5decf4a74c2aac732a28cd7c83374bc4f10",
+    "locked": false,
+    "observed": {
+      "akm_version": [
+        "0.10.261111-beta"
+      ],
+      "plugin_akm_cli": [],
+      "assets_indexed": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "env": {
+        "AKM_BUNDLE_DIR": "/opt/akm/bundle",
+        "AKM_CONFIG_DIR": "/opt/akm/config",
+        "AKM_DATA_DIR": "/opt/akm/data",
+        "AKM_CACHE_DIR": "/opt/akm/cache",
+        "AKM_STATE_DIR": "/opt/akm/state",
+        "AKM_AUTO_FEEDBACK": "0",
+        "AKM_AUTO_LEARNING": "0",
+        "AKM_AUTO_MEMORY": "0",
+        "AKM_INDEX_ON_SESSION_END": "0"
+      },
+      "dependency_trees": [
+        "daafbeab29ba13b3d0946dd322cfb5decf4a74c2aac732a28cd7c83374bc4f10"
+      ],
+      "lockfiles": {
+        "akm_cli": null,
+        "plugin": null
+      }
+    }
+  },
+  "pins": {
+    "akm_cli": "0.10.261111-beta",
+    "akm_plugin": null,
+    "opencode": "1.18.34",
+    "harbor": "0.24.0"
+  },
+  "limit": null,
+  "n_tasks": 14,
+  "attempts": 1,
+  "arms": {
+    "minimal": {
+      "prompt": "prompts/minimal.md"
+    },
+    "guidance": {
+      "prompt": "prompts/guidance.md"
+    }
+  },
+  "harbor_exit": 0,
+  "status": "complete",
+  "aborted_reason": null,
+  "check": null,
+  "completion": {
+    "minimal": {
+      "expected": 14,
+      "completed": 14,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "guidance": {
+      "expected": 14,
+      "completed": 14,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    }
+  },
+  "libraries_sha256": "9475b5fe359d3b281be334b26d82fa16abd554ede2a4644bf5f199d9d0b29572",
+  "tasks_sha256": {
+    "apply--deploy-env": "e6d5e1451ee42bbd14607e416a0e7acc59801c9d8cb724c3c4c5806e59c5e315",
+    "apply--limits-json": "a301b14f2b947cbee88b7f26953fe67258c59f6ccb99972dceea3a637c6357b8",
+    "apply--service-json": "9967c2497bed3f35d5ca321814b36017efa431ca2dfda18005e243e00c38132b",
+    "persist--canary-share": "9c4568b6d6e1ace91f6e2862ee73a6f5edde4403502c6dccac84c1fdd5efe355",
+    "persist--release-address": "d667dda83ae7fccb3067ca743bee0ec48bfee00e66008718ce6dad1922c6a1d1",
+    "persist--staging-host": "f1934e0e24c8027ded20ea79eef551737a7744521917b3a3f9325ba32bc637d7",
+    "regression--1472-cross-project": "7d5b8ed6a463802df6d632143efa61e8d7eb7c5ac9aad12a9d60058c4c67351c",
+    "regression--1473-pack": "7de6bbaa063735b4ac233789ca077bc80a6afef516e913a4b1ca8a303406db50",
+    "repair--excluded-type": "1374dc51309104f163376efd609d2c869c389a7dd71d259fb498a4a7d7523324",
+    "repair--project-filter": "edf663676eca3f98259a346ed321b966bc301012ee9186fb80e2e0f98d5e4fd0",
+    "repair--stale-index": "52162a086b164b9019ce7a6323512e4d39c444202f847b9b758a83826cddfd83",
+    "resume--release-3": "1d845581f66ced92a1598dbad56e022992c0e727753255f8a20c0f2ab136127f",
+    "resume--release-4": "589621caf24323e318b4547df059da7530b7126619ca2d362314343053209f2f",
+    "resume--release-last": "1982088b1b6e94dec6c2dab62bd93c60344a5d78d5695fbc15f6b943b9534460"
+  },
+  "arms_sha256": "d6c4aee084693a68e5d64a253d394c741abcad000c7f65d57d4602e51cc857d1",
+  "assets_sha256": "75873f523e14cb81e77b05b44d4d723efc49d68a04ed5f07ee6509846f8c54e7",
+  "engine": {
+    "model": "openai/opencode-zen/qwen3.8-flash",
+    "endpoint": "<MODEL_BASE_URL>"
+  },
+  "config": {
+    "n_attempts": 1,
+    "n_concurrent_trials": 2,
+    "environment": {
+      "type": "docker",
+      "delete": true,
+      "extra_docker_compose": [
+        "lib/harbor/shared-network.yaml"
+      ]
+    },
+    "agents": [
+      {
+        "import_path": "akm_cli:AkmCli",
+        "model_name": "openai/opencode-zen/qwen3.8-flash",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/opencode-zen/qwen3.8-flash"
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "libraries_dir": "libraries",
+          "arm": "minimal",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ]
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ]
+            }
+          },
+          "disable_web_search": true,
+          "prompt_template_path": "prompts/minimal.md"
+        }
+      },
+      {
+        "import_path": "akm_cli:AkmCli",
+        "model_name": "openai/opencode-zen/qwen3.8-flash",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/opencode-zen/qwen3.8-flash"
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "libraries_dir": "libraries",
+          "arm": "guidance",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ]
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ]
+            }
+          },
+          "disable_web_search": true,
+          "prompt_template_path": "prompts/guidance.md"
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "apply--deploy-env",
+          "apply--limits-json",
+          "apply--service-json",
+          "persist--canary-share",
+          "persist--release-address",
+          "persist--staging-host",
+          "regression--1472-cross-project",
+          "regression--1473-pack",
+          "repair--excluded-type",
+          "repair--project-filter",
+          "repair--stale-index",
+          "resume--release-3",
+          "resume--release-4",
+          "resume--release-last"
+        ]
+      }
+    ]
+  },
+  "n_errored": 0,
+  "metrics": {
+    "arms": {
+      "minimal": {
+        "pass_rate": 1,
+        "passed": 14,
+        "scored": 14,
+        "errored": 0,
+        "mediated_pass": 14,
+        "unmediated_pass": 0,
+        "tokens_per_success": 184190,
+        "calls_to_first_useful_median": 9,
+        "help_calls": 34,
+        "invalid_commands": 6,
+        "by_family": {
+          "apply": {
+            "passed": 3,
+            "scored": 3,
+            "mediated": 3
+          },
+          "persist": {
+            "passed": 3,
+            "scored": 3,
+            "mediated": 3
+          },
+          "repair": {
+            "passed": 3,
+            "scored": 3,
+            "mediated": 3
+          },
+          "resume": {
+            "passed": 3,
+            "scored": 3,
+            "mediated": 3
+          },
+          "regression": {
+            "passed": 2,
+            "scored": 2,
+            "mediated": 2
+          }
+        }
+      },
+      "guidance": {
+        "pass_rate": 1,
+        "passed": 14,
+        "scored": 14,
+        "errored": 0,
+        "mediated_pass": 14,
+        "unmediated_pass": 0,
+        "tokens_per_success": 234298,
+        "calls_to_first_useful_median": 9,
+        "help_calls": 45,
+        "invalid_commands": 10,
+        "by_family": {
+          "apply": {
+            "passed": 3,
+            "scored": 3,
+            "mediated": 3
+          },
+          "persist": {
+            "passed": 3,
+            "scored": 3,
+            "mediated": 3
+          },
+          "repair": {
+            "passed": 3,
+            "scored": 3,
+            "mediated": 3
+          },
+          "resume": {
+            "passed": 3,
+            "scored": 3,
+            "mediated": 3
+          },
+          "regression": {
+            "passed": 2,
+            "scored": 2,
+            "mediated": 2
+          }
+        }
+      }
+    },
+    "comparisons": {
+      "guidance-minimal": {
+        "value": 0,
+        "lo": 0,
+        "hi": 0,
+        "n": 14,
+        "sign_p": 1,
+        "tokens_per_success_change": 0.272
+      }
+    }
+  },
+  "job": {
+    "n_attempts": 1,
+    "n_concurrent_trials": 2,
+    "environment": {
+      "type": "docker",
+      "delete": true,
+      "extra_docker_compose": [
+        "lib/harbor/shared-network.yaml"
+      ]
+    },
+    "agents": [
+      {
+        "import_path": "akm_cli:AkmCli",
+        "model_name": "openai/opencode-zen/qwen3.8-flash",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/opencode-zen/qwen3.8-flash"
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "libraries_dir": "libraries",
+          "arm": "minimal",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ]
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ]
+            }
+          },
+          "disable_web_search": true,
+          "prompt_template_path": "prompts/minimal.md"
+        }
+      },
+      {
+        "import_path": "akm_cli:AkmCli",
+        "model_name": "openai/opencode-zen/qwen3.8-flash",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/opencode-zen/qwen3.8-flash"
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261111-beta",
+          "libraries_dir": "libraries",
+          "arm": "guidance",
+          "projects": {
+            "orchid": {
+              "paths": [
+                "/work/orchid"
+              ]
+            },
+            "quill": {
+              "paths": [
+                "/work/quill"
+              ]
+            }
+          },
+          "disable_web_search": true,
+          "prompt_template_path": "prompts/guidance.md"
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "apply--deploy-env",
+          "apply--limits-json",
+          "apply--service-json",
+          "persist--canary-share",
+          "persist--release-address",
+          "persist--staging-host",
+          "regression--1472-cross-project",
+          "regression--1473-pack",
+          "repair--excluded-type",
+          "repair--project-filter",
+          "repair--stale-index",
+          "resume--release-3",
+          "resume--release-4",
+          "resume--release-last"
+        ]
+      }
+    ]
+  },
+  "report": {
+    "arms": [
+      "minimal",
+      "guidance"
+    ],
+    "by_arm": {
+      "minimal": {
+        "trials": 14,
+        "scored": 14,
+        "passed": 14,
+        "errored": 0,
+        "timeouts": 0,
+        "agent_exits": 0,
+        "pass_rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1,
+          "n": 14
+        },
+        "by_family": {
+          "apply": {
+            "scored": 3,
+            "passed": 3,
+            "mediated": 3,
+            "unmediated": 0,
+            "unknown": 0
+          },
+          "persist": {
+            "scored": 3,
+            "passed": 3,
+            "mediated": 3,
+            "unmediated": 0,
+            "unknown": 0
+          },
+          "repair": {
+            "scored": 3,
+            "passed": 3,
+            "mediated": 3,
+            "unmediated": 0,
+            "unknown": 0
+          },
+          "resume": {
+            "scored": 3,
+            "passed": 3,
+            "mediated": 3,
+            "unmediated": 0,
+            "unknown": 0
+          },
+          "regression": {
+            "scored": 2,
+            "passed": 2,
+            "mediated": 2,
+            "unmediated": 0,
+            "unknown": 0
+          }
+        },
+        "akm_called": {
+          "trials": 14,
+          "called": 14
+        },
+        "tokens": {
+          "trials": 14,
+          "missing": 0,
+          "input": 2553049,
+          "cache": 2223104,
+          "output": 25617,
+          "per_success": 184190
+        },
+        "calls": {
+          "traced": 14,
+          "tool_calls": 234,
+          "over_budget": 0,
+          "to_first_useful_median": 9,
+          "seconds_to_first_useful_median": 14.3,
+          "no_useful_operation": 0,
+          "help_calls": 34,
+          "help_chars": 185914,
+          "doc_reads": 0,
+          "akm_chars": 322916,
+          "invalid": 6,
+          "repeated": 0
+        },
+        "leakage": {
+          "trials": 0,
+          "hits": 0,
+          "by_trial": []
+        },
+        "failures": []
+      },
+      "guidance": {
+        "trials": 14,
+        "scored": 14,
+        "passed": 14,
+        "errored": 0,
+        "timeouts": 0,
+        "agent_exits": 0,
+        "pass_rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1,
+          "n": 14
+        },
+        "by_family": {
+          "apply": {
+            "scored": 3,
+            "passed": 3,
+            "mediated": 3,
+            "unmediated": 0,
+            "unknown": 0
+          },
+          "persist": {
+            "scored": 3,
+            "passed": 3,
+            "mediated": 3,
+            "unmediated": 0,
+            "unknown": 0
+          },
+          "repair": {
+            "scored": 3,
+            "passed": 3,
+            "mediated": 3,
+            "unmediated": 0,
+            "unknown": 0
+          },
+          "resume": {
+            "scored": 3,
+            "passed": 3,
+            "mediated": 3,
+            "unmediated": 0,
+            "unknown": 0
+          },
+          "regression": {
+            "scored": 2,
+            "passed": 2,
+            "mediated": 2,
+            "unmediated": 0,
+            "unknown": 0
+          }
+        },
+        "akm_called": {
+          "trials": 14,
+          "called": 14
+        },
+        "tokens": {
+          "trials": 14,
+          "missing": 0,
+          "input": 3251934,
+          "cache": 2828288,
+          "output": 28234,
+          "per_success": 234298
+        },
+        "calls": {
+          "traced": 14,
+          "tool_calls": 245,
+          "over_budget": 0,
+          "to_first_useful_median": 9,
+          "seconds_to_first_useful_median": 16.6,
+          "no_useful_operation": 0,
+          "help_calls": 45,
+          "help_chars": 421916,
+          "doc_reads": 0,
+          "akm_chars": 601289,
+          "invalid": 10,
+          "repeated": 0
+        },
+        "leakage": {
+          "trials": 0,
+          "hits": 0,
+          "by_trial": []
+        },
+        "failures": []
+      }
+    },
+    "comparisons": [
+      {
+        "a": "guidance",
+        "b": "minimal",
+        "delta": {
+          "value": 0,
+          "lo": 0,
+          "hi": 0,
+          "n": 14,
+          "ci": [
+            0,
+            0
+          ],
+          "resampled": "tasks"
+        },
+        "better": {
+          "a": 0,
+          "b": 0,
+          "same": 14
+        },
+        "sign_test": {
+          "n": 0,
+          "p": 1
+        },
+        "tokens_per_success_change": 0.272
+      }
+    ],
+    "tasks": [
+      {
+        "task": "apply--deploy-env",
+        "family": "apply",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "apply--limits-json",
+        "family": "apply",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "apply--service-json",
+        "family": "apply",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "persist--canary-share",
+        "family": "persist",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "persist--release-address",
+        "family": "persist",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "persist--staging-host",
+        "family": "persist",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "regression--1472-cross-project",
+        "family": "regression",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "regression--1473-pack",
+        "family": "regression",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "repair--excluded-type",
+        "family": "repair",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "repair--project-filter",
+        "family": "repair",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "repair--stale-index",
+        "family": "repair",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "resume--release-3",
+        "family": "resume",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "resume--release-4",
+        "family": "resume",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      },
+      {
+        "task": "resume--release-last",
+        "family": "resume",
+        "cells": {
+          "minimal": "1/1",
+          "guidance": "1/1"
+        }
+      }
+    ]
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "cli-ratification",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.1"
+    },
+    "scorer": {
+      "version": "0.1"
+    },
+    "cases": {
+      "apply--deploy-env": {
+        "input_sha256": "14dd4142138f0d3d2e8dca78f655b40b45d4514b4457715152b90b80c027239e",
+        "label_sha256": "c08b742a74277392534db7dae2329e6a538d584c1e1f5ef84f9f163e59e4516b"
+      },
+      "apply--limits-json": {
+        "input_sha256": "05832c4badf9d01f242c193dc1b993ff1a07445d77a035901faabb7506ff5b26",
+        "label_sha256": "c08b742a74277392534db7dae2329e6a538d584c1e1f5ef84f9f163e59e4516b"
+      },
+      "apply--service-json": {
+        "input_sha256": "0c505a2b474eaa0aae97ed9574cdad7e908fa005aab5830af6b4a461f03405c9",
+        "label_sha256": "c08b742a74277392534db7dae2329e6a538d584c1e1f5ef84f9f163e59e4516b"
+      },
+      "persist--canary-share": {
+        "input_sha256": "f24c4819336ea872f3daed1f979993bdb4d24205a4900d6c9fc37c5d3f8fef2d",
+        "label_sha256": "7d5b7806565421afca4f9138d6745450d0ba829a3ab1589a743d88ecb3465738"
+      },
+      "persist--release-address": {
+        "input_sha256": "f1ca2279bb7136e278b5d8de6c7209dc0a7ba82f93abcb57155defe6989b5406",
+        "label_sha256": "7d5b7806565421afca4f9138d6745450d0ba829a3ab1589a743d88ecb3465738"
+      },
+      "persist--staging-host": {
+        "input_sha256": "e1d5cf684258cd390c48fe01d012cb3801c55cba6cde34c7733c4b7fc4a0c3fc",
+        "label_sha256": "7d5b7806565421afca4f9138d6745450d0ba829a3ab1589a743d88ecb3465738"
+      },
+      "regression--1472-cross-project": {
+        "input_sha256": "a472f63853c294c3a4bf92a20ea6f1a4a7cbd43a8ec8b835b8936f899419d060",
+        "label_sha256": "3b0aafb957f9b710970e10c9e977948bda6f99b7d9e0a0b72f9e1503267d79a8"
+      },
+      "regression--1473-pack": {
+        "input_sha256": "a64d5eba1d78542eab29ffa55710d9646a14c2c1be2f8d5473972028aff81746",
+        "label_sha256": "3b0aafb957f9b710970e10c9e977948bda6f99b7d9e0a0b72f9e1503267d79a8"
+      },
+      "repair--excluded-type": {
+        "input_sha256": "7bc6145e61f6f4f899098c1b6ccd8a81e48330fb59e9ce514c2e4ba2b157401a",
+        "label_sha256": "d160e29a7c4269b5cab60810b66093b07fb8fcfd891953c59467f6620677e8d7"
+      },
+      "repair--project-filter": {
+        "input_sha256": "ff8f28318c744211fa1aa159444eef583a7a568ef7c5ac0e4f8bd9e6b8ca89d4",
+        "label_sha256": "d160e29a7c4269b5cab60810b66093b07fb8fcfd891953c59467f6620677e8d7"
+      },
+      "repair--stale-index": {
+        "input_sha256": "b8ea0dbcf5b087932c9565db97b70357ad4167156ccdd312569acd585ca83f6c",
+        "label_sha256": "d160e29a7c4269b5cab60810b66093b07fb8fcfd891953c59467f6620677e8d7"
+      },
+      "resume--release-3": {
+        "input_sha256": "9ef66782c6a1984ec1f094259f510071b0c3f4f5964bda0bc4185123efd5fc2d",
+        "label_sha256": "a75e2c7e11a44fddce2314cb8aa406b2770dce601aeb1dc14a309b3a0ef5ab04"
+      },
+      "resume--release-4": {
+        "input_sha256": "15f261beb10e695dfaaa4fdf2679f01afdb23e4712fc6c7f256c7416e26706e8",
+        "label_sha256": "a75e2c7e11a44fddce2314cb8aa406b2770dce601aeb1dc14a309b3a0ef5ab04"
+      },
+      "resume--release-last": {
+        "input_sha256": "ba715ba6da8e8109dcc1de266646102de97f22d61c10b57c70dbe9aa1d27fdc6",
+        "label_sha256": "a75e2c7e11a44fddce2314cb8aa406b2770dce601aeb1dc14a309b3a0ef5ab04"
+      }
+    },
+    "akm": {
+      "version": "0.10.261111-beta",
+      "bin": "akm-cli@0.10.261111-beta",
+      "build": null,
+      "build_fingerprint": "1951b22031a33baf13124731f4760a3078d3652a38154eea6dfb5349822d9d71"
+    },
+    "config": {
+      "redacted": {
+        "n_concurrent_trials": 2,
+        "environment": {
+          "type": "docker",
+          "delete": true,
+          "extra_docker_compose": [
+            "lib/harbor/shared-network.yaml"
+          ]
+        },
+        "agents": [
+          {
+            "import_path": "akm_cli:AkmCli",
+            "model_name": "openai/opencode-zen/qwen3.8-flash",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/opencode-zen/qwen3.8-flash"
+              },
+              "setup_cache_dir": ".cache/harbor-setup",
+              "akm_cli_version": "0.10.261111-beta",
+              "libraries_dir": "libraries",
+              "arm": "minimal",
+              "projects": {
+                "orchid": {
+                  "paths": [
+                    "/work/orchid"
+                  ]
+                },
+                "quill": {
+                  "paths": [
+                    "/work/quill"
+                  ]
+                }
+              },
+              "disable_web_search": true,
+              "prompt_template_path": "prompts/minimal.md"
+            }
+          },
+          {
+            "import_path": "akm_cli:AkmCli",
+            "model_name": "openai/opencode-zen/qwen3.8-flash",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/opencode-zen/qwen3.8-flash"
+              },
+              "setup_cache_dir": ".cache/harbor-setup",
+              "akm_cli_version": "0.10.261111-beta",
+              "libraries_dir": "libraries",
+              "arm": "guidance",
+              "projects": {
+                "orchid": {
+                  "paths": [
+                    "/work/orchid"
+                  ]
+                },
+                "quill": {
+                  "paths": [
+                    "/work/quill"
+                  ]
+                }
+              },
+              "disable_web_search": true,
+              "prompt_template_path": "prompts/guidance.md"
+            }
+          }
+        ]
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "opencode": {
+        "model": "openai/opencode-zen/qwen3.8-flash",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": null,
+        "enableThinking": null,
+        "timeoutMs": null
+      }
+    },
+    "eval_settings": {
+      "attempts": 1
+    },
+    "completion": {
+      "selected": [
+        "apply--deploy-env",
+        "apply--limits-json",
+        "apply--service-json",
+        "persist--canary-share",
+        "persist--release-address",
+        "persist--staging-host",
+        "regression--1472-cross-project",
+        "regression--1473-pack",
+        "repair--excluded-type",
+        "repair--project-filter",
+        "repair--stale-index",
+        "resume--release-3",
+        "resume--release-4",
+        "resume--release-last"
+      ],
+      "scored": [
+        "apply--deploy-env",
+        "apply--limits-json",
+        "apply--service-json",
+        "persist--canary-share",
+        "persist--release-address",
+        "persist--staging-host",
+        "regression--1472-cross-project",
+        "regression--1473-pack",
+        "repair--excluded-type",
+        "repair--project-filter",
+        "repair--stale-index",
+        "resume--release-3",
+        "resume--release-4",
+        "resume--release-last"
+      ],
+      "errored": []
+    }
+  },
+  "rerun": {
+    "cards": [
+      "apply--deploy-env",
+      "apply--service-json"
+    ],
+    "reason": "the first run's trials of these two cards were invalid (a README from another card's image; an ambiguous time format and a verifier that rejected quoted values); the cards and verifier were fixed and each card was run once more per arm, same model and akm build",
+    "label": "qwen3.8-flash-rerun",
+    "date": "2026-11-08T02:27:28.529Z",
+    "git_commit": "e3c8511",
+    "tasks_sha256": {
+      "apply--deploy-env": "e6d5e1451ee42bbd14607e416a0e7acc59801c9d8cb724c3c4c5806e59c5e315",
+      "apply--service-json": "9967c2497bed3f35d5ca321814b36017efa431ca2dfda18005e243e00c38132b"
+    },
+    "invalid_first_run_trials": [
+      {
+        "task": "apply--deploy-env",
+        "arm": "minimal",
+        "trial": "apply--deploy-env__himjesb",
+        "failed_checks": [
+          "1-lines-file:deploy.env"
+        ]
+      },
+      {
+        "task": "apply--deploy-env",
+        "arm": "guidance",
+        "trial": "apply--deploy-env__oC6FCdK",
+        "failed_checks": [
+          "1-lines-file:deploy.env"
+        ]
+      },
+      {
+        "task": "apply--service-json",
+        "arm": "minimal",
+        "trial": "apply--service-json__VRWvwrr",
+        "failed_checks": [
+          "3-preserved"
+        ]
+      },
+      {
+        "task": "apply--service-json",
+        "arm": "guidance",
+        "trial": "apply--service-json__YW8vai2",
+        "failed_checks": [
+          "3-preserved"
+        ]
+      }
+    ]
+  }
+}
