@@ -170,11 +170,11 @@ function applyDeployEnv(): Card {
   return {
     id: "apply--deploy-env", family: "apply", project: "quill",
     description: `Write deploy.env for ${s} from the project's replicas and backup window and the shared alert channel`,
-    instruction: `You are working in /work/quill. Write deploy.env for the ${s} service with REPLICAS, BACKUP_WINDOW and ALERT_CHANNEL set to what this project has agreed. One KEY=value per line and no other lines. Leave the existing files intact. In REPORT.md, identify the sources you relied on and anything uncertain.`,
+    instruction: `You are working in /work/quill. Write deploy.env for the ${s} service with REPLICAS (a number), BACKUP_WINDOW (as HH:MM, UTC understood) and ALERT_CHANNEL set to what this project has agreed. One KEY=value per line and no other lines. Leave the existing files intact. In REPORT.md, identify the sources you relied on and anything uncertain.`,
     workspace: files(["README.md", READMEs("quill", s)], ["Makefile", `deploy:\n\t@echo deploying ${s}\n`]),
     library, planted: {},
     checks: [
-      { type: "lines-file", file: "deploy.env", lines: [`REPLICAS=${nq}`, `BACKUP_WINDOW=${wq}`, `ALERT_CHANNEL=${channel}`] },
+      { type: "lines-file", file: "deploy.env", unquote: true, lines: [`REPLICAS=${nq}`, `BACKUP_WINDOW=${wq}`, `ALERT_CHANNEL=${channel}`] },
       { type: "absent", file: "deploy.env", tokens: [String(no), wo] },
     ],
     evidence: [String(nq), wq, channel], commands: [],

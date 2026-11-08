@@ -2,7 +2,7 @@
 // Writes the tasks and libraries of cli-ratification from cards.ts (the cards are the source; the folders are their output, committed so
 // that a run reads plain files, and a test regenerates them and compares). Harbor's task format, one folder per card:
 //
-//   tasks/<card>/instruction.md, task.toml, environment/{Dockerfile,workspace/...}, tests/{test.sh,verify.mjs,expected.json}
+//   tasks/<card>/instruction.md, task.toml, environment/{Dockerfile,workspace-<card>/...}, tests/{test.sh,verify.mjs,expected.json}
 //   libraries/<card>/{memories,knowledge,workflows}/...   and the hidden .plant.sh and .solve.sh
 //
 //   evals/cli-ratification/generate [--check]    --check writes nothing and fails when the folders differ from the cards.
@@ -51,11 +51,12 @@ AKM_TASK_STASH = ${str(c.id)}
 `;
 
 /**
- * The label makes every card's image chain its own. Without it two cards of one project have the same first layers, and a COPY of
- * workspace files that agree in path, size and modification second (a README of two names of six letters, written in one run of generate)
- * can come out of the build cache with the other card's content: seen in a check run as a README that "changed".
+ * The workspace folder is named for its card. BuildKit shares the transfer of a local build context between builds, and takes a file
+ * with the same path, size and modification second as unchanged: two cards of one project, each with a README of the same length (names
+ * of six letters) written by one run of generate or one checkout, came out with each other's README in the first model run. A folder
+ * name of its own gives every card paths of its own.
  */
-const dockerfile = (c: Card) => `FROM ubuntu:24.04\n\nLABEL org.akm-eval.card=${str(c.id)}\n\n${CURL_LAYER}WORKDIR /work/${c.project}\nCOPY workspace/ /work/${c.project}/\n`;
+const dockerfile = (c: Card) => `FROM ubuntu:24.04\n\n${CURL_LAYER}WORKDIR /work/${c.project}\nCOPY workspace-${c.id}/ /work/${c.project}/\n`;
 
 const testSh = `#!/bin/bash
 # Harbor entry point, run in the container after the agent has exited. verify.mjs judges the state left behind and writes
@@ -74,7 +75,7 @@ export function render(cards: Card[] = CARDS()): Record<string, string> {
     out[`${t}/instruction.md`] = `${c.instruction}\n`;
     out[`${t}/task.toml`] = taskToml(c);
     out[`${t}/environment/Dockerfile`] = dockerfile(c);
-    for (const [p, text] of Object.entries(c.workspace)) out[`${t}/environment/workspace/${p}`] = text;
+    for (const [p, text] of Object.entries(c.workspace)) out[`${t}/environment/workspace-${c.id}/${p}`] = text;
     out[`${t}/tests/test.sh`] = testSh;
     out[`${t}/tests/verify.mjs`] = verify;
     out[`${t}/tests/expected.json`] = `${JSON.stringify(expectedOf(c), null, 2)}\n`;

@@ -206,6 +206,14 @@ describe("the other families' failing cases", () => {
     return box.run();
   };
 
+  test("apply--deploy-env: a quoted value is the same assignment; a unit appended to the time is another value", () => {
+    const id = "apply--deploy-env";
+    const lines = (card(id).checks[0] as any).lines as string[];
+    const quote = lines.map((l) => l.replace(/^([^=]+=)(.*)$/, '$1"$2"'));
+    expect(attempt(id, (b) => b.write("deploy.env", `${quote.join("\n")}\n`)).reward).toBe(1);
+    expect(attempt(id, (b) => b.write("deploy.env", `${lines.map((l) => (l.startsWith("BACKUP") ? `${l} UTC` : l)).join("\n")}\n`)).reward).toBe(0);
+  });
+
   test("persist: not indexed, wrong project, duplicated, missing tag, only in the report", () => {
     const id = "persist--release-address";
     const note = (box: Box) => `memories/decision-${id.split("--")[1]}.md`;

@@ -104,11 +104,13 @@ const CHECKS = {
     return ok();
   },
 
-  /** A text file whose non-blank lines are exactly these lines. */
+  /** A text file whose non-blank lines are exactly these lines (`unquote`: values may be quoted). */
   "lines-file"(c, ctx) {
     const text = read(join(ctx.workdir, c.file));
     if (text === null) return bad(`${c.file} is missing`);
-    const got = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    // `unquote`: KEY="value" and KEY='value' are the same assignment as KEY=value, as an env file reads them (a # starts a comment unless quoted).
+    const plain = (l) => (c.unquote ? l.replace(/^([^=]+=)(["'])(.*)\2$/, "$1$3") : l);
+    const got = text.split("\n").map((l) => plain(l.trim())).filter(Boolean);
     const want = c.lines;
     const missing = want.filter((l) => !got.includes(l));
     const extra = got.filter((l) => !want.includes(l));

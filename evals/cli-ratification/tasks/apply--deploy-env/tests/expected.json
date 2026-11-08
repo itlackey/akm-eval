@@ -7,6 +7,7 @@
     {
       "type": "lines-file",
       "file": "deploy.env",
+      "unquote": true,
       "lines": [
         "REPLICAS=232",
         "BACKUP_WINDOW=04:45",

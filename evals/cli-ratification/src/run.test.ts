@@ -52,7 +52,7 @@ describe("the cards", () => {
     }
   });
 
-  test("no two cards share a Dockerfile, so no two share image layers", () => {
+  test("no two cards share a Dockerfile, and no two share a workspace path", () => {
     const files = cards.map((c) => readFileSync(join(TASKS, c.id, "environment", "Dockerfile"), "utf8"));
     expect(new Set(files).size).toBe(cards.length);
   });
