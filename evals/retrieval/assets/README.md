@@ -202,6 +202,10 @@ An E6 ref `type:name` is the ref akm prints, `<folder>/<name>`: `lesson:dont-cro
 
 `banned_above` counts the queries in which a banned asset is among the first 10 results and ranks above a relevant one. With akm 0.9.26 it is 12 of 51. `banned_above_first` counts only those in which it ranks above the first relevant asset, so a relevant asset that is missing does not put one above.
 
+### Memory families
+
+Three books memories (`mise-en-place-workflow`, `wound-care-cleaning-protocol`, `client-nexus-exposure-review`) each have a hand-authored `.derived` twin, the file akm's memory inference writes beside a memory. The twins name their parent the way akm writes it today (`source: memories/<name>` or `derivedFrom: <name>`); E6 wrote `memory:<name>`, which akm no longer reads as a link. akm returns one result per memory family: a twin is dropped when its parent is also a hit (akm#1481), so the judgments grade a family once. Each of the 25 rows that grade a twin carries `alias_of`, the parent's ref, and the scorer counts the pair as one asset (each once, in the ideal ranking, recall and nDCG, whichever of the two akm returns). In 16 of the 25 the query also grades the parent. The family has one grade, the higher of the two: in 5 of the 16 the two rows differed, and the lower row (3 twin rows and 2 parent rows) now carries the higher grade. The other 9 grade the twin alone, which the family grade stands for when the parent is not a hit. No query was added or removed.
+
 ### The library
 
 93 assets: 29 memories, 25 knowledge notes, 9 facts, 9 lessons, 6 skills, 6 commands, 3 agents, 3 workflows and 3 scripts, the E6 folders merged. No file name occurs in two domains. akm 0.9.26 indexes all 93.
