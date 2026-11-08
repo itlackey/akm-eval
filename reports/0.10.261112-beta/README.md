@@ -18,12 +18,13 @@ evals are inside the spread, five of them case for case identical to last round.
 ## Look at these first
 
 1. **Distill: lesson updates right 6/40, against 3/40 on 0.10.261111-beta (7, 7, 7, 9 on earlier builds); `new_facts` 12 against 5.**
-   19 updates were emitted (20); 19 of 96 verdicts and 15 of 96 outcomes moved, every moved verdict in the `lesson-update` class.
+   19 updates were emitted (20); against the 96-case 0.10.261111-beta round, 19 verdicts and 15 outcomes moved, all in the `lesson-update` class; against its 99-case feature run, 20 verdicts and 16 outcomes moved, all `lesson-update` except `asset-02` (verdict and outcome).
    Good lessons 29/40 (29), wrong lessons 1/16 (1: `asset-02`, as in the README run of 0.10.261111-beta; 0 in both of that
    build's feature runs), `knowledge-update` class 2/3 as on 0.10.261111-beta (`know-01` missed, `know-02`/`know-03` right). Cause, from the
-   akm tree and not from this run: two commits between the `v0.10.261111-beta` and `v0.10.261112-beta` tags change the lesson-update
-   writer (`8ce086e78`, "hand the lesson-update writer the memory's figures and names the lesson lacks", and `56cf58a27`, which tightens
-   and lists the candidate facts per lesson). Neither is in the CHANGELOG. The three other runs of 0.10.261111-beta (the README run
+   akm tree and not from this run: three commits between the `v0.10.261111-beta` and `v0.10.261112-beta` tags touch the lesson-update writer:
+   `8ce086e78` (hand the writer the memory's figures and names the lesson lacks), `56cf58a27` (tighten the fact candidates, list them per lesson)
+   and `8fa5d47ff` (reverts the "figures and names" wording of the first). The net change is a model-free `memoryFactCandidates` list added to the writer's
+   prompt for each candidate lesson. It is absent from akm's CHANGELOG `[0.10.261112]`. The three other runs of 0.10.261111-beta (the README run
    and the two feature runs) differ from each other by at most 1 verdict, so 20 moved verdicts is not the run-to-run noise seen there. Not repeated (one run each).
 2. **akm prints about half as much for the same lists.** The retrieval summaries' `calls.out_tokens` (characters akm printed, over 4):
    library search 3,433 to 1,720, curate 3,738 to 1,667; books search 2,628 to 1,310, curate 3,156 to 1,385; the selection sets the
@@ -38,12 +39,13 @@ evals are inside the spread, five of them case for case identical to last round.
    (it was 1.0; the new tail items are not graded: the `judged_10` fall is the honest cost of that and has not been graded here).
    Library (544 lists), SkillRet (4,392 queries, every field but timing) and the four selection runs (76 metric keys each; 112, 112,
    2,020 and 2,020 ranked lists): 0 differ.
-4. **Agent A/B: akm arm 6/18, control 1/18.** Last round's akm arm 8/17 scored (8/18) and 8/18 on the matched-plugin repeat, control 2/18
-   both; 6 is below the 8 to 13 of 18 the akm arm has given. Difference +27.8 points (interval -5.6 to 66.7 over 6 tasks); the akm arm
+4. **Agent A/B: akm arm 6/18, control 1/18.** The comparable baseline is the matched-plugin run at collection 0.5 (0.10.261111-beta feature run, plugin 0.10.261110-beta): akm 8/18, control 2/18.
+   The published round (8/17 scored, control 2/18, plugin 0.10.261002-beta) is collection 0.4 and is not comparable with 0.5. 6 is below the 8 to 13 of 18 the akm arm has given. Difference +27.8 points (interval -5.6 to 66.7 over 6 tasks); the akm arm
    beat the control on 2 tasks and tied on 4. akm was called in 3 of 18 trials (curate 3, show 5 calls; 5 of 18 on the repeat): all 3
    that called it passed, 3 of the 15 that did not. All 36 trials scored, none errored, no timeout, no non-zero agent exit. The akm arm
    runs plugin 0.10.261111-beta (the release that pins this CLI) as the matched-plugin repeat ran 0.10.261110-beta. Per-trial agent
-   time was shorter (0.3 and 0.6 minutes against 1.1 to 2.1; wall 820 s against 1,493 s). One observation; the engagement fall
+   time was shorter in both arms (control 0.3 minutes against 2.0, akm 0.6 against 2.1; wall 820 s against 1,493 s), and the control arm moved too
+   (2 to 1 passed), so part of the shift is the environment (the lab route's speed that day), not only akm engagement. One observation; the engagement fall
    (3 of 18) is the likely reason the arm sits lower. **The first attempt of this eval failed in the environment** (next item).
 5. **Agent-ab, first attempt: the akm arm completed 0 of 18 trials, because of the lockfile this round committed.** `npm ci` from a
    committed lockfile of akm-cli 0.10.261112-beta runs better-sqlite3 13.0.3's inferred `node-gyp rebuild` (npm 10.9.9 does not take
@@ -68,7 +70,7 @@ evals are inside the spread, five of them case for case identical to last round.
 
 The baseline is the 0.10.261111-beta column named in the decision table: its published round, except for the books (that run
 rescored with current scoring), distill's `knowledge-update` class and the selection sets (its feature runs at the same collection
-version), and agent-ab (its published round and the matched-plugin run).
+version), and agent-ab (the matched-plugin feature run at collection 0.5 only).
 
 | eval | headline | 0.10.261111-beta | 0.10.261112-beta | verdict |
 |---|---|---:|---:|---|
@@ -88,7 +90,7 @@ version), and agent-ab (its published round and the matched-plugin run).
 | retrieval, library | semantic / keyword nDCG@10 | 0.8223 / 0.7668 | 0.8223 / 0.7668 | none (lists identical) |
 | skillret | keyword / semantic NDCG@10 | 50.49 / 57.79 | 50.49 / 57.79 | none (identical) |
 | selection, selection-split | 76 metric keys per run, four runs | feature runs, same version | identical | none (lists identical) |
-| agent-ab | pass rate, akm / control | 8/17 scored / 2/18 (matched plugin: 8/18 / 2/18) | 6/18 / 1/18 | none (watch: one observation, fewer akm calls) |
+| agent-ab | pass rate, akm / control | 8/18 / 2/18 (matched-plugin run, collection 0.5; the published 8/17 / 2/18 is collection 0.4, not comparable) | 6/18 / 1/18 | none (watch: one observation, fewer akm calls) |
 
 Judge-gate's figure is good revisions passed over good revisions; promotion's is good accepted over all accepted. The books'
 0.10.261111-beta published figures (0.9103 / 0.8308) were scored before the family grade; the rescored ones are the like-for-like column.
@@ -100,11 +102,11 @@ says what was done for each; it was applied unchanged. The old CLI was not colle
 
 | change | evals | can it move a score? | what was done |
 |---|---|---|---|
-| retrieval 0.5 -> 0.6, scoring 0.7 -> 0.8 (akm#1481): books qrels grade a memory family once (`alias_of`), the books' three `.derived` twins respelled | retrieval books | Yes, the books' scores and (with akm#1481) lists | rescored the saved 0.10.261111-beta books run with current scoring (allowed: queries, qrels judgments and assets are unchanged; the changelog says rescore saved books runs) and compared with that; the stored figures are shown beside it |
+| retrieval 0.5 -> 0.6, scoring 0.7 -> 0.8 (akm#1481): books qrels grade a memory family once (`alias_of`), the books' three `.derived` twins respelled | retrieval books | Yes, the books' scores and (with akm#1481) lists | queries and judgments unchanged, twin frontmatter respelled (all 51 books input hashes differ); rescored the saved 0.10.261111-beta books run with current scoring, as the changelog says, and compared with that. The rescored run is published as [a `-rescored` folder](../0.10.261111-beta/retrieval/2026-11-07-0.10.261111-beta-35b-semantic-full-20261111-books-rescored) beside the original; the stored figures are shown beside it |
 | retrieval library, SkillRet | library, skillret | No (library qrels, queries and assets unchanged) | unchanged: compared with the published 0.10.261111-beta runs |
 | retrieval 0.4 -> 0.5, scoring 0.6 -> 0.7: selection sets gain the empty value, a project-filter arm and `team`/`project` keys (run before this round, in its feature runs) | selection, selection-split | Yes (more queries, renamed keys, new qrels for 50 split pairs) | compared with the feature runs of 0.10.261111-beta at the same collection and scoring version (semantic, `filter`, `prefer`), by query id; the published README's selection rows (earlier set) are not comparable by totals. The `project-filter` arm is not in this round's set |
 | distill 0.2 -> 0.3 (akm#1454): 99 cases, new class `knowledge-update` | distill | The 96 earlier cases, labels and digests are unchanged | headline keys compared with the published 0.10.261111-beta round (96 cases) by case; the `knowledge-update` class and the verdict moves compared with the 0.10.261111-beta feature full run at distill 0.3 (99 cases) |
-| agent-ab, terminal-bench 0.4 -> 0.5: each beta gets its matching plugin (`RELEASE_PLUGINS`) | agent-ab | Yes (the plugin) | added `"0.10.261112-beta": "0.10.261111-beta"` and the plugin's lockfile on this branch, with a MEASUREMENT_CHANGELOG line; compared with the published round (plugin 0.10.261002-beta) and the matched-plugin feature run (0.10.261110-beta). No CLI lockfile (item 5) |
+| agent-ab, terminal-bench 0.4 -> 0.5: each beta gets its matching plugin (`RELEASE_PLUGINS`) | agent-ab | Yes (the plugin) | added `"0.10.261112-beta": "0.10.261111-beta"` and the plugin's lockfile on this branch, with a MEASUREMENT_CHANGELOG line; compared with the matched-plugin feature run (plugin 0.10.261110-beta, collection 0.5) only; the published round (plugin 0.10.261002-beta, collection 0.4) is not comparable. No CLI lockfile (item 5) |
 | judge-gate, bakeoff, reflect, extract, consolidate, promotion, nightly | | No change since the last round | unchanged: compared with the published 0.10.261111-beta runs |
 | project-intent 0.3, cli-ratification 0.1, harbor shared network | project-intent, cli-ratification (agent-ab uses the shared network) | agent-ab's jobs run on the shared Docker network (`akm-eval-trials`); the trials are the same | none needed |
 
@@ -132,8 +134,8 @@ Cases whose verdict changed between the baseline run and this round (the key is 
 | eval (cases) | moved cases | against the spread |
 |---|---:|---|
 | reflect (80) | 0 | 5 last round |
-| distill (96 earlier cases), verdict / outcome | 19 / 15 | 1 / 1 between the README run and the feature run of 0.10.261111-beta; 0 between its two repeats |
-| distill (99 cases) against the 0.10.261111-beta feature run, verdict / outcome | 20 / 16 | all in the `lesson-update` class but one outcome |
+| distill (96 earlier cases), verdict / outcome | 19 / 15 (all `lesson-update`) | 1 / 1 between the README run and the feature run of 0.10.261111-beta; 0 between its two repeats |
+| distill (99 cases) against the 0.10.261111-beta feature run, verdict / outcome | 20 / 16 | all `lesson-update` except `asset-02` (verdict and outcome) |
 | extract (64) | 0 | 5 last round |
 | judge-gate (188) | 12 | 16 last round |
 | bakeoff (55) | 0 | 3 last round |
@@ -202,6 +204,7 @@ Host load was not controlled (load average about 28 during SkillRet). The evals 
 | skillret | [2026-11-08-0.10.261112-beta-35b-semantic-full-20261112](skillret/2026-11-08-0.10.261112-beta-35b-semantic-full-20261112) |
 | agent-ab | [2026-11-08-0.10.261112-beta-35b-semantic-full-20261112](agent-ab/2026-11-08-0.10.261112-beta-35b-semantic-full-20261112) |
 | retrieval books | [2026-11-08-0.10.261112-beta-35b-semantic-full-20261112-books](retrieval/2026-11-08-0.10.261112-beta-35b-semantic-full-20261112-books) |
+| retrieval books, 0.10.261111-beta rescored (comparison column) | [2026-11-07-0.10.261111-beta-35b-semantic-full-20261111-books-rescored](../0.10.261111-beta/retrieval/2026-11-07-0.10.261111-beta-35b-semantic-full-20261111-books-rescored) |
 | retrieval library | [2026-11-08-0.10.261112-beta-35b-semantic-full-20261112-library](retrieval/2026-11-08-0.10.261112-beta-35b-semantic-full-20261112-library) |
 | selection, filter | [2026-11-08-0.10.261112-beta-selection-filter-semantic-20261112](retrieval/2026-11-08-0.10.261112-beta-selection-filter-semantic-20261112) |
 | selection, prefer | [2026-11-08-0.10.261112-beta-selection-prefer-semantic-20261112](retrieval/2026-11-08-0.10.261112-beta-selection-prefer-semantic-20261112) |
