@@ -91,9 +91,9 @@
   },
   "libraries_sha256": "9475b5fe359d3b281be334b26d82fa16abd554ede2a4644bf5f199d9d0b29572",
   "tasks_sha256": {
-    "apply--deploy-env": "7f9486137bf5f29de9bd62abc8bdd74323cc82c6a092f2856f7b776e5c3e1bf4",
+    "apply--deploy-env": "e6d5e1451ee42bbd14607e416a0e7acc59801c9d8cb724c3c4c5806e59c5e315",
     "apply--limits-json": "a301b14f2b947cbee88b7f26953fe67258c59f6ccb99972dceea3a637c6357b8",
-    "apply--service-json": "fd648db00e5f1f3693ac662e67aa6c0ff7d0c06b9e8dae354b7eddcc8c11bd42",
+    "apply--service-json": "9967c2497bed3f35d5ca321814b36017efa431ca2dfda18005e243e00c38132b",
     "persist--canary-share": "9c4568b6d6e1ace91f6e2862ee73a6f5edde4403502c6dccac84c1fdd5efe355",
     "persist--release-address": "d667dda83ae7fccb3067ca743bee0ec48bfee00e66008718ce6dad1922c6a1d1",
     "persist--staging-host": "f1934e0e24c8027ded20ea79eef551737a7744521917b3a3f9325ba32bc637d7",
@@ -107,7 +107,7 @@
     "resume--release-last": "1982088b1b6e94dec6c2dab62bd93c60344a5d78d5695fbc15f6b943b9534460"
   },
   "arms_sha256": "d6c4aee084693a68e5d64a253d394c741abcad000c7f65d57d4602e51cc857d1",
-  "assets_sha256": "baaf98caea585626fd1612ccdc9c218e7b4cf4ef4d6daab689f98cf92b65f0f0",
+  "assets_sha256": "75873f523e14cb81e77b05b44d4d723efc49d68a04ed5f07ee6509846f8c54e7",
   "engine": {
     "model": "openai/opencode-zen/qwen3.8-flash",
     "endpoint": "<MODEL_BASE_URL>"
@@ -212,21 +212,21 @@
   "metrics": {
     "arms": {
       "minimal": {
-        "pass_rate": 0.857,
-        "passed": 12,
+        "pass_rate": 1,
+        "passed": 14,
         "scored": 14,
         "errored": 0,
-        "mediated_pass": 12,
+        "mediated_pass": 14,
         "unmediated_pass": 0,
-        "tokens_per_success": 226485,
+        "tokens_per_success": 184190,
         "calls_to_first_useful_median": 9,
-        "help_calls": 36,
+        "help_calls": 34,
         "invalid_commands": 6,
         "by_family": {
           "apply": {
-            "passed": 1,
+            "passed": 3,
             "scored": 3,
-            "mediated": 1
+            "mediated": 3
           },
           "persist": {
             "passed": 3,
@@ -251,21 +251,21 @@
         }
       },
       "guidance": {
-        "pass_rate": 0.857,
-        "passed": 12,
+        "pass_rate": 1,
+        "passed": 14,
         "scored": 14,
         "errored": 0,
-        "mediated_pass": 12,
+        "mediated_pass": 14,
         "unmediated_pass": 0,
-        "tokens_per_success": 405751,
+        "tokens_per_success": 234298,
         "calls_to_first_useful_median": 9,
-        "help_calls": 47,
+        "help_calls": 45,
         "invalid_commands": 10,
         "by_family": {
           "apply": {
-            "passed": 1,
+            "passed": 3,
             "scored": 3,
-            "mediated": 1
+            "mediated": 3
           },
           "persist": {
             "passed": 3,
@@ -297,7 +297,7 @@
         "hi": 0,
         "n": 14,
         "sign_p": 1,
-        "tokens_per_success_change": 0.792
+        "tokens_per_success_change": 0.272
       }
     }
   },
@@ -406,21 +406,21 @@
       "minimal": {
         "trials": 14,
         "scored": 14,
-        "passed": 12,
+        "passed": 14,
         "errored": 0,
         "timeouts": 0,
         "agent_exits": 0,
         "pass_rate": {
-          "value": 0.857,
-          "lo": 0.643,
+          "value": 1,
+          "lo": 1,
           "hi": 1,
           "n": 14
         },
         "by_family": {
           "apply": {
             "scored": 3,
-            "passed": 1,
-            "mediated": 1,
+            "passed": 3,
+            "mediated": 3,
             "unmediated": 0,
             "unknown": 0
           },
@@ -460,22 +460,22 @@
         "tokens": {
           "trials": 14,
           "missing": 0,
-          "input": 2691780,
-          "cache": 2347776,
-          "output": 26045,
-          "per_success": 226485
+          "input": 2553049,
+          "cache": 2223104,
+          "output": 25617,
+          "per_success": 184190
         },
         "calls": {
           "traced": 14,
-          "tool_calls": 243,
+          "tool_calls": 234,
           "over_budget": 0,
           "to_first_useful_median": 9,
-          "seconds_to_first_useful_median": 13.9,
+          "seconds_to_first_useful_median": 14.3,
           "no_useful_operation": 0,
-          "help_calls": 36,
-          "help_chars": 202772,
+          "help_calls": 34,
+          "help_chars": 185914,
           "doc_reads": 0,
-          "akm_chars": 339504,
+          "akm_chars": 322916,
           "invalid": 6,
           "repeated": 0
         },
@@ -484,45 +484,26 @@
           "hits": 0,
           "by_trial": []
         },
-        "failures": [
-          {
-            "task": "apply--deploy-env",
-            "trial": "apply--deploy-env__himjesb",
-            "error": null,
-            "failed_checks": [
-              "1-lines-file:deploy.env"
-            ],
-            "mediated": true
-          },
-          {
-            "task": "apply--service-json",
-            "trial": "apply--service-json__VRWvwrr",
-            "error": null,
-            "failed_checks": [
-              "3-preserved"
-            ],
-            "mediated": true
-          }
-        ]
+        "failures": []
       },
       "guidance": {
         "trials": 14,
         "scored": 14,
-        "passed": 12,
+        "passed": 14,
         "errored": 0,
         "timeouts": 0,
         "agent_exits": 0,
         "pass_rate": {
-          "value": 0.857,
-          "lo": 0.643,
+          "value": 1,
+          "lo": 1,
           "hi": 1,
           "n": 14
         },
         "by_family": {
           "apply": {
             "scored": 3,
-            "passed": 1,
-            "mediated": 1,
+            "passed": 3,
+            "mediated": 3,
             "unmediated": 0,
             "unknown": 0
           },
@@ -562,22 +543,22 @@
         "tokens": {
           "trials": 14,
           "missing": 0,
-          "input": 4836004,
-          "cache": 4387840,
-          "output": 33003,
-          "per_success": 405751
+          "input": 3251934,
+          "cache": 2828288,
+          "output": 28234,
+          "per_success": 234298
         },
         "calls": {
           "traced": 14,
-          "tool_calls": 285,
-          "over_budget": 1,
+          "tool_calls": 245,
+          "over_budget": 0,
           "to_first_useful_median": 9,
-          "seconds_to_first_useful_median": 14.8,
+          "seconds_to_first_useful_median": 16.6,
           "no_useful_operation": 0,
-          "help_calls": 47,
-          "help_chars": 431487,
-          "doc_reads": 10,
-          "akm_chars": 611281,
+          "help_calls": 45,
+          "help_chars": 421916,
+          "doc_reads": 0,
+          "akm_chars": 601289,
           "invalid": 10,
           "repeated": 0
         },
@@ -586,26 +567,7 @@
           "hits": 0,
           "by_trial": []
         },
-        "failures": [
-          {
-            "task": "apply--deploy-env",
-            "trial": "apply--deploy-env__oC6FCdK",
-            "error": null,
-            "failed_checks": [
-              "1-lines-file:deploy.env"
-            ],
-            "mediated": true
-          },
-          {
-            "task": "apply--service-json",
-            "trial": "apply--service-json__YW8vai2",
-            "error": null,
-            "failed_checks": [
-              "3-preserved"
-            ],
-            "mediated": true
-          }
-        ]
+        "failures": []
       }
     },
     "comparisons": [
@@ -632,7 +594,7 @@
           "n": 0,
           "p": 1
         },
-        "tokens_per_success_change": 0.792
+        "tokens_per_success_change": 0.272
       }
     ],
     "tasks": [
@@ -640,8 +602,8 @@
         "task": "apply--deploy-env",
         "family": "apply",
         "cells": {
-          "minimal": "0/1",
-          "guidance": "0/1"
+          "minimal": "1/1",
+          "guidance": "1/1"
         }
       },
       {
@@ -656,8 +618,8 @@
         "task": "apply--service-json",
         "family": "apply",
         "cells": {
-          "minimal": "0/1",
-          "guidance": "0/1"
+          "minimal": "1/1",
+          "guidance": "1/1"
         }
       },
       {
@@ -765,7 +727,7 @@
     },
     "cases": {
       "apply--deploy-env": {
-        "input_sha256": "293cd6c76ec7abe2200e43ecd23521223974d1e12a55355d28fec461e0cc0cbe",
+        "input_sha256": "14dd4142138f0d3d2e8dca78f655b40b45d4514b4457715152b90b80c027239e",
         "label_sha256": "c08b742a74277392534db7dae2329e6a538d584c1e1f5ef84f9f163e59e4516b"
       },
       "apply--limits-json": {
@@ -773,7 +735,7 @@
         "label_sha256": "c08b742a74277392534db7dae2329e6a538d584c1e1f5ef84f9f163e59e4516b"
       },
       "apply--service-json": {
-        "input_sha256": "4a99ea926b7c771cf231ad28913488d441c6620a1ff979ca19847f54f5d639eb",
+        "input_sha256": "0c505a2b474eaa0aae97ed9574cdad7e908fa005aab5830af6b4a461f03405c9",
         "label_sha256": "c08b742a74277392534db7dae2329e6a538d584c1e1f5ef84f9f163e59e4516b"
       },
       "persist--canary-share": {
@@ -956,5 +918,53 @@
       ],
       "errored": []
     }
+  },
+  "rerun": {
+    "cards": [
+      "apply--deploy-env",
+      "apply--service-json"
+    ],
+    "reason": "the first run's trials of these two cards were invalid (a README from another card's image; an ambiguous time format and a verifier that rejected quoted values); the cards and verifier were fixed and each card was run once more per arm, same model and akm build",
+    "label": "qwen3.8-flash-rerun",
+    "date": "2026-11-08T02:27:28.529Z",
+    "git_commit": "e3c8511",
+    "tasks_sha256": {
+      "apply--deploy-env": "e6d5e1451ee42bbd14607e416a0e7acc59801c9d8cb724c3c4c5806e59c5e315",
+      "apply--service-json": "9967c2497bed3f35d5ca321814b36017efa431ca2dfda18005e243e00c38132b"
+    },
+    "invalid_first_run_trials": [
+      {
+        "task": "apply--deploy-env",
+        "arm": "minimal",
+        "trial": "apply--deploy-env__himjesb",
+        "failed_checks": [
+          "1-lines-file:deploy.env"
+        ]
+      },
+      {
+        "task": "apply--deploy-env",
+        "arm": "guidance",
+        "trial": "apply--deploy-env__oC6FCdK",
+        "failed_checks": [
+          "1-lines-file:deploy.env"
+        ]
+      },
+      {
+        "task": "apply--service-json",
+        "arm": "minimal",
+        "trial": "apply--service-json__VRWvwrr",
+        "failed_checks": [
+          "3-preserved"
+        ]
+      },
+      {
+        "task": "apply--service-json",
+        "arm": "guidance",
+        "trial": "apply--service-json__YW8vai2",
+        "failed_checks": [
+          "3-preserved"
+        ]
+      }
+    ]
   }
 }
