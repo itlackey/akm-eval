@@ -419,7 +419,10 @@ class AkmOpenCode(EvalOpenCode):
             "set -euo pipefail; " + NVM + 'stash="$(printenv AKM_TASK_STASH || true)"; '
             '[[ "$stash" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "AKM-SETUP FATAL: AKM_TASK_STASH=$stash is not a library name" >&2; exit 1; }; '
             f'[ -d {LIBRARIES}/"$stash" ] || {{ echo "AKM-SETUP FATAL: no library named $stash" >&2; exit 1; }}; '
+            # What stops plugin learning now; older plugins read the AKM_AUTO_* in AKM_ENV. An
+            # akm that does not know the key stores and ignores it.
             f"akm bundle create --dir {BUNDLE} --set-default && akm config set registries '[]' && "
+            "akm config set improve.enabled false --silent && "
             + semantic_config + projects +
             f'for d in {LIBRARIES}/"$stash"/*/; do cp -a "$d" {BUNDLE}/; done; '
             f"want={want}; rm -rf {LIBRARIES}; "

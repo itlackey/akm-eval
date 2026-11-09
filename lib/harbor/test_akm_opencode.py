@@ -70,6 +70,10 @@ def test_an_arm_label_names_the_agent_and_projects_go_into_the_akm_config(tmp_pa
     assert "config set projects" not in make(tmp_path, arm="none")._seed_command()
 
 
+def test_the_seed_turns_background_learning_off(tmp_path):
+    assert "akm config set improve.enabled false --silent && " in make(tmp_path)._seed_command()
+
+
 def test_the_plugin_is_the_only_thing_added_to_the_config(tmp_path):
     # Installed here from its lockfile and named as the folder it is in, so opencode does not resolve its dependencies itself.
     agent = make(tmp_path)
