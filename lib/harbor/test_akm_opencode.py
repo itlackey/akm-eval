@@ -264,7 +264,7 @@ def test_akm_env_is_added_to_every_command_and_the_callers_env_still_wins(tmp_pa
 
 
 def test_akm_env_may_not_move_what_the_arm_fixes(tmp_path):
-    for key in ("AKM_BUNDLE_DIR", "AKM_CONFIG_DIR", "AKM_DATA_DIR", "AKM_CACHE_DIR", "AKM_STATE_DIR", "AKM_OPENCODE_CLI"):
+    for key in ("AKM_BUNDLE_DIR", "AKM_CONFIG_DIR", "AKM_CONFIG_FILE", "AKM_DATA_DIR", "AKM_CACHE_DIR", "AKM_STATE_DIR", "AKM_OPENCODE_CLI"):
         assert key in m.FIXED_AKM_ENV
         with pytest.raises(ValueError, match=f"{key} is fixed"):
             make(tmp_path, akm_env={key: "/elsewhere"})

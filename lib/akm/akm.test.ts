@@ -99,7 +99,8 @@ describe("createSandbox", () => {
     const { dir, env } = sandbox;
     expect(env.AKM_BUNDLE_DIR).toBe(join(dir, "bundle"));
     for (const k of ["AKM_CONFIG_DIR", "AKM_DATA_DIR", "AKM_CACHE_DIR", "AKM_STATE_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"]) expect(env[k]).toStartWith(`${dir}/`);
-    expect(Object.keys(env).filter((k) => k.startsWith("AKM_")).sort()).toEqual(["AKM_BUNDLE_DIR", "AKM_CACHE_DIR", "AKM_CONFIG_DIR", "AKM_DATA_DIR", "AKM_STATE_DIR"]);
+    expect(env.AKM_CONFIG_FILE).toBe(join(dir, "config", "akm.json")); // akm 0.11 reads this and ignores the four before it; older akm ignores it
+    expect(Object.keys(env).filter((k) => k.startsWith("AKM_")).sort()).toEqual(["AKM_BUNDLE_DIR", "AKM_CACHE_DIR", "AKM_CONFIG_DIR", "AKM_CONFIG_FILE", "AKM_DATA_DIR", "AKM_STATE_DIR"]);
     expect(env.JUDGE_API_KEY).toBeUndefined();
     expect(env.MODEL_API_KEY).toBeUndefined();
     expect(env.PATH).toBe(process.env.PATH as string);
@@ -240,6 +241,7 @@ describe("createSandbox", () => {
     const own = (dir: string) => ({
       AKM_BUNDLE_DIR: join(dir, "bundle"),
       AKM_CONFIG_DIR: join(dir, "config"),
+      AKM_CONFIG_FILE: join(dir, "config", "akm.json"),
       AKM_DATA_DIR: join(dir, "data"),
       AKM_CACHE_DIR: join(dir, "cache"),
       AKM_STATE_DIR: join(dir, "state"),
@@ -484,6 +486,22 @@ describe("sandboxIn", () => {
 });
 
 describe("writeConfig", () => {
+  test("writes config.json as the object, for akm 0.9 and 0.10, and akm.json with the bundle and folders named, for akm 0.11", () => {
+    const sandbox = fakeSandbox();
+    writeConfig(sandbox, { configVersion: "0.9.0", extra: { a: 1 } });
+    const config = join(sandbox.dir, "config");
+    expect(JSON.parse(readFileSync(join(config, "config.json"), "utf8"))).toEqual({ configVersion: "0.9.0", extra: { a: 1 } });
+    expect(JSON.parse(readFileSync(join(config, "akm.json"), "utf8"))).toEqual({
+      configVersion: "0.9.0",
+      extra: { a: 1 },
+      defaultBundle: "sandbox",
+      paths: { data: join(sandbox.dir, "data"), state: join(sandbox.dir, "state"), cache: join(sandbox.dir, "cache") },
+      bundles: { sandbox: { path: join(sandbox.dir, "bundle") } },
+    });
+    writeConfig(sandbox, { defaultBundle: "mine", paths: { data: "/elsewhere" }, bundles: { mine: { path: "/m" } } });
+    expect(JSON.parse(readFileSync(join(config, "akm.json"), "utf8"))).toEqual({ defaultBundle: "mine", paths: { data: "/elsewhere" }, bundles: { sandbox: { path: join(sandbox.dir, "bundle") }, mine: { path: "/m" } } });
+  });
+
   test("replaces the config file with the object, as JSON", () => {
     const sandbox = fakeSandbox();
     writeConfig(sandbox, { configVersion: "0.9.0", extra: { a: 1 } });
@@ -656,9 +674,10 @@ describe("akmVersion", () => {
 });
 
 describe("agentDetailFrom", () => {
-  test("0.9.x help lists --shape, 0.10 help lists --detail agent only, anything else is unknown", () => {
+  test("0.9.x help lists --shape, 0.10 help lists --detail agent, 0.11 lists --detail without it, anything else is unknown", () => {
     expect(agentDetailFrom("--detail=<detail>  Detail level: brief|normal|full\n--shape=<shape>  Output projection: human|agent")).toEqual(["--shape", "agent"]);
     expect(agentDetailFrom("--detail=<detail>  Detail level: brief|normal|full, or agent")).toEqual(["--detail", "agent"]);
+    expect(agentDetailFrom("--detail=<detail>  Detail level: brief|normal|full (Default: brief)")).toEqual(["--detail", "normal"]);
     expect(agentDetailFrom("usage: akm search")).toBeNull();
   });
 });
@@ -672,6 +691,11 @@ describe("agentDetailArgs", () => {
     writeFileSync(old.cmd[1], 'console.log("--detail=<detail> Detail level, or agent");');
     expect(await agentDetailArgs(old)).toEqual(["--shape", "agent"]);
     expect(await agentDetailArgs(withHelp("--detail=<detail> Detail level, or agent"))).toEqual(["--detail", "agent"]);
+  });
+
+  test("asks the root help when the search help does not list the values, as from 0.10", async () => {
+    const sb = fakeSandbox({}, `console.log(process.argv[2] === "--help" ? "--detail=<detail> Detail level: brief|normal|full" : "Global flags: --format, --detail");`);
+    expect(await agentDetailArgs(sb)).toEqual(["--detail", "normal"]);
   });
 
   test("uses the 0.10 spelling, and says so on stderr, when the help names neither", async () => {

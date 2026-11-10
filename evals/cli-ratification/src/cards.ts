@@ -116,7 +116,7 @@ const READMEs = (project: string, s: string) => `# ${project}\n\nThe \`${s}\` se
 
 /** A shell recipe step: the first hit of a search, shown, and the first match of a pattern in it. */
 const lookup = (query: string, filter: string, pattern: string, type = "memory") =>
-  `$(akm show "$(akm search ${JSON.stringify(query)} --type ${type} --filter ${filter} --limit 1 --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).hits[0].ref')" --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).content' | grep -oE ${JSON.stringify(pattern)} | tail -1)`;
+  `$(akm show "$(akm search ${JSON.stringify(query)} --type ${type} --filter ${filter} --limit 1 --format json | node -pe '(j=>(j.results??j.hits)[0].ref)(JSON.parse(require("fs").readFileSync(0,"utf8")))')" --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).content' | grep -oE ${JSON.stringify(pattern)} | tail -1)`;
 
 const solve = (project: string, body: string) => `#!/bin/bash\n# The informed reference: written by someone who knows the commands. Run by the reference agent, never given to a model.\nset -euo pipefail\ncd /work/${project}\n${body}`;
 
@@ -205,7 +205,7 @@ function applyLimitsJson(): Card {
       { type: "absent", file: "limits.json", tokens: [lq.cpu, lq.memory] },
     ],
     evidence: [lo.cpu, lo.memory, `${lo.timeout_secs}`], commands: [],
-    solve: solve("orchid", `text=$(akm show "$(akm search "${s} resource limits" --type knowledge --filter project=orchid --limit 1 --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).hits[0].ref')" --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).content')\ncpu=$(printf '%s' "$text" | grep -oE '[0-9]+m' | head -1)\nmem=$(printf '%s' "$text" | grep -oE '[0-9]+Mi' | head -1)\nsecs=$(printf '%s' "$text" | grep -oE '[0-9]+ seconds' | grep -oE '[0-9]+')\nprintf '{"cpu": "%s", "memory": "%s", "timeout_secs": %s}\\n' "$cpu" "$mem" "$secs" > limits.json\n`),
+    solve: solve("orchid", `text=$(akm show "$(akm search "${s} resource limits" --type knowledge --filter project=orchid --limit 1 --format json | node -pe '(j=>(j.results??j.hits)[0].ref)(JSON.parse(require("fs").readFileSync(0,"utf8")))')" --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).content')\ncpu=$(printf '%s' "$text" | grep -oE '[0-9]+m' | head -1)\nmem=$(printf '%s' "$text" | grep -oE '[0-9]+Mi' | head -1)\nsecs=$(printf '%s' "$text" | grep -oE '[0-9]+ seconds' | grep -oE '[0-9]+')\nprintf '{"cpu": "%s", "memory": "%s", "timeout_secs": %s}\\n' "$cpu" "$mem" "$secs" > limits.json\n`),
   };
 }
 
@@ -371,7 +371,7 @@ function regressionCrossProject(): Card {
     library, planted: {},
     checks: [{ type: "text-file", file: "tag.txt", text: pq }, { type: "absent", file: "tag.txt", tokens: [po] }],
     evidence: [pq], commands: [],
-    solve: solve("orchid", `out=$(akm search "${s} release tag prefix" --project quill --filter project=quill --format json)\nakm show "$(printf '%s' "$out" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).hits[0].ref')" --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).content' | grep -oE '\`[^\`]+\`' | tr -d '\`' | head -1 > tag.txt\n`),
+    solve: solve("orchid", `out=$(akm search "${s} release tag prefix" --project quill --filter project=quill --format json)\nakm show "$(printf '%s' "$out" | node -pe '(j=>(j.results??j.hits)[0].ref)(JSON.parse(require("fs").readFileSync(0,"utf8")))')" --format json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).content' | grep -oE '\`[^\`]+\`' | tr -d '\`' | head -1 > tag.txt\n`),
   };
 }
 

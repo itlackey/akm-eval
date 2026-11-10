@@ -72,7 +72,7 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
       error = timedOut ? `akm ${system} timed out after ${+(timeoutMs / 1000).toFixed(1)}s` : `akm ${system} exited ${run.code}: ${(run.stderr.trim() || run.stdout.trim()).slice(-300)}`;
       continue;
     }
-    let out: { hits?: { ref?: unknown }[]; items?: { ref?: unknown }[]; searchMode?: unknown; warnings?: unknown };
+    let out: { results?: { ref?: unknown }[]; hits?: { ref?: unknown }[]; items?: { ref?: unknown }[]; searchMode?: unknown; warnings?: unknown };
     try {
       out = JSON.parse(run.stdout);
     } catch {
@@ -81,7 +81,7 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
     }
     const said = typeof out.searchMode === "string" ? out.searchMode : null;
     const warnings = JSON.stringify(out.warnings ?? null).slice(0, 300);
-    const hits = (system === "search" ? out.hits : out.items) ?? [];
+    const hits = out.results ?? (system === "search" ? out.hits : out.items) ?? []; // akm 0.11 lists both under `results`
     // No searchMode and no results is an answer that searched nothing: curate abstains on purpose when the input is not a task.
     if (said !== null ? said !== mode : mode === "semantic" && hits.length > 0) {
       error = said !== null ? `akm ${system} searched with ${said}, not ${mode}: ${warnings}` : `akm ${system} did not say how it searched (no searchMode), and a semantic answer has to say semantic: ${warnings}`;

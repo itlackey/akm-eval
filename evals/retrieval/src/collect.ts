@@ -9,7 +9,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Sandbox, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmVersion, createSandbox, removeSandbox, writeConfig0_11 } from "../../../lib/akm/akm.ts";
 import { type BuiltBy, type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import { fail } from "../../../lib/cli.ts";
 import { redactConfig } from "../../../lib/provenance.ts";
@@ -133,7 +133,8 @@ function projectBox(sb: Sandbox, selection: NonNullable<Case["selection"]>): { b
   const base = JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"));
   const project = { paths: [dir], filters: selection, prefer: {} };
   writeFileSync(join(config, "config.json"), JSON.stringify({ ...base, projects: { selection: project } }));
-  return { box: { ...sb, env: { ...sb.env, AKM_CONFIG_DIR: config } }, dir, remove: () => rmSync(root, { recursive: true, force: true }) };
+  writeConfig0_11(config, sb.dir, { ...base, projects: { selection: project } }); // what akm 0.11 reads in its place
+  return { box: { ...sb, env: { ...sb.env, AKM_CONFIG_DIR: config, AKM_CONFIG_FILE: join(config, "akm.json") } }, dir, remove: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 /**

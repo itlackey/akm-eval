@@ -130,6 +130,7 @@ function sandboxEnv(dir: string, keep: string[], semantic: boolean, isolateHome:
     ...env,
     AKM_BUNDLE_DIR: join(dir, "bundle"),
     AKM_CONFIG_DIR: join(dir, "config"),
+    AKM_CONFIG_FILE: join(dir, "config", CONFIG_FILE_0_11), // what akm 0.11 selects its install by, and then ignores the four variables around it. An older akm ignores this and reads config.json.
     AKM_DATA_DIR: join(dir, "data"),
     AKM_CACHE_DIR: join(dir, "cache"),
     AKM_STATE_DIR: join(dir, "state"),
@@ -271,7 +272,9 @@ export function sandboxIn(dir: string, opts: SandboxOptions = {}): Sandbox {
   if (!existsSync(path)) writeConfig(sandbox, semantic ? semanticConfig() : plainConfig());
   else {
     try {
-      giveReferencedVariables(sandbox, JSON.parse(readFileSync(path, "utf8")));
+      const kept = JSON.parse(readFileSync(path, "utf8"));
+      giveReferencedVariables(sandbox, kept);
+      if (!existsSync(join(dir, "config", CONFIG_FILE_0_11))) writeConfig0_11(join(dir, "config"), dir, kept); // a folder kept from before the file of 0.11
     } catch {} // a config that is not JSON names nothing
   }
   return sandbox;
@@ -414,6 +417,29 @@ export function connectionsConfig(config: Record<string, any>): Record<string, a
   return out;
 }
 
+/** The config file of akm 0.11, beside config.json. akm 0.9 and 0.10 read config.json only and never see the keys of this one, so an older build runs as it did before. */
+const CONFIG_FILE_0_11 = "akm.json";
+
+/**
+ * `config` with the sandbox's locations named in it, as akm 0.11 reads them from its config file: the bundle as `defaultBundle` and
+ * `bundles.sandbox`, and `paths` for the data, state and cache folders (AKM_BUNDLE_DIR and the other variables are retired there).
+ * What `config` names itself (its own `bundles`, a `defaultBundle`, any `paths`) is kept and wins.
+ */
+export function withLocations(dir: string, config: Record<string, any>): Record<string, any> {
+  return {
+    defaultBundle: "sandbox",
+    paths: { data: join(dir, "data"), state: join(dir, "state"), cache: join(dir, "cache") },
+    ...config,
+    bundles: { sandbox: { path: join(dir, "bundle") }, ...config.bundles },
+  };
+}
+
+/** Writes the 0.11 form of `config` beside its config.json in `folder`. `dir` is the sandbox whose folders it names. */
+export function writeConfig0_11(folder: string, dir: string, config: unknown): void {
+  const form = typeof config === "object" && config !== null && !Array.isArray(config) ? withLocations(dir, config as Record<string, any>) : config;
+  writeFileSync(join(folder, CONFIG_FILE_0_11), `${JSON.stringify(form, null, 2)}\n`);
+}
+
 /**
  * Writes akm's config file in the sandbox, in place of the one there, and gives akm the variables that the config names as $NAME, and no others.
  * The config is in the `engines` form; an akm that reads `connections` is given it in that form (useConfigForm, connectionsConfig).
@@ -421,6 +447,7 @@ export function connectionsConfig(config: Record<string, any>): Record<string, a
 export function writeConfig(sandbox: Sandbox, config: unknown): void {
   const written = configForm === "connections" && typeof config === "object" && config !== null ? connectionsConfig(config as Record<string, any>) : config;
   writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(written, null, 2)}\n`);
+  writeConfig0_11(join(sandbox.dir, "config"), sandbox.dir, written);
   giveReferencedVariables(sandbox, config);
   const c = config as { semanticSearchMode?: unknown; embedding?: { localModel?: unknown }; engines?: Record<string, unknown> };
   sandbox.semantic = c?.semanticSearchMode === "auto" && c.embedding?.localModel === SEMANTIC_MODEL && Object.keys(c.engines ?? {}).length > 0 ? (sandbox.semantic ?? { lastEvent: 0 }) : undefined;
@@ -525,9 +552,15 @@ export function atLeast(version: string, minimum: string): boolean {
   return true;
 }
 
-/** The flag words that ask search for its agent projection, from the text of `akm search --help`: 0.9.x has `--shape agent`, 0.10 folds it into `--detail agent`. Null when the text names neither. */
+/**
+ * The flag words that ask search for its agent projection, from the help text of akm: 0.9.x has `--shape agent`, 0.10 folds it into
+ * `--detail agent`, and 0.11 has no such projection (`--detail` is brief|normal|full, and `normal` is what `agent` was), so a `--detail` line
+ * that does not offer `agent` gets `normal`. Null when the text names neither flag.
+ */
 export function agentDetailFrom(help: string): string[] | null {
   if (/--shape[= ]/.test(help)) return ["--shape", "agent"];
+  const line = help.match(/--detail=<detail>[^\n]*/)?.[0];
+  if (line) return ["--detail", /\bagent\b/.test(line) ? "agent" : "normal"];
   return /--detail[= ]/.test(help) ? ["--detail", "agent"] : null;
 }
 
@@ -542,8 +575,10 @@ export function agentDetailArgs(sandbox: Sandbox): Promise<string[]> {
   const key = sandbox.cmd.join(" ");
   let known = agentDetailCache.get(key);
   if (!known) {
-    known = runAkm(sandbox, ["search", "--help"], { timeoutMs: 60_000 })
-      .then(({ stdout, stderr }) => agentDetailFrom(stdout + stderr))
+    // `search --help` says which spelling of the projection the build has up to 0.9; from 0.10 only the root help lists the values of --detail.
+    const helpOf = (args: string[]) => runAkm(sandbox, args, { timeoutMs: 60_000 }).then(({ stdout, stderr }) => agentDetailFrom(stdout + stderr));
+    known = helpOf(["search", "--help"])
+      .then((found) => found ?? helpOf(["--help"]))
       .catch(() => null)
       .then((found) => {
         if (found) return found;
