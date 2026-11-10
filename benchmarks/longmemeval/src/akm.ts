@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Sandbox, agentDetailArgs, runAkmJson, withoutLocations } from "../../../lib/akm/akm.ts";
+import { type Sandbox, agentDetailArgs, runAkmJson } from "../../../lib/akm/akm.ts";
 import { redactConfig } from "../../../lib/provenance.ts";
 import type { SessionView } from "./prompts.ts";
 
@@ -43,7 +43,7 @@ export class Akm {
 
   /** The akm config the sandbox runs with, as the file in its config folder has it, with any secret redacted. For --semantic it holds the embedder's model and its query timeout. */
   config(): unknown {
-    return redactConfig(withoutLocations(JSON.parse(readFileSync(join(this.sandbox.dir, "config", "config.json"), "utf8"))));
+    return redactConfig(JSON.parse(readFileSync(join(this.sandbox.dir, "config", "config.json"), "utf8")));
   }
 
   /**
@@ -75,11 +75,11 @@ export class Akm {
 
   /** The memory names akm returns for the query, best first. In semantic mode, an answer that does not say it searched with embeddings is an error. */
   async search(query: string, k: number): Promise<string[]> {
-    const found = await runAkmJson<{ hits?: { ref?: string }[]; searchMode?: unknown; warnings?: unknown }>(this.sandbox, ["search", "--limit", String(k), ...(await agentDetailArgs(this.sandbox)), "--", query], { timeoutMs: this.timeoutMs });
+    const found = await runAkmJson<{ results?: { ref?: string }[]; hits?: { ref?: string }[]; searchMode?: unknown; warnings?: unknown }>(this.sandbox, ["search", "--limit", String(k), ...(await agentDetailArgs(this.sandbox)), "--", query], { timeoutMs: this.timeoutMs });
     if (this.mode === "semantic" && found.searchMode !== "semantic") {
       throw new Error(`akm searched with ${typeof found.searchMode === "string" ? found.searchMode : "no search mode"}, not semantic: ${JSON.stringify(found.warnings ?? null).slice(0, 300)}`);
     }
-    const hits = found.hits ?? [];
+    const hits = found.results ?? found.hits ?? []; // akm 0.11 says `results`
     return hits.map((h) => {
       if (typeof h.ref !== "string") throw new Error("akm returned a hit with no ref");
       return (h.ref.split("/").pop() as string).replace(/\.md$/, "");

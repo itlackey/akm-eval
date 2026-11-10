@@ -26,7 +26,7 @@ export const settings = (root = process.env.VERIFY_ROOT ?? "", cmd = process.env
     cmd,
     akmRoot,
     logs: `${root}/logs/verifier`,
-    env: { AKM_BUNDLE_DIR: `${akmRoot}/bundle`, AKM_CONFIG_DIR: `${akmRoot}/config`, AKM_CONFIG_FILE: `${akmRoot}/config/config.json`, AKM_DATA_DIR: `${akmRoot}/data`, AKM_CACHE_DIR: `${akmRoot}/cache`, AKM_STATE_DIR: `${akmRoot}/state`, AKM_AUTO_FEEDBACK: "0", AKM_AUTO_LEARNING: "0", AKM_AUTO_MEMORY: "0", AKM_INDEX_ON_SESSION_END: "0" },
+    env: { AKM_BUNDLE_DIR: `${akmRoot}/bundle`, AKM_CONFIG_DIR: `${akmRoot}/config`, AKM_CONFIG_FILE: `${akmRoot}/config/akm.json`, AKM_DATA_DIR: `${akmRoot}/data`, AKM_CACHE_DIR: `${akmRoot}/cache`, AKM_STATE_DIR: `${akmRoot}/state`, AKM_AUTO_FEEDBACK: "0", AKM_AUTO_LEARNING: "0", AKM_AUTO_MEMORY: "0", AKM_INDEX_ON_SESSION_END: "0" },
   };
 };
 

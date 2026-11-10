@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
-import { type Sandbox, akmVersion, createSandbox, removeSandbox, withoutLocations } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import { fail } from "../../../lib/cli.ts";
 import * as akm from "./akm.ts";
@@ -73,7 +73,7 @@ export interface Collected {
   workers: number;
 }
 
-const configOf = (sb: Sandbox): unknown => withoutLocations(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8")));
+const configOf = (sb: Sandbox): unknown => JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"));
 
 /**
  * Collects one corpus: index its skills for keyword search and, when `ctx.semantic`, for semantic search too, ask akm search for every query, and

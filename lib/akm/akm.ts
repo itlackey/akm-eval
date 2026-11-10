@@ -130,7 +130,7 @@ function sandboxEnv(dir: string, keep: string[], semantic: boolean, isolateHome:
     ...env,
     AKM_BUNDLE_DIR: join(dir, "bundle"),
     AKM_CONFIG_DIR: join(dir, "config"),
-    AKM_CONFIG_FILE: join(dir, "config", "config.json"), // what akm 0.11 selects its install by. It ignores the four variables around it then; an older akm reads only those.
+    AKM_CONFIG_FILE: join(dir, "config", CONFIG_FILE_0_11), // what akm 0.11 selects its install by, and then ignores the four variables around it. An older akm ignores this and reads config.json.
     AKM_DATA_DIR: join(dir, "data"),
     AKM_CACHE_DIR: join(dir, "cache"),
     AKM_STATE_DIR: join(dir, "state"),
@@ -272,7 +272,9 @@ export function sandboxIn(dir: string, opts: SandboxOptions = {}): Sandbox {
   if (!existsSync(path)) writeConfig(sandbox, semantic ? semanticConfig() : plainConfig());
   else {
     try {
-      giveReferencedVariables(sandbox, JSON.parse(readFileSync(path, "utf8")));
+      const kept = JSON.parse(readFileSync(path, "utf8"));
+      giveReferencedVariables(sandbox, kept);
+      if (!existsSync(join(dir, "config", CONFIG_FILE_0_11))) writeConfig0_11(join(dir, "config"), dir, kept); // a folder kept from before the file of 0.11
     } catch {} // a config that is not JSON names nothing
   }
   return sandbox;
@@ -415,13 +417,15 @@ export function connectionsConfig(config: Record<string, any>): Record<string, a
   return out;
 }
 
+/** The config file of akm 0.11, beside config.json. akm 0.9 and 0.10 read config.json only and never see the keys of this one, so an older build runs as it did before. */
+const CONFIG_FILE_0_11 = "akm.json";
+
 /**
- * `config` with the sandbox's locations named in it, as akm 0.11 reads them from the config file: the bundle as `defaultBundle` and
- * `bundles.sandbox`, and `paths` for the data, state and cache folders (AKM_BUNDLE_DIR and the other variables are retired there). An
- * older akm reads the variables of sandboxEnv and stores and ignores these keys. What `config` names itself (its own `bundles`, a
- * `defaultBundle`, any `paths`) is kept and wins.
+ * `config` with the sandbox's locations named in it, as akm 0.11 reads them from its config file: the bundle as `defaultBundle` and
+ * `bundles.sandbox`, and `paths` for the data, state and cache folders (AKM_BUNDLE_DIR and the other variables are retired there).
+ * What `config` names itself (its own `bundles`, a `defaultBundle`, any `paths`) is kept and wins.
  */
-function withLocations(dir: string, config: Record<string, any>): Record<string, any> {
+export function withLocations(dir: string, config: Record<string, any>): Record<string, any> {
   return {
     defaultBundle: "sandbox",
     paths: { data: join(dir, "data"), state: join(dir, "state"), cache: join(dir, "cache") },
@@ -430,19 +434,10 @@ function withLocations(dir: string, config: Record<string, any>): Record<string,
   };
 }
 
-/**
- * `config` as the eval wrote it: without the keys withLocations adds, which name the sandbox's folder, a new one on every run. A summary
- * records the config this way, so that the same run has the same config. A bundle or folder the config names itself stays.
- */
-export function withoutLocations(config: any): any {
-  if (typeof config !== "object" || config === null || Array.isArray(config)) return config;
-  const { paths: _paths, defaultBundle, bundles, ...rest } = config;
-  const { sandbox: _sandbox, ...others } = bundles ?? {};
-  return {
-    ...rest,
-    ...(defaultBundle !== undefined && defaultBundle !== "sandbox" ? { defaultBundle } : {}),
-    ...(Object.keys(others).length ? { bundles: others } : {}),
-  };
+/** Writes the 0.11 form of `config` beside its config.json in `folder`. `dir` is the sandbox whose folders it names. */
+export function writeConfig0_11(folder: string, dir: string, config: unknown): void {
+  const form = typeof config === "object" && config !== null && !Array.isArray(config) ? withLocations(dir, config as Record<string, any>) : config;
+  writeFileSync(join(folder, CONFIG_FILE_0_11), `${JSON.stringify(form, null, 2)}\n`);
 }
 
 /**
@@ -450,9 +445,9 @@ export function withoutLocations(config: any): any {
  * The config is in the `engines` form; an akm that reads `connections` is given it in that form (useConfigForm, connectionsConfig).
  */
 export function writeConfig(sandbox: Sandbox, config: unknown): void {
-  const form = configForm === "connections" && typeof config === "object" && config !== null ? connectionsConfig(config as Record<string, any>) : config;
-  const written = typeof form === "object" && form !== null && !Array.isArray(form) ? withLocations(sandbox.dir, form as Record<string, any>) : form;
+  const written = configForm === "connections" && typeof config === "object" && config !== null ? connectionsConfig(config as Record<string, any>) : config;
   writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(written, null, 2)}\n`);
+  writeConfig0_11(join(sandbox.dir, "config"), sandbox.dir, written);
   giveReferencedVariables(sandbox, config);
   const c = config as { semanticSearchMode?: unknown; embedding?: { localModel?: unknown }; engines?: Record<string, unknown> };
   sandbox.semantic = c?.semanticSearchMode === "auto" && c.embedding?.localModel === SEMANTIC_MODEL && Object.keys(c.engines ?? {}).length > 0 ? (sandbox.semantic ?? { lastEvent: 0 }) : undefined;

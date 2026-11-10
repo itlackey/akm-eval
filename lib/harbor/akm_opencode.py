@@ -72,13 +72,14 @@ AKM_CLI = "/usr/local/bin/akm"
 
 # What the agent's commands run with. The five directories are one setting: with only some of them set, the index
 # built in the setup is not the one the plugin reads, and every akm call returns nothing and no error. akm 0.11 reads
-# AKM_CONFIG_FILE and the config's `paths` (the setup writes them) and ignores the five; an older akm reads the five. The rest
+# AKM_CONFIG_FILE (its own file, beside config.json) and the config's `paths` (the setup writes them) and ignores the five; an older
+# akm ignores the file, reads the five and never sees `paths`. The rest
 # keeps background work out of a single-turn run, which has no later turn to learn for. Session-start curation and
 # the hints are the treatment and stay on; the two timeouts (seconds) only give them room in a loaded container.
 AKM_ENV = {
     "AKM_BUNDLE_DIR": BUNDLE,
     "AKM_CONFIG_DIR": f"{AKM_ROOT}/config",
-    "AKM_CONFIG_FILE": f"{AKM_ROOT}/config/config.json",
+    "AKM_CONFIG_FILE": f"{AKM_ROOT}/config/akm.json",
     "AKM_DATA_DIR": f"{AKM_ROOT}/data",
     "AKM_CACHE_DIR": f"{AKM_ROOT}/cache",
     "AKM_STATE_DIR": f"{AKM_ROOT}/state",
@@ -427,8 +428,9 @@ class AkmOpenCode(EvalOpenCode):
             # What stops plugin learning now; older plugins read the AKM_AUTO_* in AKM_ENV. An
             # akm that does not know the key stores and ignores it.
             f"akm bundle create --dir {BUNDLE} --set-default && akm config set registries '[]' && "
-            # akm 0.11 takes the data, state and cache folders from `paths`, as the older ones take them from the variables. Older akm stores and ignores it.
-            f"akm config set paths {shlex.quote(json.dumps(PATHS))} --silent && "
+            # akm 0.11 takes the data, state and cache folders from `paths`, as the older ones take them from the variables. Only a build whose help
+            # lists --config reads it: an older one would store it and warn of it on every command.
+            f"if help=$(akm --help 2>&1) && [[ \"$help\" == *--config=* ]]; then akm config set paths {shlex.quote(json.dumps(PATHS))} --silent; fi && "
             "akm config set improve.enabled false --silent && "
             + semantic_config + projects +
             f'for d in {LIBRARIES}/"$stash"/*/; do cp -a "$d" {BUNDLE}/; done; '

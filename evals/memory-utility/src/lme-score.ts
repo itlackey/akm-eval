@@ -86,7 +86,8 @@ const sessionOfRef = (files: Map<string, string>, ref: string): string | null =>
  * Null when the arm did not search (no memory, or an error before the search).
  */
 export function whereWentEvidence(c: LmeCase, arm: LmeArm, b: LmeBudgetRaw, files = sessionFiles(c)): Record<string, Where> | null {
-  const hits = (arm.search as { hits?: { ref?: unknown }[] } | null)?.hits;
+  const found = arm.search as { results?: { ref?: unknown }[]; hits?: { ref?: unknown }[] } | null; // akm 0.11 says `results`, earlier builds `hits`
+  const hits = found?.results ?? found?.hits;
   if (!Array.isArray(hits)) return null;
   const refs = hits.map(h => String(h.ref));
   const text = b.context.documents.map(d => d.content);

@@ -125,7 +125,8 @@ export async function assets(sb: Sandbox, expected: number): Promise<Asset[]> {
   for (const type of TYPES) {
     const { stdout, stderr, code } = await runAkm(sb, ["search", "", "--type", type, "--limit", "5000", "--belief", "all", ...(await agentDetailArgs(sb)), "--format", "json"]);
     if (code !== 0) throw new Error(`akm search --type ${type} failed (exit ${code}): ${stderr.trim().slice(-300)}`);
-    for (const h of (JSON.parse(stdout) as { hits?: Record<string, string>[] }).hits ?? []) {
+    const listed = JSON.parse(stdout) as { results?: Record<string, string>[]; hits?: Record<string, string>[] }; // akm 0.11 says `results`, earlier builds `hits`
+    for (const h of listed.results ?? listed.hits ?? []) {
       found.push({ ref: oldSpelling(h.ref, h.type), type: h.type, name: h.name ?? h.ref, description: h.description ?? "", path: relative(bundleOf(sb), h.path) });
     }
   }
@@ -175,7 +176,7 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
   if (timedOut) return failed(`akm ${system} timed out after ${+(timeoutMs / 1000).toFixed(1)}s`, { timedOut: true });
   if (code !== 0) return failed(`akm ${system} exited ${code}: ${(stderr.trim() || stdout.trim()).slice(-300)}`);
   type Hit = { ref?: unknown; type?: unknown; name?: unknown; description?: unknown; path?: unknown; estimatedTokens?: unknown };
-  let out: { hits?: Hit[]; items?: Hit[]; searchMode?: unknown; warnings?: unknown; project?: unknown };
+  let out: { results?: Hit[]; hits?: Hit[]; items?: Hit[]; searchMode?: unknown; warnings?: unknown; project?: unknown };
   try {
     out = JSON.parse(stdout);
   } catch {
@@ -183,7 +184,7 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
   }
   if (cwd !== undefined && (typeof out.project !== "object" || out.project === null)) return failed(`akm ${system} did not apply the project: its answer has no "project"`);
   const said = typeof out.searchMode === "string" ? out.searchMode : null;
-  const results = (system === "search" ? out.hits : out.items) ?? [];
+  const results = out.results ?? (system === "search" ? out.hits : out.items) ?? []; // akm 0.11 lists both under `results`
   // No searchMode and no results is an answer that searched nothing: curate abstains on purpose when the input is not a task, such as a tool envelope.
   if (said !== null ? said !== mode : mode === "semantic" && results.length > 0) {
     const what = said !== null ? `searched with ${said}, not ${mode}` : "did not say how it searched (no searchMode), and a semantic call has to say semantic";

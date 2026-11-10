@@ -9,7 +9,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Sandbox, akmVersion, createSandbox, removeSandbox, withoutLocations } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmVersion, createSandbox, removeSandbox, writeConfig0_11 } from "../../../lib/akm/akm.ts";
 import { type BuiltBy, type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import { fail } from "../../../lib/cli.ts";
 import { redactConfig } from "../../../lib/provenance.ts";
@@ -107,7 +107,7 @@ export async function openIndexes(i: IndexInput): Promise<Indexes> {
       // A probe that does not say it searched with embeddings could be keyword rankings under a semantic name: ask() makes it an error, and this is the same check on the answer.
       if (probe.error || probe.mode !== "semantic") fail(`akm cannot search with its embedder: ${probe.error ?? `its answer says searchMode ${probe.mode ?? "nothing"}, not semantic`}`, 1);
     }
-    const configOf = (sb: Sandbox) => redactConfig(withoutLocations(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"))));
+    const configOf = (sb: Sandbox) => redactConfig(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8")));
     const config = { keyword: configOf(boxes.keyword), ...(boxes.semantic ? { semantic: configOf(boxes.semantic) } : {}) };
     return { boxes, version, nAssets, indexSeconds, semanticIndex, builtBy, config, close };
   } catch (e) {
@@ -133,7 +133,8 @@ function projectBox(sb: Sandbox, selection: NonNullable<Case["selection"]>): { b
   const base = JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"));
   const project = { paths: [dir], filters: selection, prefer: {} };
   writeFileSync(join(config, "config.json"), JSON.stringify({ ...base, projects: { selection: project } }));
-  return { box: { ...sb, env: { ...sb.env, AKM_CONFIG_DIR: config, AKM_CONFIG_FILE: join(config, "config.json") } }, dir, remove: () => rmSync(root, { recursive: true, force: true }) };
+  writeConfig0_11(config, sb.dir, { ...base, projects: { selection: project } }); // what akm 0.11 reads in its place
+  return { box: { ...sb, env: { ...sb.env, AKM_CONFIG_DIR: config, AKM_CONFIG_FILE: join(config, "akm.json") } }, dir, remove: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 /**

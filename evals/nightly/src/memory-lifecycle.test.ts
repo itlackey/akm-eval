@@ -123,7 +123,7 @@ const improve = async (cli: Cli) => (await cli(["improve", "--strategy", "consol
 const proposals = async (cli: Cli, status = "pending") => (await cli(["proposal", "list", "--status", status, "--detail", "full"])).value.proposals as any[];
 const refFor = (s: Sandbox, name: string) => indexedRef(indexedRefs(s), `memories/${name}.md`);
 const pathFor = (s: Sandbox, name: string) => join(s.dir, "bundle", "memories", `${name}.md`);
-const refsOf = (value: any): string[] => (value.hits ?? value.items ?? []).map((h: any) => h.ref);
+const refsOf = (value: any): string[] => (value.results ?? value.hits ?? value.items ?? []).map((h: any) => h.ref);
 async function remember(cli: Cli, name: string, body: string, extra: string[] = []): Promise<void> {
   await cli(["remember", "--name", name, "--description", CLAIM, "--tag", "checkpoint", ...extra], body);
 }

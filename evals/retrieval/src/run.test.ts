@@ -61,7 +61,7 @@ if (cmd === "search" && process.argv[3] === "--help") { console.log("--detail=<d
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const semantic = config.semanticSearchMode === "auto";
 const data = process.env.AKM_DATA_DIR;
-const folders = [...new Set([process.env.AKM_BUNDLE_DIR, ...Object.values(config.bundles ?? {}).map((b) => b.path)])]; // the sandbox bundle is named in both, as in akm
+const folders = [process.env.AKM_BUNDLE_DIR, ...Object.values(config.bundles ?? {}).map((b) => b.path)];
 const total = folders.reduce((n, f) => n + readdirSync(f).length, 0);
 if (cmd === "index") {
   writeFileSync(${JSON.stringify(dir)} + "/seen-config-" + (semantic ? "semantic" : "keyword") + ".json", JSON.stringify(config));
@@ -980,16 +980,14 @@ describe("a set of your own", () => {
     expect(s.results_dir).toEndWith("-t-own");
     const seen = JSON.parse(readFileSync(join(root, "seen-config-keyword.json"), "utf8"));
     expect(seen.semanticSearchMode).toBe("off");
-    expect(seen.defaultBundle).toBe("sandbox"); // the sandbox bundle only, for akm 0.11
+    expect(seen.defaultBundle).toBeUndefined();
     expect(seen.bundles).toEqual({
-      sandbox: { path: expect.stringMatching(/\/bundle$/) },
       one: { path: join(realpathSync(library), "one"), components: { main: { adapter: "akm" } }, writable: false },
       two: { path: join(realpathSync(library), "two"), components: { main: { adapter: "claude" } }, writable: false },
     });
     // the semantic index has the same bundles, and searches with the embedder as well
     const semantic = JSON.parse(readFileSync(join(root, "seen-config-semantic.json"), "utf8"));
-    expect(semantic).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
-    expect(semantic.bundles).toEqual({ ...seen.bundles, sandbox: { path: expect.stringMatching(/\/bundle$/) } });
+    expect(semantic).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" }, bundles: seen.bundles });
   });
 
   test("keeps the semantic index of bundles that are indexed where they are, and builds it again when a file of one changed or is new", async () => {
@@ -1020,8 +1018,8 @@ describe("a set of your own", () => {
     symlinkSync(folders.library, link);
     const s = await quiet(() => runCollection(OWN, "own", ctx, { ...folders, library: link, bundles: join(root, "missing.json") }));
     expect(s.n_assets).toBe(1);
-    expect(JSON.parse(readFileSync(join(root, "seen-config-keyword.json"), "utf8")).bundles).toEqual({ sandbox: { path: expect.stringMatching(/\/bundle$/) } });
-    expect(JSON.parse(readFileSync(join(root, "seen-config-semantic.json"), "utf8")).bundles).toEqual({ sandbox: { path: expect.stringMatching(/\/bundle$/) } });
+    expect(JSON.parse(readFileSync(join(root, "seen-config-keyword.json"), "utf8")).bundles).toBeUndefined();
+    expect(JSON.parse(readFileSync(join(root, "seen-config-semantic.json"), "utf8")).bundles).toBeUndefined();
   });
 
   test("says how to make a set when the queries are not in the eval's format", async () => {

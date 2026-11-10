@@ -119,9 +119,10 @@ export async function retrieve(s: Sandbox, question: string, o: Options, arm: { 
   const found = await runAkmJson<any>(s, ["search", "--limit", String(o.searchLimit), ...(await agentDetailArgs(s)), "--", question], { timeoutMs: o.timeoutMs });
   arm.search = sandboxRelative(found, s.dir);
   if (o.semantic && found.searchMode !== "semantic") throw new Error(`search did not remain semantic: ${String(found.searchMode)}`);
-  if (!Array.isArray(found.hits)) throw new Error("search returned no hits array");
+  const listed = found.results ?? found.hits; // akm 0.11 says `results`, earlier builds `hits`
+  if (!Array.isArray(listed)) throw new Error("search returned no hits array");
   const docs: Document[] = [];
-  for (const hit of found.hits) {
+  for (const hit of listed) {
     if (typeof hit.ref !== "string") throw new Error("search hit has no ref");
     const shown = await runAkmJson<any>(s, ["show", hit.ref], { timeoutMs: o.timeoutMs });
     if (typeof shown.content !== "string") throw new Error(`show returned no content for ${hit.ref}`);
