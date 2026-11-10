@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { akmVersion, semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
+import { akmVersion, semanticConfig, withoutLocations, writeConfig } from "../../../lib/akm/akm.ts";
 import { Akm, PROJECTION_LIMIT, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { fakeAkmScript, sandboxRunning } from "./fakes.ts";
 import { TEMPERATURE, chat } from "./llm.ts";
@@ -110,7 +110,7 @@ describe("Akm", () => {
   test("puts the sessions in a fresh bundle as memories with opaque names, and searches them", async () => {
     const sandbox = sandboxRunning(fakeAkmScript(tmp()), dirs);
     const akm = new Akm(sandbox);
-    expect(JSON.parse(readFileSync(join(sandbox.dir, "config", "config.json"), "utf8"))).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
+    expect(withoutLocations(JSON.parse(readFileSync(join(sandbox.dir, "config", "config.json"), "utf8")))).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
     expect(await akmVersion(sandbox)).toBe("0.9.99-test");
     const sessions = [
       { date: "2023/05/20 (Sat) 02:21", turns: [{ role: "user", content: "My dog Biscuit needs a harness" }] },

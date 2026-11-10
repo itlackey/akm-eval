@@ -316,7 +316,7 @@ export function stagePackages(arm: AkmArm, dir: string): { dir: string; files: {
 }
 
 /** The AKM_* settings the arm fixes. Python's FIXED_AKM_ENV is the same list (a test compares them). */
-export const FIXED_AKM_ENV = ["AKM_BUNDLE_DIR", "AKM_CONFIG_DIR", "AKM_DATA_DIR", "AKM_CACHE_DIR", "AKM_STATE_DIR", "AKM_OPENCODE_CLI"];
+export const FIXED_AKM_ENV = ["AKM_BUNDLE_DIR", "AKM_CONFIG_DIR", "AKM_CONFIG_FILE", "AKM_DATA_DIR", "AKM_CACHE_DIR", "AKM_STATE_DIR", "AKM_OPENCODE_CLI"];
 
 /** `--akm-env KEY=VALUE`, repeated: the extra AKM_* settings of the akm arm. */
 export function parseAkmEnv(values: string[] | undefined, semantic = false): Record<string, string> {

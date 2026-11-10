@@ -130,6 +130,7 @@ function sandboxEnv(dir: string, keep: string[], semantic: boolean, isolateHome:
     ...env,
     AKM_BUNDLE_DIR: join(dir, "bundle"),
     AKM_CONFIG_DIR: join(dir, "config"),
+    AKM_CONFIG_FILE: join(dir, "config", "config.json"), // what akm 0.11 selects its install by. It ignores the four variables around it then; an older akm reads only those.
     AKM_DATA_DIR: join(dir, "data"),
     AKM_CACHE_DIR: join(dir, "cache"),
     AKM_STATE_DIR: join(dir, "state"),
@@ -415,11 +416,42 @@ export function connectionsConfig(config: Record<string, any>): Record<string, a
 }
 
 /**
+ * `config` with the sandbox's locations named in it, as akm 0.11 reads them from the config file: the bundle as `defaultBundle` and
+ * `bundles.sandbox`, and `paths` for the data, state and cache folders (AKM_BUNDLE_DIR and the other variables are retired there). An
+ * older akm reads the variables of sandboxEnv and stores and ignores these keys. What `config` names itself (its own `bundles`, a
+ * `defaultBundle`, any `paths`) is kept and wins.
+ */
+function withLocations(dir: string, config: Record<string, any>): Record<string, any> {
+  return {
+    defaultBundle: "sandbox",
+    paths: { data: join(dir, "data"), state: join(dir, "state"), cache: join(dir, "cache") },
+    ...config,
+    bundles: { sandbox: { path: join(dir, "bundle") }, ...config.bundles },
+  };
+}
+
+/**
+ * `config` as the eval wrote it: without the keys withLocations adds, which name the sandbox's folder, a new one on every run. A summary
+ * records the config this way, so that the same run has the same config. A bundle or folder the config names itself stays.
+ */
+export function withoutLocations(config: any): any {
+  if (typeof config !== "object" || config === null || Array.isArray(config)) return config;
+  const { paths: _paths, defaultBundle, bundles, ...rest } = config;
+  const { sandbox: _sandbox, ...others } = bundles ?? {};
+  return {
+    ...rest,
+    ...(defaultBundle !== undefined && defaultBundle !== "sandbox" ? { defaultBundle } : {}),
+    ...(Object.keys(others).length ? { bundles: others } : {}),
+  };
+}
+
+/**
  * Writes akm's config file in the sandbox, in place of the one there, and gives akm the variables that the config names as $NAME, and no others.
  * The config is in the `engines` form; an akm that reads `connections` is given it in that form (useConfigForm, connectionsConfig).
  */
 export function writeConfig(sandbox: Sandbox, config: unknown): void {
-  const written = configForm === "connections" && typeof config === "object" && config !== null ? connectionsConfig(config as Record<string, any>) : config;
+  const form = configForm === "connections" && typeof config === "object" && config !== null ? connectionsConfig(config as Record<string, any>) : config;
+  const written = typeof form === "object" && form !== null && !Array.isArray(form) ? withLocations(sandbox.dir, form as Record<string, any>) : form;
   writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(written, null, 2)}\n`);
   giveReferencedVariables(sandbox, config);
   const c = config as { semanticSearchMode?: unknown; embedding?: { localModel?: unknown }; engines?: Record<string, unknown> };
@@ -525,9 +557,15 @@ export function atLeast(version: string, minimum: string): boolean {
   return true;
 }
 
-/** The flag words that ask search for its agent projection, from the text of `akm search --help`: 0.9.x has `--shape agent`, 0.10 folds it into `--detail agent`. Null when the text names neither. */
+/**
+ * The flag words that ask search for its agent projection, from the help text of akm: 0.9.x has `--shape agent`, 0.10 folds it into
+ * `--detail agent`, and 0.11 has no such projection (`--detail` is brief|normal|full, and `normal` is what `agent` was), so a `--detail` line
+ * that does not offer `agent` gets `normal`. Null when the text names neither flag.
+ */
 export function agentDetailFrom(help: string): string[] | null {
   if (/--shape[= ]/.test(help)) return ["--shape", "agent"];
+  const line = help.match(/--detail=<detail>[^\n]*/)?.[0];
+  if (line) return ["--detail", /\bagent\b/.test(line) ? "agent" : "normal"];
   return /--detail[= ]/.test(help) ? ["--detail", "agent"] : null;
 }
 
@@ -542,8 +580,10 @@ export function agentDetailArgs(sandbox: Sandbox): Promise<string[]> {
   const key = sandbox.cmd.join(" ");
   let known = agentDetailCache.get(key);
   if (!known) {
-    known = runAkm(sandbox, ["search", "--help"], { timeoutMs: 60_000 })
-      .then(({ stdout, stderr }) => agentDetailFrom(stdout + stderr))
+    // `search --help` says which spelling of the projection the build has up to 0.9; from 0.10 only the root help lists the values of --detail.
+    const helpOf = (args: string[]) => runAkm(sandbox, args, { timeoutMs: 60_000 }).then(({ stdout, stderr }) => agentDetailFrom(stdout + stderr));
+    known = helpOf(["search", "--help"])
+      .then((found) => found ?? helpOf(["--help"]))
       .catch(() => null)
       .then((found) => {
         if (found) return found;

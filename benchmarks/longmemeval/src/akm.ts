@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Sandbox, agentDetailArgs, runAkmJson } from "../../../lib/akm/akm.ts";
+import { type Sandbox, agentDetailArgs, runAkmJson, withoutLocations } from "../../../lib/akm/akm.ts";
 import { redactConfig } from "../../../lib/provenance.ts";
 import type { SessionView } from "./prompts.ts";
 
@@ -43,7 +43,7 @@ export class Akm {
 
   /** The akm config the sandbox runs with, as the file in its config folder has it, with any secret redacted. For --semantic it holds the embedder's model and its query timeout. */
   config(): unknown {
-    return redactConfig(JSON.parse(readFileSync(join(this.sandbox.dir, "config", "config.json"), "utf8")));
+    return redactConfig(withoutLocations(JSON.parse(readFileSync(join(this.sandbox.dir, "config", "config.json"), "utf8"))));
   }
 
   /**

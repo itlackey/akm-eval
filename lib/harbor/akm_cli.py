@@ -36,8 +36,8 @@ from akm_opencode import AKM_ENV, AKM_ROOT, CLI_PREFIX, INSTALL_FILE, LIBRARIES,
 from eval_opencode import EvalOpenCode
 
 SOLVE = f"{AKM_ROOT}/solve.sh"
-# The settings the CLI arm runs with: the five directories, and background learning off. The plugin's own settings are not set.
-CLI_ENV = {k: v for k, v in AKM_ENV.items() if k.endswith("_DIR") or k.startswith("AKM_AUTO_") or k == "AKM_INDEX_ON_SESSION_END"}
+# The settings the CLI arm runs with: the five directories and AKM_CONFIG_FILE, and background learning off. The plugin's own settings are not set.
+CLI_ENV = {k: v for k, v in AKM_ENV.items() if k.endswith("_DIR") or k == "AKM_CONFIG_FILE" or k.startswith("AKM_AUTO_") or k == "AKM_INDEX_ON_SESSION_END"}
 SETUP_PLANTED = "AKM-SETUP planted="
 
 

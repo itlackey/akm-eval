@@ -71,12 +71,14 @@ WARM_DATA = f"{AKM_ROOT}/opencode-warm"  # the warm-up session's XDG_DATA_HOME, 
 AKM_CLI = "/usr/local/bin/akm"
 
 # What the agent's commands run with. The five directories are one setting: with only some of them set, the index
-# built in the setup is not the one the plugin reads, and every akm call returns nothing and no error. The rest
+# built in the setup is not the one the plugin reads, and every akm call returns nothing and no error. akm 0.11 reads
+# AKM_CONFIG_FILE and the config's `paths` (the setup writes them) and ignores the five; an older akm reads the five. The rest
 # keeps background work out of a single-turn run, which has no later turn to learn for. Session-start curation and
 # the hints are the treatment and stay on; the two timeouts (seconds) only give them room in a loaded container.
 AKM_ENV = {
     "AKM_BUNDLE_DIR": BUNDLE,
     "AKM_CONFIG_DIR": f"{AKM_ROOT}/config",
+    "AKM_CONFIG_FILE": f"{AKM_ROOT}/config/config.json",
     "AKM_DATA_DIR": f"{AKM_ROOT}/data",
     "AKM_CACHE_DIR": f"{AKM_ROOT}/cache",
     "AKM_STATE_DIR": f"{AKM_ROOT}/state",
@@ -89,9 +91,12 @@ AKM_ENV = {
     "AKM_PENDING_PROPOSAL_TIMEOUT": "5",
 }
 
+# Where akm 0.11 keeps its data, state and cache: the folders AKM_ENV names, in the config's `paths`.
+PATHS = {"data": AKM_ENV["AKM_DATA_DIR"], "state": AKM_ENV["AKM_STATE_DIR"], "cache": AKM_ENV["AKM_CACHE_DIR"]}
+
 # What a job may not change with `akm_env`: the five directories are one setting (see above), and the plugin must keep
 # running the akm this arm installed.
-FIXED_AKM_ENV = frozenset([k for k in AKM_ENV if k.endswith("_DIR")] + ["AKM_OPENCODE_CLI"])
+FIXED_AKM_ENV = frozenset([k for k in AKM_ENV if k.endswith("_DIR")] + ["AKM_CONFIG_FILE", "AKM_OPENCODE_CLI"])
 
 # Files the arm leaves in a trial's agent folder, for loadRunTrials in lib/harbor/harbor.ts to read. Both hold JSON.
 INSTALL_FILE = "akm_install.json"
@@ -422,6 +427,8 @@ class AkmOpenCode(EvalOpenCode):
             # What stops plugin learning now; older plugins read the AKM_AUTO_* in AKM_ENV. An
             # akm that does not know the key stores and ignores it.
             f"akm bundle create --dir {BUNDLE} --set-default && akm config set registries '[]' && "
+            # akm 0.11 takes the data, state and cache folders from `paths`, as the older ones take them from the variables. Older akm stores and ignores it.
+            f"akm config set paths {shlex.quote(json.dumps(PATHS))} --silent && "
             "akm config set improve.enabled false --silent && "
             + semantic_config + projects +
             f'for d in {LIBRARIES}/"$stash"/*/; do cp -a "$d" {BUNDLE}/; done; '

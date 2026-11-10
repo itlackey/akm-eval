@@ -342,7 +342,8 @@ appendFileSync(${JSON.stringify(calls)}, JSON.stringify([cmd, ...rest]) + "\\n")
 if (cmd === "--version") { console.log("0.9.99-test"); process.exit(0); }
 if (cmd === "search" && process.argv[3] === "--help") { console.log("--detail=<detail> Detail level, or agent"); process.exit(0); }
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
-const roots = config.bundles ? Object.entries(config.bundles).map(([name, b]) => [name + "//", b.path]) : [["", process.env.AKM_BUNDLE_DIR]];
+const named = Object.entries(config.bundles ?? {}).filter(([name]) => name !== "sandbox"); // the sandbox bundle is the default one, whose refs have no prefix
+const roots = named.length ? named.map(([name, b]) => [name + "//", b.path]) : [["", process.env.AKM_BUNDLE_DIR]];
 const entries = roots.flatMap(([prefix, dir]) => readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".md")).sort().map((f) => { const stem = f.slice(0, -3); const name = stem.split("/").pop(); return { ref: prefix + (stem.includes("/") ? stem : "knowledge/" + stem), type: "knowledge", name, description: "about " + name, path: join(dir, f) }; }));
 if (cmd === "index") { console.log(JSON.stringify({ ok: true, totalEntries: entries.length })); process.exit(0); }
 if (rest[0] === "") { if (!rest.join(" ").includes("--belief all")) { console.error("listing needs --belief all"); process.exit(2); } console.log(JSON.stringify({ hits: rest[rest.indexOf("--type") + 1] === "knowledge" ? entries : [] })); process.exit(0); }

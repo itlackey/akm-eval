@@ -511,7 +511,7 @@ describe("parseAkmEnv", () => {
     const start = py.indexOf("AKM_ENV = {");
     const table = py.slice(start, py.indexOf("\n}\n", start));
     const keys = [...table.matchAll(/"(AKM_[A-Z_]+)":/g)].map((m) => m[1]);
-    const fixed = [...keys.filter((k) => k.endsWith("_DIR")), "AKM_OPENCODE_CLI"];
+    const fixed = [...keys.filter((k) => k.endsWith("_DIR")), "AKM_CONFIG_FILE", "AKM_OPENCODE_CLI"];
     expect([...FIXED_AKM_ENV].sort()).toEqual(fixed.sort());
   });
 });

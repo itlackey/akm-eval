@@ -82,13 +82,20 @@ function withOnlyEnv<T>(vars: Record<string, string>, f: () => T): T {
   }
 }
 
+/** The keys writeConfig adds for akm 0.11, which names the bundle and its folders in the config file. */
+const located = (dir: string) => ({
+  defaultBundle: "sandbox",
+  paths: { data: join(dir, "data"), state: join(dir, "state"), cache: join(dir, "cache") },
+  bundles: { sandbox: { path: join(dir, "bundle") } },
+});
+
 describe("createSandbox", () => {
   test("makes a temp folder named for the eval, with akm's folders and a plain config, and removeSandbox deletes it", () => {
     const sandbox = createSandbox("lib-akm-test");
     sandboxes.push(sandbox);
     expect(basename(sandbox.dir)).toStartWith("akm-eval-lib-akm-test-");
     for (const folder of ["bundle", "config", "data", "cache", "state", "xdg-config", "xdg-data", "xdg-state"]) expect(existsSync(join(sandbox.dir, folder))).toBe(true);
-    expect(JSON.parse(readFileSync(join(sandbox.dir, "config", "config.json"), "utf8"))).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
+    expect(JSON.parse(readFileSync(join(sandbox.dir, "config", "config.json"), "utf8"))).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [], ...located(sandbox.dir) });
     removeSandbox(sandbox);
     expect(existsSync(sandbox.dir)).toBe(false);
   });
@@ -99,7 +106,8 @@ describe("createSandbox", () => {
     const { dir, env } = sandbox;
     expect(env.AKM_BUNDLE_DIR).toBe(join(dir, "bundle"));
     for (const k of ["AKM_CONFIG_DIR", "AKM_DATA_DIR", "AKM_CACHE_DIR", "AKM_STATE_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"]) expect(env[k]).toStartWith(`${dir}/`);
-    expect(Object.keys(env).filter((k) => k.startsWith("AKM_")).sort()).toEqual(["AKM_BUNDLE_DIR", "AKM_CACHE_DIR", "AKM_CONFIG_DIR", "AKM_DATA_DIR", "AKM_STATE_DIR"]);
+    expect(env.AKM_CONFIG_FILE).toBe(join(dir, "config", "config.json")); // akm 0.11 reads this and ignores the four before it
+    expect(Object.keys(env).filter((k) => k.startsWith("AKM_")).sort()).toEqual(["AKM_BUNDLE_DIR", "AKM_CACHE_DIR", "AKM_CONFIG_DIR", "AKM_CONFIG_FILE", "AKM_DATA_DIR", "AKM_STATE_DIR"]);
     expect(env.JUDGE_API_KEY).toBeUndefined();
     expect(env.MODEL_API_KEY).toBeUndefined();
     expect(env.PATH).toBe(process.env.PATH as string);
@@ -121,6 +129,7 @@ describe("createSandbox", () => {
       semanticSearchMode: "auto",
       registries: [],
       embedding: { localModel: "Xenova/bge-small-en-v1.5", queryTimeoutMs: 600_000 },
+      ...located(sandbox.dir),
     });
     expect(SEMANTIC_MODEL).toBe("Xenova/bge-small-en-v1.5");
     expect(sandbox.env.HF_HOME).toBe(cache);
@@ -240,6 +249,7 @@ describe("createSandbox", () => {
     const own = (dir: string) => ({
       AKM_BUNDLE_DIR: join(dir, "bundle"),
       AKM_CONFIG_DIR: join(dir, "config"),
+      AKM_CONFIG_FILE: join(dir, "config", "config.json"),
       AKM_DATA_DIR: join(dir, "data"),
       AKM_CACHE_DIR: join(dir, "cache"),
       AKM_STATE_DIR: join(dir, "state"),
@@ -434,7 +444,7 @@ describe("sandboxIn", () => {
     writeConfig(sandbox, { semanticSearchMode: "auto", bundles: { notes: { path: "/somewhere" } } });
     const again = sandboxIn(dir, { semantic: true });
     expect(again.env).toEqual(sandbox.env);
-    expect(JSON.parse(readFileSync(join(dir, "config", "config.json"), "utf8")).bundles).toEqual({ notes: { path: "/somewhere" } });
+    expect(JSON.parse(readFileSync(join(dir, "config", "config.json"), "utf8")).bundles).toEqual({ sandbox: { path: join(dir, "bundle") }, notes: { path: "/somewhere" } });
   });
 
   test("links ONNX Runtime again in a folder whose cache was removed, as index-cache.ts removes a kept index's, and leaves a folder in its place (#147)", () => {
@@ -487,7 +497,15 @@ describe("writeConfig", () => {
   test("replaces the config file with the object, as JSON", () => {
     const sandbox = fakeSandbox();
     writeConfig(sandbox, { configVersion: "0.9.0", extra: { a: 1 } });
-    expect(readFileSync(join(sandbox.dir, "config", "config.json"), "utf8")).toBe('{\n  "configVersion": "0.9.0",\n  "extra": {\n    "a": 1\n  }\n}\n');
+    const text = readFileSync(join(sandbox.dir, "config", "config.json"), "utf8");
+    expect(text).toEndWith("\n");
+    expect(JSON.parse(text)).toEqual({ ...located(sandbox.dir), configVersion: "0.9.0", extra: { a: 1 } });
+  });
+
+  test("names the bundle and folders for akm 0.11, and keeps what the config names itself", () => {
+    const sandbox = fakeSandbox();
+    writeConfig(sandbox, { defaultBundle: "mine", paths: { data: "/elsewhere" }, bundles: { mine: { path: "/m" } } });
+    expect(JSON.parse(readFileSync(join(sandbox.dir, "config", "config.json"), "utf8"))).toEqual({ defaultBundle: "mine", paths: { data: "/elsewhere" }, bundles: { sandbox: { path: join(sandbox.dir, "bundle") }, mine: { path: "/m" } } });
   });
 });
 
@@ -656,9 +674,10 @@ describe("akmVersion", () => {
 });
 
 describe("agentDetailFrom", () => {
-  test("0.9.x help lists --shape, 0.10 help lists --detail agent only, anything else is unknown", () => {
+  test("0.9.x help lists --shape, 0.10 help lists --detail agent, 0.11 lists --detail without it, anything else is unknown", () => {
     expect(agentDetailFrom("--detail=<detail>  Detail level: brief|normal|full\n--shape=<shape>  Output projection: human|agent")).toEqual(["--shape", "agent"]);
     expect(agentDetailFrom("--detail=<detail>  Detail level: brief|normal|full, or agent")).toEqual(["--detail", "agent"]);
+    expect(agentDetailFrom("--detail=<detail>  Detail level: brief|normal|full (Default: brief)")).toEqual(["--detail", "normal"]);
     expect(agentDetailFrom("usage: akm search")).toBeNull();
   });
 });
@@ -672,6 +691,11 @@ describe("agentDetailArgs", () => {
     writeFileSync(old.cmd[1], 'console.log("--detail=<detail> Detail level, or agent");');
     expect(await agentDetailArgs(old)).toEqual(["--shape", "agent"]);
     expect(await agentDetailArgs(withHelp("--detail=<detail> Detail level, or agent"))).toEqual(["--detail", "agent"]);
+  });
+
+  test("asks the root help when the search help does not list the values, as from 0.10", async () => {
+    const sb = fakeSandbox({}, `console.log(process.argv[2] === "--help" ? "--detail=<detail> Detail level: brief|normal|full" : "Global flags: --format, --detail");`);
+    expect(await agentDetailArgs(sb)).toEqual(["--detail", "normal"]);
   });
 
   test("uses the 0.10 spelling, and says so on stderr, when the help names neither", async () => {
@@ -1014,7 +1038,7 @@ describe("the config form", () => {
     useConfigForm("0.9.32");
     const sb = fakeSandbox({}, ENV_AKM);
     writeConfig(sb, judge());
-    expect(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"))).toEqual(judge());
+    expect(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"))).toEqual({ ...judge(), ...located(sb.dir) });
   });
 
   test("writeConfig writes the same settings as connections for an akm after: no provider, one default connection, the gate on it", () => {
@@ -1037,6 +1061,7 @@ describe("the config form", () => {
         },
       },
       improve: { strategies: { s: { processes: { reflect: { qualityGate: {} }, extract: { enabled: true } } } }, qualityGate: { connection: "default" }, strategy: "s" },
+      ...located(sb.dir),
     });
   });
 
