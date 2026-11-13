@@ -1,0 +1,546 @@
+{
+  "eval": "ratification",
+  "mode": "check",
+  "label": "check2",
+  "date": "2026-11-13T02:18:55.954Z",
+  "git_commit": "3a01c5e",
+  "model": null,
+  "engine": null,
+  "akm_version": "0.10.261120",
+  "akm_bin": "akm-cli@0.10.261120",
+  "akm_build": null,
+  "akm_build_fingerprint": "4594585ce3cfbdad37d6dfe76f1b648d5fde8c2e1fd11d4f2a13b671963617a8",
+  "akm_env": {},
+  "akm_install": {
+    "from": "release",
+    "plugin_from": "release",
+    "plugin_version": "0.10.261122",
+    "packages": [],
+    "dependency_tree_sha256": "a90a87fbab42107e4bd00d1f0b1ef09d612ec931754fdeb599fb92a94bc5dd65",
+    "locked": false,
+    "observed": {
+      "akm_version": [
+        "0.10.261120"
+      ],
+      "plugin_akm_cli": [],
+      "assets_indexed": [
+        8
+      ],
+      "env": {
+        "AKM_BUNDLE_DIR": "/opt/akm/bundle",
+        "AKM_CONFIG_DIR": "/opt/akm/config",
+        "AKM_CONFIG_FILE": "/opt/akm/config/akm.json",
+        "AKM_DATA_DIR": "/opt/akm/data",
+        "AKM_CACHE_DIR": "/opt/akm/cache",
+        "AKM_STATE_DIR": "/opt/akm/state",
+        "AKM_AUTO_FEEDBACK": "0",
+        "AKM_AUTO_LEARNING": "0",
+        "AKM_AUTO_MEMORY": "0",
+        "AKM_INDEX_ON_SESSION_END": "0"
+      },
+      "dependency_trees": [
+        "a90a87fbab42107e4bd00d1f0b1ef09d612ec931754fdeb599fb92a94bc5dd65"
+      ],
+      "lockfiles": {
+        "akm_cli": null,
+        "plugin": null
+      }
+    }
+  },
+  "pins": {
+    "akm_cli": "0.10.261120",
+    "akm_plugin": "0.10.261122",
+    "opencode": "1.18.34",
+    "harbor": "0.24.0"
+  },
+  "tasks": [
+    "clone--canary-note",
+    "doctor--stuck-run",
+    "feedback--stale-note",
+    "find--prod-port",
+    "import--handoff",
+    "proposal--review",
+    "remember--retention",
+    "run--stamp-release",
+    "validate--draft-task"
+  ],
+  "attempts": 1,
+  "arms": [
+    "reference",
+    "noop"
+  ],
+  "harbor_exit": 0,
+  "status": "complete",
+  "aborted_reason": null,
+  "check": {
+    "ok": true,
+    "problems": []
+  },
+  "completion": {
+    "reference": {
+      "expected": 9,
+      "completed": 9,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "noop": {
+      "expected": 9,
+      "completed": 9,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    }
+  },
+  "libraries_sha256": "8fe50b69f5f9ce49b272e3d9d1661031dbb6f0888a0d8d0dd4e2ab4c4dbcd49e",
+  "tasks_sha256": {
+    "clone--canary-note": "e1d4b1cdfbe93ebf845a7a988cf05c2e4deab22793d1a1b481e40b3cb869d20d",
+    "doctor--stuck-run": "2210fcabc2dcc94c81c7ac5cf99c1f5960945da24eff2d9182217f320be4c2a6",
+    "feedback--stale-note": "e4e2cee97f212536b12f3824677bfe5e41b758b0afeca652cccf58d51df05050",
+    "find--prod-port": "eaefc4d1ac9ebf04df3a61930acb0430bd718063b6a065c88828420b34296009",
+    "import--handoff": "97594c8bb85c86a817cb50463bbb2b5c42b6c3849fb71272b6e1d43ec476bf53",
+    "proposal--review": "3fabdfed64b42828f877cea54cc2ebdc8a075c88cf4a848f5c0af2e25ed3a4f7",
+    "remember--retention": "e8f794a504b00be3c86fac2b5a0c7fdc234e0903b6623007aa4b6673a9c75b39",
+    "run--stamp-release": "114a1badc5f6c44f134bfd06b7dd35e8ca1913ac187530d85431f140132ebbbe",
+    "validate--draft-task": "42ed9c0919c3f00e5038aca79755a6c4c6560c12ad8fd2310d314a7a7d0ddee6"
+  },
+  "prompt_sha256": "a3550459ff17ace706dfc212491f3790c8c1c0a0f248e56cfa9b5359bc232308",
+  "assets_sha256": "fb3e2987b01f1dfc7e43d6457f61cbe06d0622dc6aa52bb84156db4a29a140b3",
+  "config": {
+    "n_attempts": 1,
+    "n_concurrent_trials": 4,
+    "environment": {
+      "type": "docker",
+      "delete": true,
+      "extra_docker_compose": [
+        "lib/harbor/shared-network.yaml"
+      ]
+    },
+    "agents": [
+      {
+        "import_path": "akm_cli:AkmCli",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261120",
+          "libraries_dir": "libraries",
+          "arm": "reference",
+          "script": "reference"
+        }
+      },
+      {
+        "import_path": "akm_cli:AkmCli",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261120",
+          "libraries_dir": "libraries",
+          "arm": "noop",
+          "script": "noop"
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "clone--canary-note",
+          "doctor--stuck-run",
+          "feedback--stale-note",
+          "find--prod-port",
+          "import--handoff",
+          "proposal--review",
+          "remember--retention",
+          "run--stamp-release",
+          "validate--draft-task"
+        ]
+      }
+    ]
+  },
+  "report": {
+    "per_arm": {
+      "reference": {
+        "trials": 9,
+        "scored": 9,
+        "errored": 0,
+        "passed": 9,
+        "completion_rate": 1,
+        "mean_akm_calls": null,
+        "mean_other_calls": null,
+        "mean_unnecessary": null,
+        "mean_help_calls": null,
+        "error_trials": 0,
+        "recovered": 0,
+        "recovery_rate": null,
+        "old_form_trials": 0,
+        "old_form_moved_on": 0,
+        "deprecated_notices": 0,
+        "mean_tokens": null
+      },
+      "noop": {
+        "trials": 9,
+        "scored": 9,
+        "errored": 0,
+        "passed": 0,
+        "completion_rate": 0,
+        "mean_akm_calls": null,
+        "mean_other_calls": null,
+        "mean_unnecessary": null,
+        "mean_help_calls": null,
+        "error_trials": 0,
+        "recovered": 0,
+        "recovery_rate": null,
+        "old_form_trials": 0,
+        "old_form_moved_on": 0,
+        "deprecated_notices": 0,
+        "mean_tokens": null
+      }
+    },
+    "per_task": {
+      "clone--canary-note": {
+        "reference": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 1,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        },
+        "noop": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 0,
+          "completion_rate": 0,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        }
+      },
+      "doctor--stuck-run": {
+        "reference": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 1,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        },
+        "noop": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 0,
+          "completion_rate": 0,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        }
+      },
+      "feedback--stale-note": {
+        "reference": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 1,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        },
+        "noop": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 0,
+          "completion_rate": 0,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        }
+      },
+      "find--prod-port": {
+        "reference": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 1,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        },
+        "noop": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 0,
+          "completion_rate": 0,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        }
+      },
+      "import--handoff": {
+        "reference": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 1,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        },
+        "noop": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 0,
+          "completion_rate": 0,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        }
+      },
+      "proposal--review": {
+        "reference": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 1,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        },
+        "noop": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 0,
+          "completion_rate": 0,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        }
+      },
+      "remember--retention": {
+        "reference": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 1,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        },
+        "noop": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 0,
+          "completion_rate": 0,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        }
+      },
+      "run--stamp-release": {
+        "reference": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 1,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        },
+        "noop": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 0,
+          "completion_rate": 0,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        }
+      },
+      "validate--draft-task": {
+        "reference": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 1,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        },
+        "noop": {
+          "trials": 1,
+          "scored": 1,
+          "errored": 0,
+          "passed": 0,
+          "completion_rate": 0,
+          "mean_akm_calls": null,
+          "mean_other_calls": null,
+          "mean_unnecessary": null,
+          "mean_help_calls": null,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": null
+        }
+      }
+    }
+  }
+}
