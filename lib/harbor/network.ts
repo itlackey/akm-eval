@@ -71,14 +71,14 @@ export function networkPlan(cfg: Record<string, any>): { shared: boolean; concur
 }
 
 /** Before Harbor starts: the shared network exists (it is never deleted), or the per-trial networks of `concurrency` trials fit in the free subnets. */
-export function prepareNetworks(plan: ReturnType<typeof networkPlan>): void {
+export function prepareNetworks(plan: ReturnType<typeof networkPlan>, host: { sh: typeof sh; ownPools: () => boolean } = { sh, ownPools: daemonHasOwnPools }): void {
   if (plan.shared) {
-    if (!sh(["docker", "network", "inspect", SHARED_NETWORK]).ok && !sh(["docker", "network", "create", SHARED_NETWORK]).ok) fail(`could not create the Docker network ${SHARED_NETWORK}`);
+    if (!host.sh(["docker", "network", "inspect", SHARED_NETWORK]).ok && !host.sh(["docker", "network", "create", SHARED_NETWORK]).ok) fail(`could not create the Docker network ${SHARED_NETWORK}`);
     return;
   }
-  if (daemonHasOwnPools()) return; // its pools are not the built-in ones, so the count below would be wrong
+  if (host.ownPools()) return; // its pools are not the built-in ones, so the count below would be wrong
   const read = (cmd: string[]): string[] => {
-    const r = sh(cmd);
+    const r = host.sh(cmd);
     if (!r.ok) fail(`could not count Docker's free subnets: \`${cmd.slice(0, 3).join(" ")}\` failed`);
     return lines(r.out);
   };

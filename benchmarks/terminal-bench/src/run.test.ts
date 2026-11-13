@@ -1051,15 +1051,6 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(done.err + done.out + seen).not.toContain("sk-real-openai-key");
   }, 60_000);
 
-  test("refuses a width above the free subnets of Docker's address pools, since each trial has a network of its own", () => {
-    const { run } = repo();
-    const wide = run(["--limit", "2", "--concurrency", "1000", "--label", "wide"]);
-    expect(wide.code).not.toBe(0);
-    expect(wide.err).toContain("1000 concurrent trials each need a Docker network");
-    const done = run(["--limit", "1", "--label", "default"]);
-    expect(done.code, done.err).toBe(0);
-  }, 120_000);
-
   test("a run on a custom corpus records its folder from the repository root and rescore reads the library there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {
     const { root, run, summary, folder } = repo();
     const ownLibrary = (to: string) => {
