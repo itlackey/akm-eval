@@ -1,0 +1,28 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/proposal--review"
+version = "1.0.0"
+description = "Review two pending proposals: accept the one the changelog confirms, reject the other"
+authors = []
+keywords = []
+
+[metadata]
+family = "proposal"
+# How many akm calls the reference solution makes: the report counts akm calls beyond it as unnecessary.
+ref_akm = 5
+# A form this task invites that akm deprecated or removed, and the form that replaces it (regular expressions over a shell command).
+old = ""
+replacement = ""
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work"
+
+[environment.env]
+AKM_TASK_STASH = "proposal--review"

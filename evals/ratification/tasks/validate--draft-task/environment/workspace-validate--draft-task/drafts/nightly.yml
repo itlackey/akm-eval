@@ -1,0 +1,3 @@
+version: 4
+name: Nightly
+schedule: "0 4 * * *"

@@ -1,0 +1,25 @@
+{
+  "id": "proposal--review",
+  "checks": [
+    {
+      "type": "proposal",
+      "ref": "knowledge/larch-retention",
+      "status": "accepted"
+    },
+    {
+      "type": "proposal",
+      "ref": "knowledge/tallow-ports",
+      "status": "rejected"
+    },
+    {
+      "type": "file_contains",
+      "path": "$BUNDLE/knowledge/larch-retention.md",
+      "text": "60 days"
+    },
+    {
+      "type": "file_contains",
+      "path": "$BUNDLE/knowledge/tallow-ports.md",
+      "text": "7421"
+    }
+  ]
+}

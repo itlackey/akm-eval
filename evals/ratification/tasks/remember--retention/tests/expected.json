@@ -1,0 +1,14 @@
+{
+  "id": "remember--retention",
+  "checks": [
+    {
+      "type": "memory",
+      "contains": "60 days",
+      "description": "Larch retention change",
+      "tags": [
+        "retention",
+        "larch"
+      ]
+    }
+  ]
+}

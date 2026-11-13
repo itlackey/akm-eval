@@ -1,0 +1,14 @@
+{
+  "id": "validate--draft-task",
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "/work/validity.txt",
+      "text": "invalid"
+    },
+    {
+      "type": "bundle_lacks",
+      "glob": "tasks/nightly*"
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+version: 4
+name: Stamp release
+description: Writes the release stamp for the current build
+run: printf "stamp-4417\n" > /work/release.stamp

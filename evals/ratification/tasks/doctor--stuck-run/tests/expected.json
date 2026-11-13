@@ -1,0 +1,10 @@
+{
+  "id": "doctor--stuck-run",
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "/work/health.txt",
+      "text": "nightly-backup"
+    }
+  ]
+}

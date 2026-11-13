@@ -1,0 +1,14 @@
+{
+  "id": "run--stamp-release",
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "/work/release.stamp",
+      "text": "stamp-4417"
+    },
+    {
+      "type": "task_ran",
+      "id": "stamp-release"
+    }
+  ]
+}
