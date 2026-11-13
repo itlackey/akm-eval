@@ -446,8 +446,8 @@ class AkmOpenCode(EvalOpenCode):
             # akm that does not know the key stores and ignores it.
             f"akm bundle create --dir {BUNDLE} --set-default && akm config set registries '[]' && "
             # akm 0.11 takes the data, state and cache folders from `paths`, as the older ones take them from the variables. Only a build whose help
-            # lists --config reads it: an older one would store it and warn of it on every command.
-            f"if help=$(akm --help 2>&1) && [[ \"$help\" == *--config=* ]]; then akm config set paths {shlex.quote(json.dumps(PATHS))} --silent; fi && "
+            # lists --config and whose version is 0.11 or later reads it: 0.10 shows --config= too, stores `paths` and warns of it on every command, in the agent's sight.
+            f"if help=$(akm --help 2>&1) && [[ \"$help\" == *--config=* ]] && [[ ! \"$(akm --version)\" =~ ^0\\.([0-9]|10)\\. ]]; then akm config set paths {shlex.quote(json.dumps(PATHS))} --silent; fi && "
             "akm config set improve.enabled false --silent && "
             + semantic_config + projects +
             f'for d in {LIBRARIES}/"$stash"/*/; do cp -a "$d" {BUNDLE}/; done; '
