@@ -8,7 +8,7 @@
 
 import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type Sandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, engineConfig, improveTimeoutFlag, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { indexedRef, indexedRefs } from "../../../lib/akm/indexed-refs.ts";
 import { Fatal, fail, failureMessage, hideEndpoint } from "../../../lib/cli.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
@@ -212,7 +212,7 @@ async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, stri
       await runAkmJson(sandbox, feedbackArgs({ ...f, ref }), { timeoutMs: STEP_TIMEOUT_MS });
     }
   });
-  const improveArgs = ["improve", "--strategy", overrides.strategy, "--require-engines", "--no-sync", "--timeout-ms", String(budget), "--json-to-stdout", "--format", "json"];
+  const improveArgs = ["improve", "--strategy", overrides.strategy, ...requireEnginesArgs(), "--no-sync", improveTimeoutFlag(), String(budget), "--json-to-stdout", "--format", "json"];
   const [improved, improveSeconds] = await step("improve", () => runAkm(sandbox, improveArgs, { timeoutMs: improveTimeoutMs }));
   if (improved.timedOut) fail(timeoutMessage("improve", improveTimeoutMs), 1); // it was killed in the middle of the night: there is no result to score
   if (improved.code !== 0) fail(hideEndpoint(failureMessage(`akm ${improveArgs[0]}`, improved.code, improved.stderr), ctx.baseUrl), 1);

@@ -7,7 +7,7 @@
 
 import { cpSync } from "node:fs";
 import { join } from "node:path";
-import { createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { createSandbox, engineConfig, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { type LoadedCase, type Proposal, type Row, conceptId, distillAction, makeRow } from "./score.ts";
@@ -119,7 +119,7 @@ export async function runCase(c: LoadedCase, ctx: CaseContext): Promise<Row> {
       const fb = await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])], opts);
       if (fb.code !== 0) return failed(exitMessage(fb.code, fb.stderr, fb.stdout), fb.timedOut);
     }
-    const args = ["improve", memoryRef(c), "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"];
+    const args = ["improve", memoryRef(c), "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--no-sync", ...requireEnginesArgs(), "--json-to-stdout", "--format", "json"];
     const { stdout, stderr, code, timedOut } = await runAkm(sandbox, args, opts);
     if (timedOut) return failed(exitMessage(code, stderr, stdout), true);
     let improve: unknown;

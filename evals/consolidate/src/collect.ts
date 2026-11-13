@@ -8,7 +8,7 @@
 
 import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Sandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, engineConfig, improveTimeoutFlag, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { LIMIT, ask } from "../../retrieval/src/akm.ts";
@@ -192,9 +192,9 @@ export function writePoolNotes(sandbox: Sandbox, pool: Pick<Pool, "texts" | "age
   }
 }
 
-/** The arguments of the one akm run. `--timeout-ms` is akm's wall-clock budget for the run; leave it out for akm's own, which is POOL_DEFAULT_BUDGET_MS. */
-export function poolImproveArgs(strategy: string, timeoutMs?: number): string[] {
-  return ["improve", "--strategy", strategy, "--no-sync", "--json-to-stdout", "--format", "json", ...(timeoutMs ? ["--timeout-ms", String(timeoutMs)] : [])];
+/** The arguments of the one akm run. `--timeout-ms` (`--timeout` where akm has it: improveTimeoutFlag) is akm's wall-clock budget for the run; leave it out for akm's own, which is POOL_DEFAULT_BUDGET_MS. */
+export function poolImproveArgs(strategy: string, timeoutMs?: number, timeoutFlag: "--timeout" | "--timeout-ms" = "--timeout-ms"): string[] {
+  return ["improve", "--strategy", strategy, "--no-sync", "--json-to-stdout", "--format", "json", ...(timeoutMs ? [timeoutFlag, String(timeoutMs)] : [])];
 }
 
 /** The raw output of the whole run from the result of `akm improve` and the proposal list, and each retire proposal by the cluster that holds the note it retires. */
@@ -338,7 +338,7 @@ export async function collectPool(pool: Pool, ctx: PoolContext): Promise<PoolCol
     Object.assign(sandbox.env, embedderEnv(embedderOf(ctx)));
     writePoolNotes(sandbox, pool);
     await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: indexTimeout(ctx) });
-    const improve = await runAkm(sandbox, poolImproveArgs(ctx.overrides.strategy, budget === POOL_DEFAULT_BUDGET_MS ? undefined : budget), { timeoutMs: improveTimeoutMs });
+    const improve = await runAkm(sandbox, poolImproveArgs(ctx.overrides.strategy, budget === POOL_DEFAULT_BUDGET_MS ? undefined : budget, improveTimeoutFlag()), { timeoutMs: improveTimeoutMs });
     seconds = Number((improve.ms / 1000).toFixed(1));
     if (improve.timedOut) throw new Error(timeoutMessage("improve", improveTimeoutMs));
     if (improve.code !== 0) throw new Error(`akm improve failed (exit ${improve.code}): ${improve.stderr.trim().slice(-300)}`);

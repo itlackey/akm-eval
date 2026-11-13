@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Sandbox, sandboxIn } from "./akm/akm.ts";
+import { type Sandbox, sandboxIn, useConfigForm } from "./akm/akm.ts";
 import { callJudge, requireJudge, routeOf } from "./judge.ts";
 
 const dirs: string[] = [];
@@ -14,7 +14,11 @@ afterEach(() => {
 
 /** An akm whose `judge --list` names reflect.quality at FAKE_SCHEMA (none when it is "none", no judge command when FAKE_NOJUDGE is set), and whose `judge reflect.quality` prints FAKE_OUT, or sleeps for FAKE_HANG. */
 const FAKE = `
-const [a, b] = process.argv.slice(2);
+// \`judge\` moved under \`doctor\` in 0.10.261119, and 0.11 has only the new spelling: with FAKE_NEW the fake answers \`doctor judge\` alone, else \`judge\` alone.
+let words = process.argv.slice(2);
+if ((words[0] === "doctor") !== Boolean(process.env.FAKE_NEW)) { console.error("Unknown command " + words[0]); process.exit(2); }
+if (words[0] === "doctor") words = words.slice(1);
+const [a, b] = words;
 if (a === "judge" && b === "--list") {
   if (process.env.FAKE_NOJUDGE) { console.error("Unknown command judge"); process.exit(2); }
   const schema = process.env.FAKE_SCHEMA;
@@ -80,6 +84,24 @@ describe("callJudge", () => {
   test("a call past the time limit is killed and says so", async () => {
     const call = await callJudge(sandbox({ FAKE_HANG: "1" }), "reflect.quality", {}, { timeoutMs: 300 });
     expect(call).toMatchObject({ timedOut: true, error: expect.stringContaining("timed out") });
+  });
+});
+
+describe("the doctor spelling", () => {
+  test("goes through `doctor judge` on an akm from 0.10.261119, for a call and for the list, and through `judge` before", async () => {
+    const out = envelope("verdict", { verdict: { pass: true, score: 5 } });
+    useConfigForm("0.10.261120");
+    try {
+      const box = sandbox({ FAKE_NEW: "1", FAKE_OUT: out, FAKE_ARGS: join(tmpdir(), `judge-args-new-${process.pid}.json`) });
+      dirs.push(box.env.FAKE_ARGS!);
+      expect((await callJudge(box, "reflect.quality", {}, { timeoutMs: 5000 })).envelope).toBeDefined();
+      expect(JSON.parse(await Bun.file(box.env.FAKE_ARGS!).text())).toEqual(["doctor", "judge", "reflect.quality", "--format", "json"]);
+      await requireJudge(box, "reflect.quality", 2);
+      await expect(requireJudge(sandbox({ FAKE_NEW: "1", FAKE_SCHEMA: "1" }), "reflect.quality", 2)).rejects.toThrow("has schemaVersion 1");
+    } finally {
+      useConfigForm("0.9.99");
+    }
+    expect((await callJudge(sandbox({ FAKE_OUT: out }), "reflect.quality", {}, { timeoutMs: 5000 })).envelope).toBeDefined();
   });
 });
 

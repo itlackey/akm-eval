@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { akmVersion, commandLine, writeConfig } from "../../../lib/akm/akm.ts";
+import { akmVersion, commandLine, useConfigForm, writeConfig } from "../../../lib/akm/akm.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { sha256Json } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
@@ -198,6 +198,21 @@ describe("akm", () => {
 });
 
 describe("runCorpus", () => {
+  test("reads the index of an akm that has only `doctor info` (0.11) as it reads that of one that has only `info`, with the same results", async () => {
+    const old = setup();
+    const oldRun = await logged(() => runCorpus(old.corpus, old.ctx({ label: "old", workers: 3 }), { assets: old.assets, results: old.results }));
+    process.env.FAKE_AKM_NEW = "1";
+    useConfigForm("0.10.261120");
+    try {
+      const s = setup();
+      const { result: summary } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "new", workers: 3 }), { assets: s.assets, results: s.results }));
+      expect(summary.metrics).toEqual(oldRun.result.metrics);
+    } finally {
+      delete process.env.FAKE_AKM_NEW;
+      useConfigForm("0.9.99");
+    }
+  });
+
   test("writes every skill, asks search of both indexes for every query, scores it and writes the results", async () => {
     const s = setup();
     const { result: summary, lines } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "t", workers: 3 }), { assets: s.assets, results: s.results }));

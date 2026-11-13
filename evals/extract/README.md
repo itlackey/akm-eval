@@ -24,9 +24,11 @@ evals/extract/run --cases ~/notes/extract
 Each session goes into its own akm sandbox, where akm reads Claude Code sessions (`AKM_CLAUDE_PROJECTS_DIR`), so akm never reads your own:
 
 ```
-akm proposal extract --type claude --location <sandbox>/projects --session-id <id> --strategy extract-only --format json
+akm proposal extract --sessions claude --location <sandbox>/projects --session-id <id> --strategy extract-only --format json
 akm proposal list --status pending --detail full
 ```
+
+`--sessions claude` is `--type claude` on an akm before 0.10.261120.
 
 `extract-only` sends extract to the model under test and turns off the session summary (a second call) and the heuristic triage gate, so every session reaches the model in one call. The model must return a JSON object with a `candidates` list, and a `when_to_use` for every lesson, or akm's parser drops the lesson and the session reads as empty. The longest session is about 10k tokens; 16k of context is safe. akm does not retry a 429. The eval sets temperature 0 and thinking off.
 

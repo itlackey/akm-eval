@@ -9,7 +9,7 @@
 import { cpSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import type { ModelLimits } from "../../../lib/models.ts";
 import { join, resolve } from "node:path";
-import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson } from "../../../lib/akm/akm.ts";
+import { akmBuild, akmVersion, createSandbox, doctorArgs, removeSandbox, runAkm, runAkmJson } from "../../../lib/akm/akm.ts";
 import { CONCURRENT_TRIALS, type AkmArm, jobConfig as harborJob, runHarbor, sha256Dir, stagePackages } from "../../../lib/harbor/harbor.ts";
 
 export const NAME = "terminal-bench";
@@ -62,7 +62,7 @@ export async function measureLibrary(library: string): Promise<LibraryCount & { 
     await run(["bundle", "create", "--dir", bundle, "--set-default"]);
     for (const e of readdirSync(library, { withFileTypes: true })) if (e.isDirectory()) cpSync(join(library, e.name), join(bundle, e.name), { recursive: true });
     await run(["index", "--full"]);
-    const info = await runAkmJson<{ indexStats: { byType: Record<string, number> } }>(sandbox, ["info", "-q"], { timeoutMs: 60_000 });
+    const info = await runAkmJson<{ indexStats: { byType: Record<string, number> } }>(sandbox, [...doctorArgs(version), "info", "-q"], { timeoutMs: 60_000 });
     const assets = Object.entries(info.indexStats.byType).reduce((n, [type, count]) => n + (type === "fact" ? 0 : count), 0);
     return { assets, measured_with: { akm_version: version, ...akmBuild() } };
   } catch (e) {

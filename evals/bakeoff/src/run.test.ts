@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { commandLine } from "../../../lib/akm/akm.ts";
+import { commandLine, useConfigForm } from "../../../lib/akm/akm.ts";
 import { fail } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
@@ -16,10 +16,11 @@ import { MIN_AKM, runCorpus } from "./run.ts";
 const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
 
 const dirs: string[] = [];
-const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_PLAN: process.env.FAKE_PLAN, FAKE_LOG: process.env.FAKE_LOG, MODEL_API_KEY: process.env.MODEL_API_KEY };
+const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_PLAN: process.env.FAKE_PLAN, FAKE_LOG: process.env.FAKE_LOG, FAKE_AKM_VERSION: process.env.FAKE_AKM_VERSION, MODEL_API_KEY: process.env.MODEL_API_KEY };
 const sandboxes = (): string[] => readdirSync(tmpdir()).filter((n) => n.startsWith("akm-eval-bakeoff-"));
 const before = new Set(sandboxes());
 afterEach(() => {
+  useConfigForm("0.9.99-test");
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
   for (const [k, v] of Object.entries(saved)) {
     if (v === undefined) delete process.env[k];
@@ -81,7 +82,9 @@ function setup(specs: Spec[], plan: object) {
   process.env.FAKE_LOG = join(root, "calls.jsonl");
   process.env.MODEL_API_KEY = "model-secret";
   const corpus: ResolvedCorpus = { name: "public", folder: assets, rewrite: false, seed: null, flag: "--corpus public" };
-  const ctx = { baseUrl: "http://localhost:9/v1", model: "the-model", hasKey: true, version: "0.9.99-test", label: "t" };
+  const version = process.env.FAKE_AKM_VERSION ?? "0.9.99-test";
+  useConfigForm(version); // the one version probe of a real run (lib/run.ts), which picks the form of each command
+  const ctx = { baseUrl: "http://localhost:9/v1", model: "the-model", hasKey: true, version, label: "t" };
   const calls = () => (existsSync(process.env.FAKE_LOG as string) ? readFileSync(process.env.FAKE_LOG as string, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
   return { corpus, ctx, calls, results: join(root, "results"), root };
 }
@@ -140,6 +143,45 @@ describe("runCorpus", () => {
     ]);
     // akm looks for the session where the sandbox put it, and the sandbox is not the caller's folder
     expect(calls().find((c) => c.args[1] === "extract").projects).toMatch(/akm-eval-bakeoff-[^/]+\/projects$/);
+  });
+
+  test("asks the replacement forms of an akm that has them, and the old ones of an akm that does not, with the same cases and scores", async () => {
+    const old = setup(SPECS, PLAN);
+    const oldSummary = await quiet(() => runCorpus(old.corpus, old.ctx, old.results));
+    process.env.FAKE_AKM_VERSION = "0.10.261120";
+    const current = setup(SPECS, PLAN);
+    const summary = await quiet(() => runCorpus(current.corpus, current.ctx, current.results));
+    expect(summary).toMatchObject({ n_run: 5, n_errored: 0 });
+    expect(summary.metrics).toEqual(oldSummary.metrics);
+    const args = current.calls().map((c) => c.args.join(" "));
+    expect(args.filter((a) => a.startsWith("improve"))).toEqual([
+      "improve --strategy bakeoff-memory-inference --no-sync --json-to-stdout --format json",
+      "improve lessons/pause-publishers --strategy bakeoff-schema-repair --no-sync --json-to-stdout --format json",
+      "improve --strategy bakeoff-consolidate-promote --no-sync --json-to-stdout --format json",
+    ]);
+    expect(args.find((a) => a.startsWith("proposal extract"))).toContain(" --sessions claude --location ");
+    expect(args.some((a) => a.includes("--type"))).toBe(false);
+    expect(args).toContain("remember --enrich --name retry-backoff --format json"); // 0.10 still has the flag
+  });
+
+  test("remember-enrich is not applicable on an akm without `remember --enrich` (0.11): left out and said so, never run and never scored as a failure", async () => {
+    process.env.FAKE_AKM_VERSION = "0.11.0";
+    const { corpus, ctx, calls, results } = setup(SPECS, PLAN);
+    const said: string[] = [];
+    const log = console.log;
+    console.log = (...a: unknown[]) => void said.push(a.join(" "));
+    let summary;
+    try {
+      summary = await runCorpus(corpus, ctx, results);
+    } finally {
+      console.log = log;
+    }
+    expect(summary).toMatchObject({ n_run: 4, n_errored: 0 });
+    expect(Object.keys(summary.metrics.by_process)).toEqual(["memory-inference", "schema-repair", "session-summary", "consolidate-promote"]);
+    expect(samplesOf(summary).map((r) => r.id)).toEqual(["infer-ok", "repair-ok", "summary-ok", "promote-ok"]);
+    expect(calls().some((c) => c.args.includes("--enrich"))).toBe(false);
+    expect(said.some((l) => l.includes("remember-enrich: not applicable on akm 0.11.0"))).toBe(true);
+    await expect(runCorpus(corpus, { ...ctx, process: "remember-enrich", label: "only" }, results)).rejects.toThrow();
   });
 
   test("gives akm the text of the memory without its frontmatter, the model at temperature 0 with thinking off, and the key by reference", async () => {

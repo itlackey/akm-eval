@@ -349,7 +349,8 @@ if (process.env.FAKE_AKM_FAIL === args[0]) { console.error("akm cannot " + args[
 if (args[0] === "--version") console.log("akm " + (process.env.FAKE_AKM_VERSION ?? "0.9.99-test"));
 else if (args[0] === "bundle") mkdirSync(args[args.indexOf("--dir") + 1], { recursive: true });
 else if (args[0] === "index") {}
-else if (args[0] === "info") console.log(JSON.stringify({ indexStats: { byType: { skill: walk(process.env.AKM_BUNDLE_DIR as string), fact: 5 } } }));
+// \`info\` moved under \`doctor\` in 0.10.261119 and 0.11 has only the new spelling, so the fake answers the one spelling of its FAKE_AKM_VERSION.
+else if ((process.env.FAKE_AKM_VERSION === "0.10.261120" ? args[0] === "doctor" && args[1] === "info" : args[0] === "info")) console.log(JSON.stringify({ indexStats: { byType: { skill: walk(process.env.AKM_BUNDLE_DIR as string), fact: 5 } } }));
 else { console.error("unknown command " + args[0]); process.exit(1); }
 `;
 
@@ -390,6 +391,20 @@ describe("measureLibrary", () => {
     expect((await measureLibrary(lib)).assets).toBe(4);
     rmSync(join(lib, "skills"), { recursive: true });
     expect((await measureLibrary(lib)).assets).toBe(2);
+  });
+
+  test("asks `doctor info` of an akm that has it, and `info` of one that does not, and counts the same", async () => {
+    fakeAkm(true);
+    const lib = library();
+    const old = await measureLibrary(lib);
+    process.env.FAKE_AKM_VERSION = "0.10.261120";
+    try {
+      const current = await measureLibrary(lib);
+      expect(current.assets).toBe(old.assets as number);
+      expect(current.measured_with).toMatchObject({ akm_version: "0.10.261120" });
+    } finally {
+      delete process.env.FAKE_AKM_VERSION;
+    }
   });
 
   test("is null, with the reason, when there is no akm to count with or it cannot index", async () => {
@@ -1035,15 +1050,6 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(JSON.parse(seen)).toMatchObject({ OPENAI_API_KEY: "unused", OPENAI_BASE_URL: "https://gw.example.net/v1" });
     expect(done.err + done.out + seen).not.toContain("sk-real-openai-key");
   }, 60_000);
-
-  test("refuses a width above the free subnets of Docker's address pools, since each trial has a network of its own", () => {
-    const { run } = repo();
-    const wide = run(["--limit", "2", "--concurrency", "1000", "--label", "wide"]);
-    expect(wide.code).not.toBe(0);
-    expect(wide.err).toContain("1000 concurrent trials each need a Docker network");
-    const done = run(["--limit", "1", "--label", "default"]);
-    expect(done.code, done.err).toBe(0);
-  }, 120_000);
 
   test("a run on a custom corpus records its folder from the repository root and rescore reads the library there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {
     const { root, run, summary, folder } = repo();

@@ -545,7 +545,8 @@ def test_semantic_setup_requires_embeddings_and_actual_semantic_search(tmp_path)
     ({}, "semantic", False, "incomplete semantic index"),
     ({"totalEntries": 3, "verification": {"embeddingCount": 3}}, "fts-fallback", False, "search is not semantic"),
 ])
-def test_semantic_seed_accepts_verified_search_and_rejects_missing_embeddings_or_fallback(tmp_path, monkeypatch, index, search, ok, reason):
+@pytest.mark.parametrize("info_mode", ["old", "new", "both"])
+def test_semantic_seed_accepts_verified_search_and_rejects_missing_embeddings_or_fallback(tmp_path, monkeypatch, index, search, ok, reason, info_mode):
     import os
     root = tmp_path / "akm"
     root.mkdir()
@@ -562,10 +563,18 @@ def test_semantic_seed_accepts_verified_search_and_rejects_missing_embeddings_or
         "if a[:2]==['bundle','create']: os.makedirs(a[a.index('--dir')+1],exist_ok=True)",
         "if a[0]=='index': print(os.environ['TEST_INDEX'])",
         "if a[0]=='search': print(json.dumps({'searchMode':os.environ['TEST_SEARCH']}))",
-        "if a[0]=='info': print(json.dumps({'indexStats':{'byType':{'fact':2,'memory':1}}}))",
+        # `info` moved under `doctor` in 0.10.261119; TEST_INFO says which spelling this akm has: "old" (info only), "new" (doctor info only, as 0.11) or "both"
+        "stats=json.dumps({'indexStats':{'byType':{'fact':2,'memory':1}}})",
+        "mode=os.environ.get('TEST_INFO','both')",
+        "if a[0]=='info':",
+        "    if mode=='new': sys.stderr.write('unknown command info\\n'); sys.exit(2)",
+        "    print(stats)",
+        "if a[:2]==['doctor','info']:",
+        "    if mode=='old': sys.stderr.write('unknown command doctor\\n'); sys.exit(2)",
+        "    print(stats)",
     ]) + "\n")
     executable.chmod(0o755)
-    env = {**os.environ, "PATH": str(executable.parent) + os.pathsep + os.environ["PATH"], "AKM_TASK_STASH": "sample", "TEST_INDEX": json.dumps(index), "TEST_SEARCH": search}
+    env = {**os.environ, "PATH": str(executable.parent) + os.pathsep + os.environ["PATH"], "AKM_TASK_STASH": "sample", "TEST_INDEX": json.dumps(index), "TEST_SEARCH": search, "TEST_INFO": info_mode}
     command = make(tmp_path / "logs", library_assets=1, akm_env={"AKM_EVAL_SEMANTIC_SEARCH": "1"})._seed_command()
     done = subprocess.run(["bash", "-c", command], capture_output=True, text=True, env=env)
     assert (done.returncode == 0) is ok, done.stderr

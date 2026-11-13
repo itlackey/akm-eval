@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, akmBuild, commandLine, semanticConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, akmBuild, commandLine, semanticConfig, useConfigForm } from "./akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex, digest, digestTree } from "./index-cache.ts";
 
 const dirs: string[] = [];
@@ -25,7 +25,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 const data = process.env.AKM_DATA_DIR as string;
 const read = (name: string) => (existsSync(join(data, name)) ? readFileSync(join(data, name), "utf8") : undefined);
-if (process.argv[2] === "info") console.log(JSON.stringify({ ok: true, indexStats: { entryCount: Number(read("entries")), lastBuiltAt: read("built-at"), hasEmbeddings: read("embeddings") !== "none" } }));
+// info moved under doctor in 0.10.261119, and 0.11 has only the new spelling: with FAKE_AKM_NEW the fake answers "doctor info" alone, else "info" alone.
+const spelling = process.env.FAKE_AKM_NEW ? process.argv[2] === "doctor" && process.argv[3] === "info" : process.argv[2] === "info";
+if (spelling) console.log(JSON.stringify({ ok: true, indexStats: { entryCount: Number(read("entries")), lastBuiltAt: read("built-at"), hasEmbeddings: read("embeddings") !== "none" } }));
 else { console.error("unknown command"); process.exit(1); }
 `;
 
@@ -84,6 +86,22 @@ describe("cachedIndex", () => {
     expect(second.sandbox.dir).toBe(first.sandbox.dir);
     second.release();
     expect(s.log).toEqual([`  the index skillret-public is kept from an earlier run: it was built by akm 0.9.99 (${second.builtBy.akm_bin}) at build 1.`]);
+  });
+
+  test("asks `doctor info` of an akm that has it and `info` of one that does not, and sees the same index", async () => {
+    const s = setup();
+    const old = await s.open();
+    old.release();
+    process.env.FAKE_AKM_NEW = "1";
+    useConfigForm("0.10.261120");
+    try {
+      const warm = await s.open({ version: "0.10.261120" }); // another version: another index, built and read by `doctor info`
+      expect(warm.entries).toBe(old.entries);
+      warm.release();
+    } finally {
+      delete process.env.FAKE_AKM_NEW;
+      useConfigForm("0.9.99");
+    }
   });
 
   test("keeps the config that the build wrote, such as bundles that are indexed where they are", async () => {

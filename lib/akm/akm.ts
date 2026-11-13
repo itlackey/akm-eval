@@ -343,9 +343,10 @@ export const CONNECTIONS_FROM = "0.10.261014-beta";
 export type ConfigForm = "engines" | "connections";
 let configForm: ConfigForm = "engines";
 
-/** The form of config the akm under test reads, from the version it prints. Sets the form writeConfig writes, and returns it. */
+/** The form of config the akm under test reads, from the version it prints. Sets the form writeConfig writes, and returns it. It also records the version for akmAtLeast. */
 export function useConfigForm(version: string): ConfigForm {
   const m = version.match(/\d+\.\d+\.\d+\S*/);
+  testedVersion = m?.[0];
   return (configForm = m && atLeast(m[0], CONNECTIONS_FROM) ? "connections" : "engines");
 }
 
@@ -550,6 +551,52 @@ export function atLeast(version: string, minimum: string): boolean {
     return x > y;
   }
   return true;
+}
+
+/**
+ * The first akm releases that have the replacement of a deprecated form (akm's docs/migration/v0.10-to-v0.11.md). A prerelease of such a release
+ * counts as older, which is safe: every old form still works through 0.10.x. `--require-engines` is a no-op from CONNECTIONS_FROM, and 0.11 removes the old forms.
+ */
+export const REPLACEMENT_FROM = {
+  /** `improve --timeout <duration>` for `--timeout-ms`; `doctor info` for `info`; `doctor judge` for `judge`. */
+  timeout: "0.10.261119",
+  doctor: "0.10.261119",
+  /** `proposal extract --sessions <harness>` for `--type <harness>`. */
+  sessions: "0.10.261120",
+} as const;
+
+/** The first version without `remember --enrich` (removed in 0.11; its replacement is akm's TODO(0.11:memory-enrichment)). The lowest prerelease of 0.11.0 counts. */
+export const ENRICH_REMOVED_FROM = "0.11.0-0";
+
+let testedVersion: string | undefined;
+
+/**
+ * Is the akm under test at least `minimum`? It is `version`, else the one useConfigForm was last given (the one probe of a run), so a run costs no extra call. Before any
+ * version is known, or when akm printed one that is not a version, it answers false, which picks the old form of a command: the one every release before the
+ * replacement, and 0.10.x itself, accepts. A 0.10 prerelease that prints a 0.9.x version gets the old forms too.
+ */
+export function akmAtLeast(minimum: string, version: string | undefined = testedVersion): boolean {
+  return version !== undefined && atLeast(version, minimum);
+}
+
+/** `--require-engines` for an akm before CONNECTIONS_FROM, where it still checks the engines. From there it does nothing (and akm 0.11 refuses it), so it is left out. */
+export function requireEnginesArgs(): string[] {
+  return akmAtLeast(CONNECTIONS_FROM) ? [] : ["--require-engines"];
+}
+
+/** The flag of `improve`'s wall-clock budget in milliseconds: `--timeout` (a bare number is milliseconds) where it exists, else `--timeout-ms`. The budget is the same. */
+export function improveTimeoutFlag(): "--timeout" | "--timeout-ms" {
+  return akmAtLeast(REPLACEMENT_FROM.timeout) ? "--timeout" : "--timeout-ms";
+}
+
+/** `proposal extract`'s session source: `--sessions <harness>` where it exists, else `--type <harness>`. The values and the behaviour are the same. */
+export function extractSessionsArgs(harness: string): string[] {
+  return [akmAtLeast(REPLACEMENT_FROM.sessions) ? "--sessions" : "--type", harness];
+}
+
+/** The words before `info` and `judge`: `doctor` where akm has the entry point under it, else none. */
+export function doctorArgs(version?: string): string[] {
+  return akmAtLeast(REPLACEMENT_FROM.doctor, version) ? ["doctor"] : [];
 }
 
 /**
