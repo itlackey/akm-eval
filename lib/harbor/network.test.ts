@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jobConfig } from "./harbor.ts";
-import { SHARED_NETWORK_COMPOSE, freeSubnets, networkPlan, singleService } from "./network.ts";
+import { SHARED_NETWORK_COMPOSE, freeSubnets, networkPlan, prepareNetworks, singleService } from "./network.ts";
 
 test("counts the built-in pool subnets that no network or route overlaps", () => {
   expect(freeSubnets([])).toBe(31);
@@ -32,4 +32,14 @@ test("a task folder with a compose file of its own is not single-service", () =>
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("refuses a width above the free subnets of Docker's built-in pools, since each trial has a network of its own", () => {
+  // a host with no pools of its own, one network on 172.17.0.0/16 and a route on 192.168.0.0/24: 31 pool subnets, 2 taken
+  const out = (cmd: string[]) => (cmd[1] === "network" && cmd[2] === "ls" ? "n1\n" : cmd[1] === "network" ? "172.17.0.0/16\n" : "default via 192.168.0.1\n192.168.0.0/24 dev eth0\n");
+  const host = { sh: (cmd: string[]) => ({ ok: true, out: out(cmd) }), ownPools: () => false };
+  const plan = (concurrency: number) => ({ shared: false, concurrency, trialsDir: "/jobs/j" });
+  expect(() => prepareNetworks(plan(29), host)).not.toThrow();
+  expect(() => prepareNetworks(plan(1000), host)).toThrow("1000 concurrent trials each need a Docker network");
+  expect(() => prepareNetworks(plan(1000), { ...host, ownPools: () => true })).not.toThrow(); // the daemon's own pools: not counted
 });

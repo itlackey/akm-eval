@@ -141,6 +141,8 @@ describe("poolImproveArgs", () => {
     expect(poolImproveArgs(POOL_STRATEGY)).toEqual(["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout", "--format", "json"]);
     expect(poolImproveArgs("catchup").slice(0, 3)).toEqual(["improve", "--strategy", "catchup"]);
     expect(poolImproveArgs("catchup", 60000).slice(-2)).toEqual(["--timeout-ms", "60000"]);
+    expect(poolImproveArgs("catchup", 60000, "--timeout").slice(-2)).toEqual(["--timeout", "60000"]); // the same budget, in the spelling of akm 0.10.261119 and later
+    expect(poolImproveArgs("catchup", undefined, "--timeout")).toEqual(poolImproveArgs("catchup"));
   });
 });
 

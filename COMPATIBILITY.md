@@ -5,10 +5,10 @@ Every eval that uses akm runs the `akm` command (from `--akm`, `AKM_BIN` or `PAT
 | Eval | akm | Last run on |
 |---|---|---|
 | `evals/retrieval` | 0.9.26. Works on 0.9 and 0.10 (reads the projection flag from `search --help`) | 0.10.261003-beta: three full keyword repeats; library semantic run aborted on missing curate `searchMode`, which is fixed since: a curate that abstains, with no results and no `searchMode`, is an empty answer |
-| `evals/judge-gate` | 0.10.261105 or later with `akm judge` (akm main from #1416; not in a release yet). `reflect.quality` at schemaVersion 2 (akm#1418 / PR #1419: reflect's review floor is in the verdict); any other schemaVersion is refused | akm main cc4872fe8 on shredder (a 10-case smoke), measurement 0.5 (see the PR of #153). Measurement 0.4 ran on akm main 029c68e51 on the lab 35B, with the 3.5 floor in the scorer. Runs of 0.3 and earlier were on 0.9.25-alpha.2 or later with `akm improve judge`, and do not compare |
-| `evals/pair-judge` | 0.10.261105 or later with `akm judge` (akm main from #1416; not in a release yet). `consolidate.pair` at schemaVersion 1; any other schemaVersion is refused | akm main cc4872fe8 on shredder (a 10-case smoke), measurement 0.1 |
-| `evals/lesson-judge` | 0.10.261105 or later with `akm judge` (akm main from #1416; not in a release yet). `distill.lesson` at schemaVersion 1; any other schemaVersion is refused | akm main cc4872fe8 on shredder (a 10-case smoke), measurement 0.1. No baseline round yet |
-| `evals/drain-judge` | 0.10.261105 or later with `akm judge` (akm main from #1416; not in a release yet). `proposal.judgment` at schemaVersion 1; any other schemaVersion is refused. Its capture and reachability check (`src/capture.ts`) load akm's source (`consolidate.ts`, `drain.ts`), so they need a checkout of that akm with its dependencies installed | akm main cc4872fe8 on shredder (a 10-case smoke, with `reasoningEffort: none` patched in), measurement 0.1 (see the PR of #157) |
+| `evals/judge-gate` | 0.10.261105 or later with `akm judge` (stable 0.10.261120 has it, Deprecated there in favour of `akm doctor judge`). `reflect.quality` at schemaVersion 2 (akm#1418 / PR #1419: reflect's review floor is in the verdict); any other schemaVersion is refused | akm main cc4872fe8 on shredder (a 10-case smoke), measurement 0.5 (see the PR of #153). Measurement 0.4 ran on akm main 029c68e51 on the lab 35B, with the 3.5 floor in the scorer. Runs of 0.3 and earlier were on 0.9.25-alpha.2 or later with `akm improve judge`, and do not compare |
+| `evals/pair-judge` | 0.10.261105 or later with `akm judge` (stable 0.10.261120 has it, Deprecated there in favour of `akm doctor judge`). `consolidate.pair` at schemaVersion 1; any other schemaVersion is refused | akm main cc4872fe8 on shredder (a 10-case smoke), measurement 0.1 |
+| `evals/lesson-judge` | 0.10.261105 or later with `akm judge` (stable 0.10.261120 has it, Deprecated there in favour of `akm doctor judge`). `distill.lesson` at schemaVersion 1; any other schemaVersion is refused | akm main cc4872fe8 on shredder (a 10-case smoke), measurement 0.1. No baseline round yet |
+| `evals/drain-judge` | 0.10.261105 or later with `akm judge` (stable 0.10.261120 has it, Deprecated there in favour of `akm doctor judge`). `proposal.judgment` at schemaVersion 1; any other schemaVersion is refused. Its capture and reachability check (`src/capture.ts`) load akm's source (`consolidate.ts`, `drain.ts`), so they need a checkout of that akm with its dependencies installed | akm main cc4872fe8 on shredder (a 10-case smoke, with `reasoningEffort: none` patched in), measurement 0.1 (see the PR of #157) |
 | `evals/reflect` | 0.9.25-alpha.3 or later | 0.10.261003-beta on v0.4: three full real-model repeats; indexed-ref errors repaired, six AKM file-layout refusals each, 44/50 cases scored; bounded validation pilots pass. The six notes have since moved into their type's folder, where akm reflects on them |
 | `evals/distill` | 0.9.26 and 0.9.31. The `lesson-update` class needs 0.10.0; an older akm scores 0 on it | 0.10.261003-beta: three full real-model repeats, no errors, including lesson updates |
 | `evals/consolidate` | 0.9.26, the first release whose pair judge lists the claims each note holds alone | 0.10.261003-beta: three full real-model pair repeats, no errors, including crash recovery; default deterministic embedder |
@@ -25,6 +25,21 @@ Every eval that uses akm runs the `akm` command (from `--akm`, `AKM_BIN` or `PAT
 | `benchmarks/terminal-bench` | as agent-ab | 0.10.261003-beta, opencode 1.18.34, Harbor 0.24.0: one-task GPT-120 pilot, no errors |
 
 The contract smoke (`scripts/smoke/run --contract`) has passed for retrieval, judge-gate, reflect, distill, consolidate, extract and nightly on 0.9.26, 0.9.30, 0.9.31 and 0.10.26101201-alpha, and for promotion on 0.9.26. The expanded nine-eval contract smoke, including bakeoff, passed on both 0.9.26 and 0.10.261003-beta; strict startup smoke also passed on the requested beta. It shows that an eval can reach and read a success on a release, not that its scores are right. The [2026-10-12–13 real runs](reports/0.10.261003-beta/README.md) record full coverage, pilot limits, and compatibility failures separately.
+
+## Forms by akm version
+
+akm deprecates some spellings in 0.10.x and removes them in 0.11 (akm's `docs/migration/v0.10-to-v0.11.md`). Each eval asks the spelling that the akm under test has, chosen once from the version `akm --version` prints (`akmAtLeast` in `lib/akm/akm.ts`), so the same akm behaviour is measured on every version and scores stay comparable. A 0.10 prerelease counts as older than its release and gets the old spelling, which every 0.10 accepts; so does an akm whose version is unknown. Cases, prompts, scoring and results are unchanged.
+
+| What the evals ask | Before | From |
+|---|---|---|
+| `improve --require-engines` | passed | left out from 0.10.261014-beta, where it does nothing (0.11 refuses it) |
+| `improve` budget: `--timeout-ms <ms>` | `--timeout-ms` | `--timeout <ms>` from 0.10.261119 (a bare number is milliseconds) |
+| `proposal extract` source: `--type <harness>` | `--type` | `--sessions <harness>` from 0.10.261120 |
+| `info` (index stats) | `info` | `doctor info` from 0.10.261119 |
+| `judge` (the judge evals) | `judge` | `doctor judge` from 0.10.261119 |
+| `remember --enrich` (bakeoff `remember-enrich`) | run | not applicable from 0.11.0: the case is left out and the run says so, it is not scored as a failure (no replacement until akm's `TODO(0.11:memory-enrichment)`) |
+
+Not yet moved, because akm has no replacement in 0.10.x: `improve --json-to-stdout` (0.11 switches to ordinary JSON output) and `--detail full` on `proposal list` (global `--detail` goes in 0.11).
 
 ## When a new akm ships
 

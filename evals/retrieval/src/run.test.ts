@@ -72,7 +72,7 @@ if (cmd === "index") {
   console.log(JSON.stringify({ ok: true, totalEntries: total, verification: { embeddingCount: semantic ? total : 0, message: "embedded" } }));
   process.exit(0);
 }
-if (cmd === "info") {
+if (process.env.FAKE_AKM_NEW ? cmd === "doctor" && rest[0] === "info" : cmd === "info") { // info moved under doctor in 0.10.261119; with FAKE_AKM_NEW only the new spelling answers
   const built = data + "/built-at";
   console.log(JSON.stringify({ ok: true, indexStats: { entryCount: total, lastBuiltAt: existsSync(built) ? readFileSync(built, "utf8") : "never", hasEmbeddings: semantic } }));
   process.exit(0);

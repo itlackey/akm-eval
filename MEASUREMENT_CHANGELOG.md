@@ -5,6 +5,7 @@ when the selected inputs or collection protocol change. A scoring correction
 or label-only change sets `scoringVersion` (default: `version`) without changing collection identity.
 Model/AKM/configuration experiments remain recorded settings within that version.
 Documentation, ledger and reporting changes alone do not require a new version.
+A version-gated spelling of the same akm behaviour (the replacement form of a deprecated command, chosen by the akm under test) is not a new eval version.
 
 Comparison has no gates (since #108): `scripts/compare` shows each run's eval and
 scoring versions, settings and coverage beside the differences between them, and

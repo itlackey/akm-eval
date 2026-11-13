@@ -2,7 +2,7 @@
 // and telling the envelope it prints apart from akm failing. What a case is, whether akm could send it, and how a verdict is scored are each eval's own.
 
 import { rmSync } from "node:fs";
-import { type Sandbox, createSandbox, removeSandbox, runAkm, writeConfig, writeOpencodeConfig } from "./akm/akm.ts";
+import { type Sandbox, createSandbox, doctorArgs, removeSandbox, runAkm, writeConfig, writeOpencodeConfig } from "./akm/akm.ts";
 import { exitMessage, fail } from "./cli.ts";
 
 /** Where akm sends a proposal after its judge: pass (accepted), review (a person decides) or reject. */
@@ -68,7 +68,7 @@ export async function callJudge(sandbox: Sandbox, name: string, input: unknown, 
   let run: Awaited<ReturnType<typeof runAkm>>;
   const runner = opts.harness ? ["--harness", opts.harness.name, "--model", opts.harness.model] : [];
   try {
-    run = await runAkm(sandbox, ["judge", name, ...runner, "--format", "json"], { stdin: JSON.stringify(input), timeoutMs: opts.timeoutMs });
+    run = await runAkm(sandbox, [...doctorArgs(), "judge", name, ...runner, "--format", "json"], { stdin: JSON.stringify(input), timeoutMs: opts.timeoutMs });
   } catch (e) {
     return { error: hide((e as Error).message), seconds: 0, timedOut: false };
   }
@@ -92,7 +92,7 @@ export async function callJudge(sandbox: Sandbox, name: string, input: unknown, 
  * Throws a message that says which of the two it is.
  */
 export async function requireJudge(sandbox: Sandbox, name: string, version: number): Promise<void> {
-  const listed = await runAkm(sandbox, ["judge", "--list", "--format", "json"], { timeoutMs: 120_000 }).catch(() => undefined);
+  const listed = await runAkm(sandbox, [...doctorArgs(), "judge", "--list", "--format", "json"], { timeoutMs: 120_000 }).catch(() => undefined);
   let judges: unknown;
   try {
     judges = listed && listed.code === 0 ? JSON.parse(listed.stdout).judges : undefined;

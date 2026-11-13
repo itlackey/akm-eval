@@ -19,7 +19,7 @@ import { MEASUREMENT } from "./measurement.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
-const MIN_AKM = "0.10.261105"; // `akm judge` is not in a release yet: akm main from #1416, which reports this version
+const MIN_AKM = "0.10.261105"; // `akm judge` first reports this version (akm main from #1416); stable 0.10.261120 ships it, Deprecated there (replacement: `akm doctor judge`)
 
 /** What a run opens for its cases: the one sandbox, with the config written, that all of them go through. */
 type Extra = { sandbox: Sandbox; harness?: string; harnessRecord?: HarnessRecord };

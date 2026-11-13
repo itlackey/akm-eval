@@ -32,7 +32,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { INDEX_CACHE, SEMANTIC_MODEL, type Sandbox, akmBuild, runAkmJson, sandboxIn, semanticConfig } from "./akm.ts";
+import { INDEX_CACHE, SEMANTIC_MODEL, type Sandbox, akmBuild, doctorArgs, runAkmJson, sandboxIn, semanticConfig } from "./akm.ts";
 
 export const digest = (content: string | Uint8Array): string => createHash("sha256").update(content).digest("hex");
 
@@ -154,7 +154,7 @@ function lock(path: string): () => void {
 
 /** What akm says the index in the sandbox holds, without touching it. */
 async function stats(sandbox: Sandbox): Promise<{ entries: number; builtAt: string; hasEmbeddings: boolean }> {
-  const info = await runAkmJson<{ indexStats?: { entryCount?: number; lastBuiltAt?: string; hasEmbeddings?: boolean } }>(sandbox, ["info"], { timeoutMs: 120_000 });
+  const info = await runAkmJson<{ indexStats?: { entryCount?: number; lastBuiltAt?: string; hasEmbeddings?: boolean } }>(sandbox, [...doctorArgs(), "info"], { timeoutMs: 120_000 });
   const s = info.indexStats;
   if (typeof s?.entryCount !== "number" || typeof s.lastBuiltAt !== "string") throw new Error("akm info did not say what the index holds");
   return { entries: s.entryCount, builtAt: s.lastBuiltAt, hasEmbeddings: s.hasEmbeddings === true };

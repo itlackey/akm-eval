@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, readdirSync, lstatSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type Sandbox, createSandbox, removeSandbox, runAkmJson, writeConfig, agentDetailArgs } from "../../../lib/akm/akm.ts";
+import { type Sandbox, createSandbox, removeSandbox, runAkmJson, writeConfig, agentDetailArgs, requireEnginesArgs } from "../../../lib/akm/akm.ts";
 import { takeModelCalls, tallyCalls } from "../../../lib/akm/usage.ts";
 import { type Overrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
@@ -98,7 +98,7 @@ export async function runInference(raw: Pick<Raw, "source" | "post_inference" | 
     try { await index(generator, o); } finally { raw.inference.index_seconds = seconds(t); }
     t = performance.now();
     try {
-      raw.inference.report = sandboxRelative(await runAkmJson(generator, ["improve", "--strategy", STRATEGIES["memory-inference"], "--no-sync", "--require-engines", "--json-to-stdout"], { timeoutMs: improveTimeoutMs(o.timeoutMs, Object.keys(raw.source).length) }), generator.dir);
+      raw.inference.report = sandboxRelative(await runAkmJson(generator, ["improve", "--strategy", STRATEGIES["memory-inference"], "--no-sync", ...requireEnginesArgs(), "--json-to-stdout"], { timeoutMs: improveTimeoutMs(o.timeoutMs, Object.keys(raw.source).length) }), generator.dir);
     } finally { raw.inference.seconds = seconds(t); }
     raw.post_inference = snapshot(generator);
     raw.inference.outcome = inferenceOutcome(raw.inference.report, raw.source, raw.post_inference);

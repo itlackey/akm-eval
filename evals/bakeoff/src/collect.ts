@@ -10,12 +10,12 @@
 //   memory-inference     akm index, akm improve --strategy bakeoff-memory-inference   reads memories/<name>.derived.md
 //   remember-enrich      akm remember --enrich --name <name>                          reads memories/<name>.md
 //   schema-repair        akm index, akm improve <lesson> --strategy bakeoff-schema-repair    reads the proposal of source schema-repair
-//   session-summary      akm proposal extract --type claude --session-id <id>         reads sessions/claude/<id>.md
+//   session-summary      akm proposal extract --sessions claude --session-id <id>     reads sessions/claude/<id>.md (--type claude before 0.10.261120)
 //   consolidate-promote  akm index, akm improve --strategy bakeoff-consolidate-promote      reads consolidation.planned and the proposals of source consolidate
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { type Sandbox, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, createSandbox, engineConfig, extractSessionsArgs, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
 import { type Case, type Inference, type Process, type Raw, type Row, makeRow } from "./score.ts";
@@ -138,7 +138,7 @@ const memoryInference: Collect = async (c, sandbox, timeoutMs) => {
   place(c, sandbox);
   const opts = { timeoutMs };
   await runAkmJson(sandbox, ["index"], opts);
-  const improve = await runAkmJson<Obj>(sandbox, ["improve", "--strategy", STRATEGIES["memory-inference"], "--no-sync", "--require-engines", "--json-to-stdout"], opts);
+  const improve = await runAkmJson<Obj>(sandbox, ["improve", "--strategy", STRATEGIES["memory-inference"], "--no-sync", ...requireEnginesArgs(), "--json-to-stdout"], opts);
   const served = servedBy(improve, "memoryInference");
   const derived = bundleFile(sandbox, join(dirname(file), `${basename(file, ".md")}.derived.md`));
   const inference = inferenceOf(improve);
@@ -175,7 +175,7 @@ const schemaRepair: Collect = async (c, sandbox, timeoutMs) => {
   const opts = { timeoutMs };
   await runAkmJson(sandbox, ["index"], opts);
   const ref = file.replace(/\.md$/, "");
-  const improve = await runAkmJson<Obj>(sandbox, ["improve", ref, "--strategy", STRATEGIES["schema-repair"], "--no-sync", "--require-engines", "--json-to-stdout"], opts);
+  const improve = await runAkmJson<Obj>(sandbox, ["improve", ref, "--strategy", STRATEGIES["schema-repair"], "--no-sync", ...requireEnginesArgs(), "--json-to-stdout"], opts);
   const served = servedBy(improve, "validation");
   const repair = (improve.schemaRepairs as Obj[] | undefined)?.find((r) => typeof r.ref === "string" && r.ref.replace(/\.md$/, "") === ref);
   if (!repair) throw new Error("akm attempted no schema repair: it found nothing to repair in the lesson");
@@ -218,7 +218,7 @@ const sessionSummary: Collect = async (c, sandbox, timeoutMs) => {
   mkdirSync(join(projects, basename(dirname(file))), { recursive: true });
   writeFileSync(join(projects, basename(dirname(file)), `${id}.jsonl`), c.texts[file] as string);
   sandbox.env.AKM_CLAUDE_PROJECTS_DIR = projects; // akm looks for Claude Code sessions here, and never reads the caller's own
-  const result = await runAkmJson<Obj>(sandbox, ["proposal", "extract", "--type", "claude", "--location", projects, "--session-id", id, "--strategy", STRATEGIES["session-summary"]], { timeoutMs });
+  const result = await runAkmJson<Obj>(sandbox, ["proposal", "extract", ...extractSessionsArgs("claude"), "--location", projects, "--session-id", id, "--strategy", STRATEGIES["session-summary"]], { timeoutMs });
   const session = (result.sessions as Obj[] | undefined)?.find((s) => s.sessionId === id);
   if (!session) throw new Error(`akm extract did not process the session: ${String((result.warnings as unknown[] | undefined)?.[0] ?? "no warning")}`.slice(0, 300));
   const asset = bundleFile(sandbox, join("sessions", "claude", `${id}.md`));
@@ -235,7 +235,7 @@ const consolidatePromote: Collect = async (c, sandbox, timeoutMs) => {
   place(c, sandbox);
   const opts = { timeoutMs };
   await runAkmJson(sandbox, ["index"], opts);
-  const improve = await runAkmJson<Obj>(sandbox, ["improve", "--strategy", STRATEGIES["consolidate-promote"], "--no-sync", "--require-engines", "--json-to-stdout"], opts);
+  const improve = await runAkmJson<Obj>(sandbox, ["improve", "--strategy", STRATEGIES["consolidate-promote"], "--no-sync", ...requireEnginesArgs(), "--json-to-stdout"], opts);
   const served = servedBy(improve, "consolidate");
   const consolidation = improve.consolidation as Obj | undefined;
   if (!consolidation) throw new Error("improve printed no consolidation result. Is consolidate on in the strategy?");

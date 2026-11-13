@@ -50,7 +50,9 @@ const FAKE_AKM = `
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-const [a, b] = process.argv.slice(2);
+// \`judge\` is asked as \`doctor judge\` by a run on 0.10.261119 or later (the version this fake prints), and as \`judge\` by a run that was given another version (runCorpus with a ctx): the fake answers both.
+const words = process.argv.slice(2);
+const [a, b] = words[0] === "doctor" ? words.slice(1) : words;
 const log = (o) => { if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_LOG, JSON.stringify({ t: performance.now() + performance.timeOrigin, ...o }) + "\\n"); };
 if (a === "--version") { log({ at: "version" }); console.log("0.10.261200-test"); process.exit(0); }
 if (a === "judge" && b === "--list") {
@@ -619,6 +621,7 @@ describe("the command", () => {
     for (const r of [plain, set]) {
       expect([r.code, r.err]).toEqual([0, ""]);
       expect(r.calls.filter((c) => c.at === "version")).toHaveLength(1); // akm is probed once
+      expect(r.calls.filter((c) => c.at === "start").every((c) => c.args[0] === "doctor" && c.args[1] === "judge")).toBe(true); // and the version it prints, 0.10.261200, is asked \`doctor judge\``
       expect(new Set(r.calls.filter((c) => c.at === "start").map((c) => c.data)).size).toBe(1); // and the eight cases go through one sandbox
       expect(r.leftover).toEqual([]); // which is removed, the probe's too
       expect(r.stored).toMatchObject({ n_run: 8, status: "complete", rubric_version: 3 });

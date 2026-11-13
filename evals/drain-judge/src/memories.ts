@@ -6,7 +6,7 @@
 import { cpSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, useAkm, useConfigForm, writeConfig } from "../../../lib/akm/akm.ts";
+import { akmVersion, createSandbox, extractSessionsArgs, removeSandbox, runAkm, runAkmJson, useAkm, useConfigForm, writeConfig } from "../../../lib/akm/akm.ts";
 import { useModel } from "../../../lib/models.ts";
 import { STRATEGY, extractConfig } from "../../extract/src/collect.ts";
 
@@ -48,7 +48,7 @@ for (const c of cases.filter((c) => !values.only || c.id === values.only)) {
     mkdirSync(join(projects, s.project), { recursive: true });
     cpSync(s.file, join(projects, s.project, `${c.id}.jsonl`));
     sandbox.env.AKM_CLAUDE_PROJECTS_DIR = projects;
-    const r = await runAkm(sandbox, ["proposal", "extract", "--type", "claude", "--location", projects, "--session-id", c.id, "--strategy", STRATEGY, "--format", "json"], { timeoutMs: 15 * 60_000 });
+    const r = await runAkm(sandbox, ["proposal", "extract", ...extractSessionsArgs("claude"), "--location", projects, "--session-id", c.id, "--strategy", STRATEGY, "--format", "json"], { timeoutMs: 15 * 60_000 });
     const listed = await runAkmJson<{ proposals?: { id: string; ref: string; source: string }[] }>(sandbox, ["proposal", "list", "--status", "pending", "--detail", "full"]);
     const mine = (listed.proposals ?? []).filter((p) => p.source === "extract" && p.ref.includes("memories/"));
     if (mine.length > 0) await runAkm(sandbox, ["proposal", "accept", ...mine.map((p) => p.id)], { timeoutMs: 5 * 60_000 });
