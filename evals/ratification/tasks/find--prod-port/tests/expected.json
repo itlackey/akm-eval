@@ -1,0 +1,10 @@
+{
+  "id": "find--prod-port",
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "/work/answer.txt",
+      "text": "7421"
+    }
+  ]
+}

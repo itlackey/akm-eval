@@ -1,0 +1,808 @@
+{
+  "eval": "ratification",
+  "mode": "run",
+  "label": "full",
+  "date": "2026-11-13T03:24:04.270Z",
+  "git_commit": "912f757",
+  "model": "openai/moe/qwen3.8-flash-next-iq2_xs",
+  "engine": {
+    "model": "openai/moe/qwen3.8-flash-next-iq2_xs",
+    "endpoint": "<MODEL_BASE_URL>"
+  },
+  "akm_version": "0.10.261120",
+  "akm_bin": "akm-cli@0.10.261120",
+  "akm_build": null,
+  "akm_build_fingerprint": "57abd43f3d33e9808b1ddd286ff106ede84b322cd718eb40c92cab80287a6835",
+  "akm_env": {},
+  "akm_install": {
+    "from": "release",
+    "plugin_from": "release",
+    "plugin_version": "0.10.261122",
+    "packages": [],
+    "dependency_tree_sha256": "3a0701b4aadec911f5f1486696e931430e7f08bfb3aaa669598f9ba42cdda298",
+    "locked": false,
+    "observed": {
+      "akm_version": [
+        "0.10.261120"
+      ],
+      "plugin_akm_cli": [
+        "0.10.261120"
+      ],
+      "assets_indexed": [
+        8
+      ],
+      "env": {
+        "AKM_BUNDLE_DIR": "/opt/akm/bundle",
+        "AKM_CONFIG_DIR": "/opt/akm/config",
+        "AKM_CONFIG_FILE": "/opt/akm/config/akm.json",
+        "AKM_DATA_DIR": "/opt/akm/data",
+        "AKM_CACHE_DIR": "/opt/akm/cache",
+        "AKM_STATE_DIR": "/opt/akm/state",
+        "AKM_AUTO_FEEDBACK": "0",
+        "AKM_AUTO_LEARNING": "0",
+        "AKM_AUTO_MEMORY": "0",
+        "AKM_INDEX_ON_SESSION_END": "0"
+      },
+      "dependency_trees": [
+        "3a0701b4aadec911f5f1486696e931430e7f08bfb3aaa669598f9ba42cdda298"
+      ],
+      "lockfiles": {
+        "akm_cli": null,
+        "plugin": null
+      }
+    }
+  },
+  "pins": {
+    "akm_cli": "0.10.261120",
+    "akm_plugin": "0.10.261122",
+    "opencode": "1.18.34",
+    "harbor": "0.24.0"
+  },
+  "tasks": [
+    "clone--canary-note",
+    "doctor--stuck-run",
+    "feedback--stale-note",
+    "find--prod-port",
+    "import--handoff",
+    "proposal--review",
+    "remember--retention",
+    "run--stamp-release",
+    "validate--draft-task"
+  ],
+  "attempts": 3,
+  "arms": [
+    "minimal",
+    "guided",
+    "plugin"
+  ],
+  "harbor_exit": 0,
+  "status": "complete",
+  "aborted_reason": null,
+  "check": null,
+  "completion": {
+    "minimal": {
+      "expected": 27,
+      "completed": 27,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "guided": {
+      "expected": 27,
+      "completed": 27,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "plugin": {
+      "expected": 27,
+      "completed": 27,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    }
+  },
+  "libraries_sha256": "8fe50b69f5f9ce49b272e3d9d1661031dbb6f0888a0d8d0dd4e2ab4c4dbcd49e",
+  "tasks_sha256": {
+    "clone--canary-note": "e1d4b1cdfbe93ebf845a7a988cf05c2e4deab22793d1a1b481e40b3cb869d20d",
+    "doctor--stuck-run": "2210fcabc2dcc94c81c7ac5cf99c1f5960945da24eff2d9182217f320be4c2a6",
+    "feedback--stale-note": "e4e2cee97f212536b12f3824677bfe5e41b758b0afeca652cccf58d51df05050",
+    "find--prod-port": "eaefc4d1ac9ebf04df3a61930acb0430bd718063b6a065c88828420b34296009",
+    "import--handoff": "97594c8bb85c86a817cb50463bbb2b5c42b6c3849fb71272b6e1d43ec476bf53",
+    "proposal--review": "3fabdfed64b42828f877cea54cc2ebdc8a075c88cf4a848f5c0af2e25ed3a4f7",
+    "remember--retention": "e8f794a504b00be3c86fac2b5a0c7fdc234e0903b6623007aa4b6673a9c75b39",
+    "run--stamp-release": "114a1badc5f6c44f134bfd06b7dd35e8ca1913ac187530d85431f140132ebbbe",
+    "validate--draft-task": "42ed9c0919c3f00e5038aca79755a6c4c6560c12ad8fd2310d314a7a7d0ddee6"
+  },
+  "prompt_sha256": "a3550459ff17ace706dfc212491f3790c8c1c0a0f248e56cfa9b5359bc232308",
+  "assets_sha256": "f4a5ab5db07d0fd2819c1ce8ffb6212d014f64e1774476db1aea3beb528e962b",
+  "config": {
+    "n_attempts": 3,
+    "n_concurrent_trials": 2,
+    "environment": {
+      "type": "docker",
+      "delete": true,
+      "extra_docker_compose": [
+        "lib/harbor/shared-network.yaml"
+      ]
+    },
+    "agents": [
+      {
+        "import_path": "akm_ratify:AkmRatifyCli",
+        "model_name": "openai/moe/qwen3.8-flash-next-iq2_xs",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/moe/qwen3.8-flash-next-iq2_xs",
+            "provider": {
+              "openai": {
+                "models": {
+                  "moe/qwen3.8-flash-next-iq2_xs": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261120",
+          "libraries_dir": "libraries",
+          "arm": "minimal",
+          "guide": false,
+          "disable_web_search": true,
+          "prompt_template_path": "prompts/minimal.md"
+        }
+      },
+      {
+        "import_path": "akm_ratify:AkmRatifyCli",
+        "model_name": "openai/moe/qwen3.8-flash-next-iq2_xs",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/moe/qwen3.8-flash-next-iq2_xs",
+            "provider": {
+              "openai": {
+                "models": {
+                  "moe/qwen3.8-flash-next-iq2_xs": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261120",
+          "libraries_dir": "libraries",
+          "arm": "guided",
+          "guide": true,
+          "disable_web_search": true,
+          "prompt_template_path": "prompts/minimal.md"
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/moe/qwen3.8-flash-next-iq2_xs",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/moe/qwen3.8-flash-next-iq2_xs",
+            "provider": {
+              "openai": {
+                "models": {
+                  "moe/qwen3.8-flash-next-iq2_xs": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setup_cache_dir": ".cache/harbor-setup",
+          "akm_cli_version": "0.10.261120",
+          "akm_plugin_version": "0.10.261122",
+          "libraries_dir": "libraries",
+          "arm": "plugin",
+          "disable_web_search": true,
+          "prompt_template_path": "prompts/minimal.md"
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "clone--canary-note",
+          "doctor--stuck-run",
+          "feedback--stale-note",
+          "find--prod-port",
+          "import--handoff",
+          "proposal--review",
+          "remember--retention",
+          "run--stamp-release",
+          "validate--draft-task"
+        ]
+      }
+    ]
+  },
+  "report": {
+    "per_arm": {
+      "minimal": {
+        "trials": 27,
+        "scored": 27,
+        "errored": 0,
+        "passed": 27,
+        "completion_rate": 1,
+        "mean_akm_calls": 6.81,
+        "mean_other_calls": 2.85,
+        "mean_unnecessary": 5.15,
+        "mean_help_calls": 2.93,
+        "error_trials": 6,
+        "recovered": 6,
+        "recovery_rate": 1,
+        "old_form_trials": 9,
+        "old_form_moved_on": 3,
+        "deprecated_notices": 20,
+        "mean_tokens": 131152.15
+      },
+      "guided": {
+        "trials": 27,
+        "scored": 27,
+        "errored": 0,
+        "passed": 25,
+        "completion_rate": 0.926,
+        "mean_akm_calls": 5.48,
+        "mean_other_calls": 1.52,
+        "mean_unnecessary": 3.85,
+        "mean_help_calls": 1.22,
+        "error_trials": 10,
+        "recovered": 7,
+        "recovery_rate": 0.7,
+        "old_form_trials": 3,
+        "old_form_moved_on": 2,
+        "deprecated_notices": 3,
+        "mean_tokens": 85164.7
+      },
+      "plugin": {
+        "trials": 27,
+        "scored": 27,
+        "errored": 0,
+        "passed": 27,
+        "completion_rate": 1,
+        "mean_akm_calls": 6.44,
+        "mean_other_calls": 2.26,
+        "mean_unnecessary": 4.78,
+        "mean_help_calls": 2.04,
+        "error_trials": 9,
+        "recovered": 9,
+        "recovery_rate": 1,
+        "old_form_trials": 11,
+        "old_form_moved_on": 2,
+        "deprecated_notices": 12,
+        "mean_tokens": 121264.11
+      }
+    },
+    "per_task": {
+      "clone--canary-note": {
+        "minimal": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 6.67,
+          "mean_other_calls": 3.67,
+          "mean_unnecessary": 5.67,
+          "mean_help_calls": 2,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 3,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 4,
+          "mean_tokens": 144842.33
+        },
+        "guided": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 5,
+          "mean_other_calls": 3.33,
+          "mean_unnecessary": 4,
+          "mean_help_calls": 1.67,
+          "error_trials": 2,
+          "recovered": 1,
+          "recovery_rate": 0.5,
+          "old_form_trials": 1,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 1,
+          "mean_tokens": 109798.67
+        },
+        "plugin": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 7,
+          "mean_other_calls": 3,
+          "mean_unnecessary": 6,
+          "mean_help_calls": 2,
+          "error_trials": 1,
+          "recovered": 1,
+          "recovery_rate": 1,
+          "old_form_trials": 3,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 3,
+          "mean_tokens": 115667.33
+        }
+      },
+      "doctor--stuck-run": {
+        "minimal": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 12.67,
+          "mean_other_calls": 6.33,
+          "mean_unnecessary": 11.67,
+          "mean_help_calls": 4.33,
+          "error_trials": 2,
+          "recovered": 2,
+          "recovery_rate": 1,
+          "old_form_trials": 3,
+          "old_form_moved_on": 2,
+          "deprecated_notices": 10,
+          "mean_tokens": 319252.67
+        },
+        "guided": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 1,
+          "mean_other_calls": 2,
+          "mean_unnecessary": 0,
+          "mean_help_calls": 0,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 40307.33
+        },
+        "plugin": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 2,
+          "mean_other_calls": 1,
+          "mean_unnecessary": 1,
+          "mean_help_calls": 1,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 3,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 3,
+          "mean_tokens": 43749
+        }
+      },
+      "feedback--stale-note": {
+        "minimal": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 4,
+          "mean_other_calls": 1,
+          "mean_unnecessary": 3,
+          "mean_help_calls": 2,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 71255
+        },
+        "guided": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 1,
+          "mean_other_calls": 0,
+          "mean_unnecessary": 0,
+          "mean_help_calls": 0,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 15479.33
+        },
+        "plugin": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 2.33,
+          "mean_other_calls": 0,
+          "mean_unnecessary": 1.33,
+          "mean_help_calls": 0,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 30146.33
+        }
+      },
+      "find--prod-port": {
+        "minimal": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 6.67,
+          "mean_other_calls": 4,
+          "mean_unnecessary": 4.67,
+          "mean_help_calls": 1.67,
+          "error_trials": 1,
+          "recovered": 1,
+          "recovery_rate": 1,
+          "old_form_trials": 1,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 1,
+          "mean_tokens": 126752.33
+        },
+        "guided": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 3.33,
+          "mean_other_calls": 1.33,
+          "mean_unnecessary": 1.33,
+          "mean_help_calls": 0,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 47001.67
+        },
+        "plugin": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 8,
+          "mean_other_calls": 6.67,
+          "mean_unnecessary": 6,
+          "mean_help_calls": 1.33,
+          "error_trials": 1,
+          "recovered": 1,
+          "recovery_rate": 1,
+          "old_form_trials": 1,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 2,
+          "mean_tokens": 223694.67
+        }
+      },
+      "import--handoff": {
+        "minimal": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 4.67,
+          "mean_other_calls": 1,
+          "mean_unnecessary": 3.67,
+          "mean_help_calls": 2,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 1,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 1,
+          "mean_tokens": 65537.33
+        },
+        "guided": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 10.67,
+          "mean_other_calls": 1,
+          "mean_unnecessary": 9.67,
+          "mean_help_calls": 1.67,
+          "error_trials": 1,
+          "recovered": 1,
+          "recovery_rate": 1,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 157577
+        },
+        "plugin": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 9,
+          "mean_other_calls": 1.33,
+          "mean_unnecessary": 8,
+          "mean_help_calls": 2.67,
+          "error_trials": 2,
+          "recovered": 2,
+          "recovery_rate": 1,
+          "old_form_trials": 1,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 1,
+          "mean_tokens": 128020.33
+        }
+      },
+      "proposal--review": {
+        "minimal": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 6.67,
+          "mean_other_calls": 1,
+          "mean_unnecessary": 1.67,
+          "mean_help_calls": 2.33,
+          "error_trials": 2,
+          "recovered": 2,
+          "recovery_rate": 1,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 69287.33
+        },
+        "guided": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 5,
+          "mean_other_calls": 1,
+          "mean_unnecessary": 0.33,
+          "mean_help_calls": 0,
+          "error_trials": 3,
+          "recovered": 3,
+          "recovery_rate": 1,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 49238
+        },
+        "plugin": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 6.33,
+          "mean_other_calls": 1,
+          "mean_unnecessary": 1.33,
+          "mean_help_calls": 1,
+          "error_trials": 3,
+          "recovered": 3,
+          "recovery_rate": 1,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 77297.33
+        }
+      },
+      "remember--retention": {
+        "minimal": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 3.33,
+          "mean_other_calls": 0.67,
+          "mean_unnecessary": 2.33,
+          "mean_help_calls": 2.33,
+          "error_trials": 1,
+          "recovered": 1,
+          "recovery_rate": 1,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 52375.33
+        },
+        "guided": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 1,
+          "completion_rate": 0.333,
+          "mean_akm_calls": 10.67,
+          "mean_other_calls": 1.33,
+          "mean_unnecessary": 9.67,
+          "mean_help_calls": 1,
+          "error_trials": 2,
+          "recovered": 1,
+          "recovery_rate": 0.5,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 152662.67
+        },
+        "plugin": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 8.33,
+          "mean_other_calls": 2,
+          "mean_unnecessary": 7.33,
+          "mean_help_calls": 2,
+          "error_trials": 1,
+          "recovered": 1,
+          "recovery_rate": 1,
+          "old_form_trials": 1,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 1,
+          "mean_tokens": 135129.67
+        }
+      },
+      "run--stamp-release": {
+        "minimal": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 5,
+          "mean_other_calls": 1,
+          "mean_unnecessary": 3,
+          "mean_help_calls": 2,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 61134.33
+        },
+        "guided": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 3,
+          "mean_other_calls": 0.67,
+          "mean_unnecessary": 1,
+          "mean_help_calls": 0,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 37823.33
+        },
+        "plugin": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 4.67,
+          "mean_other_calls": 1,
+          "mean_unnecessary": 2.67,
+          "mean_help_calls": 0.67,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 0,
+          "old_form_moved_on": 0,
+          "deprecated_notices": 0,
+          "mean_tokens": 62304.33
+        }
+      },
+      "validate--draft-task": {
+        "minimal": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 11.67,
+          "mean_other_calls": 7,
+          "mean_unnecessary": 10.67,
+          "mean_help_calls": 7.67,
+          "error_trials": 0,
+          "recovered": 0,
+          "recovery_rate": null,
+          "old_form_trials": 1,
+          "old_form_moved_on": 1,
+          "deprecated_notices": 4,
+          "mean_tokens": 269932.67
+        },
+        "guided": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 9.67,
+          "mean_other_calls": 3,
+          "mean_unnecessary": 8.67,
+          "mean_help_calls": 6.67,
+          "error_trials": 2,
+          "recovered": 1,
+          "recovery_rate": 0.5,
+          "old_form_trials": 2,
+          "old_form_moved_on": 2,
+          "deprecated_notices": 2,
+          "mean_tokens": 156594.33
+        },
+        "plugin": {
+          "trials": 3,
+          "scored": 3,
+          "errored": 0,
+          "passed": 3,
+          "completion_rate": 1,
+          "mean_akm_calls": 10.33,
+          "mean_other_calls": 4.33,
+          "mean_unnecessary": 9.33,
+          "mean_help_calls": 7.67,
+          "error_trials": 1,
+          "recovered": 1,
+          "recovery_rate": 1,
+          "old_form_trials": 2,
+          "old_form_moved_on": 2,
+          "deprecated_notices": 2,
+          "mean_tokens": 275368
+        }
+      }
+    }
+  }
+}

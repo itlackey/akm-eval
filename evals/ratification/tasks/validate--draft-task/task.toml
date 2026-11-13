@@ -1,0 +1,28 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/validate--draft-task"
+version = "1.0.0"
+description = "Check whether a draft task file is valid (the documented-looking `task validate` no longer exists)"
+authors = []
+keywords = []
+
+[metadata]
+family = "recover"
+# How many akm calls the reference solution makes: the report counts akm calls beyond it as unnecessary.
+ref_akm = 1
+# A form this task invites that akm deprecated or removed, and the form that replaces it (regular expressions over a shell command).
+old = "\\bakm\\s+task\\s+validate\\b"
+replacement = "\\bakm\\s+(import|lint)\\b"
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work"
+
+[environment.env]
+AKM_TASK_STASH = "validate--draft-task"

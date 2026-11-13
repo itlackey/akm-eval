@@ -1,0 +1,28 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/feedback--stale-note"
+version = "1.0.0"
+description = "Flag a wrong note with negative feedback and a reason"
+authors = []
+keywords = []
+
+[metadata]
+family = "feedback"
+# How many akm calls the reference solution makes: the report counts akm calls beyond it as unnecessary.
+ref_akm = 1
+# A form this task invites that akm deprecated or removed, and the form that replaces it (regular expressions over a shell command).
+old = ""
+replacement = ""
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work"
+
+[environment.env]
+AKM_TASK_STASH = "feedback--stale-note"

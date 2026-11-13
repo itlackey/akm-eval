@@ -43,6 +43,8 @@ A run that did not finish everything (Harbor failed, a task, arm and attempt has
 
 The model is reached through opencode's `openai` provider. With `MODEL_BASE_URL` or `OPENAI_BASE_URL` set, every `--model` name that is not a `models.json` line is sent to that gateway as `openai/<name>`, even one that names another provider; another provider's own path, with its key under its own name, is used only when neither URL is set. The `MODEL_BASE_URL=http://localhost:8080/v1` that `.env.example` starts with is the task container itself, which the run refuses: set an address the task containers reach. An empty `MODEL_API_KEY` is sent to a gateway as `unused`, and the run says so.
 
+A provider's key reaches opencode by its name, not by `.env`'s: for an `opencode/<id>` model (OpenCode Zen) the resolver passes the host variables named `OPENCODE_*`, so the key must be set as `OPENCODE_API_KEY` in the environment of the run (`ZEN_API_KEY` in `.env` is not mapped). For a gateway, the run asks it `GET /models` with the key before any container starts, and stops on a 401 or 403.
+
 Harbor gets only the model's variables and what it, uv and Docker read.
 
 ## Concurrency and Docker networks

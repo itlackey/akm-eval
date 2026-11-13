@@ -1,0 +1,30 @@
+{
+  "id": "clone--canary-note",
+  "checks": [
+    {
+      "type": "file_contains",
+      "path": "$BUNDLE/knowledge/tallow-ports-canary.md",
+      "text": "7430"
+    },
+    {
+      "type": "file_absent_text",
+      "path": "$BUNDLE/knowledge/tallow-ports-canary.md",
+      "text": "7421"
+    },
+    {
+      "type": "file_contains",
+      "path": "$BUNDLE/knowledge/tallow-ports.md",
+      "text": "7421"
+    },
+    {
+      "type": "file_absent_text",
+      "path": "$BUNDLE/knowledge/tallow-ports.md",
+      "text": "7430"
+    },
+    {
+      "type": "akm_show",
+      "ref": "knowledge/tallow-ports-canary",
+      "text": "7430"
+    }
+  ]
+}

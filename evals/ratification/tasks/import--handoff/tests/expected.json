@@ -1,0 +1,14 @@
+{
+  "id": "import--handoff",
+  "checks": [
+    {
+      "type": "knowledge",
+      "contains": "handoff-marker-9f3a",
+      "search": "handoff"
+    },
+    {
+      "type": "file_exists",
+      "path": "/work/inbox/handoff-2026-11.md"
+    }
+  ]
+}

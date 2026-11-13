@@ -416,6 +416,7 @@ REPLIES = [
     ("akm bundle create", "AKM-SETUP assets=259\n"),
     ('echo "akm setup ok"', "akm setup ok\nAKM-SETUP akm=0.9.27 plugin_akm_cli=0.9.26\n"),
     ("tree_akm_cli", f"AKM-SETUP tree_akm_cli={CLI_TREE} tree_plugin={PLUGIN_TREE}\n"),
+    ("AKM-SETUP planted=", "AKM-SETUP planted=yes\n"),
 ]
 
 
@@ -441,9 +442,10 @@ def test_a_checkout_is_uploaded_and_installed_before_the_library_and_the_install
     assert env.uploads == [("/packages", m.PACKAGES), ("/libraries", m.LIBRARIES)]  # a checkout has no lockfile to upload
     assert at("UPLOAD /packages") < at(f"npm install --prefix {m.CLI_PREFIX} --no-audit --no-fund /opt/akm/packages/akm-cli-0.9.27.tgz") < at(f"npm install --prefix {m.PLUGIN_PREFIX}")
     assert at(f"npm install --prefix {m.PLUGIN_PREFIX}") < at("npm ls") < at(f"rm -rf {m.PACKAGES}") < at("UPLOAD /libraries")  # the tree is read while the tarballs are still there
-    assert at("UPLOAD /libraries") < at("akm bundle create") < at("opencode --model")
+    assert at("UPLOAD /libraries") < at("akm bundle create") < at("opencode --model") < at("AKM-SETUP planted=")  # the plant script runs last, once
+    assert sum(m.SETUP_PLANTED in c for c in commands) == 1 and f"rm -rf {m.LIBRARIES}" in commands[at("AKM-SETUP planted=")]
     record = json.loads((tmp_path / m.INSTALL_FILE).read_text())
-    assert record["akm_version"] == "0.9.27" and record["plugin_akm_cli"] == "0.9.26" and record["assets_indexed"] == 259
+    assert record["akm_version"] == "0.9.27" and record["plugin_akm_cli"] == "0.9.26" and record["assets_indexed"] == 259 and record["planted"] is True
     assert record["env"]["AKM_CURATE_TIMEOUT"] == "30" and record["env"]["AKM_BUNDLE_DIR"] == m.BUNDLE
     # No lockfile, and the record says so; the digest of what npm installed is there all the same.
     assert record["lockfiles"] == {"akm_cli": None, "plugin": None}

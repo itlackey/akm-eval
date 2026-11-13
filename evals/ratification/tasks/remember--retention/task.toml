@@ -1,0 +1,28 @@
+schema_version = "1.4"
+
+[task]
+name = "akm-eval/remember--retention"
+version = "1.0.0"
+description = "Save a fact as a memory with a description and tags"
+authors = []
+keywords = []
+
+[metadata]
+family = "remember"
+# How many akm calls the reference solution makes: the report counts akm calls beyond it as unnecessary.
+ref_akm = 1
+# A form this task invites that akm deprecated or removed, and the form that replaces it (regular expressions over a shell command).
+old = ""
+replacement = ""
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+workdir = "/work"
+
+[environment.env]
+AKM_TASK_STASH = "remember--retention"

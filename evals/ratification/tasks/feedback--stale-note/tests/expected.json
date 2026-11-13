@@ -1,0 +1,11 @@
+{
+  "id": "feedback--stale-note",
+  "checks": [
+    {
+      "type": "feedback",
+      "ref": "knowledge/tallow-deploy",
+      "signal": "negative",
+      "reason": "thursday"
+    }
+  ]
+}

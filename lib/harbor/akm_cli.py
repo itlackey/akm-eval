@@ -32,13 +32,12 @@ from harbor.models.agent.context import AgentContext
 from pydantic import field_validator
 
 import akm_opencode as base
-from akm_opencode import AKM_ENV, AKM_ROOT, CLI_PREFIX, INSTALL_FILE, LIBRARIES, NVM, PACKAGES, PLUGIN_PREFIX, AkmOpenCode, AkmOpenCodeOptions
+from akm_opencode import AKM_ENV, AKM_ROOT, CLI_PREFIX, INSTALL_FILE, LIBRARIES, NVM, PACKAGES, PLUGIN_PREFIX, SETUP_PLANTED, AkmOpenCode, AkmOpenCodeOptions
 from eval_opencode import EvalOpenCode
 
 SOLVE = f"{AKM_ROOT}/solve.sh"
 # The settings the CLI arm runs with: the five directories and AKM_CONFIG_FILE, and background learning off. The plugin's own settings are not set.
 CLI_ENV = {k: v for k, v in AKM_ENV.items() if k.endswith("_DIR") or k == "AKM_CONFIG_FILE" or k.startswith("AKM_AUTO_") or k == "AKM_INDEX_ON_SESSION_END"}
-SETUP_PLANTED = "AKM-SETUP planted="
 
 
 class AkmCliOptions(AkmOpenCodeOptions):
@@ -115,15 +114,10 @@ class AkmCli(AkmOpenCode):
             'echo "AKM-SETUP tree_akm_cli=$(printf "%s" "$out" | sha256sum | cut -d" " -f1)"'
         )
 
-    def _plant_command(self) -> str:
-        """Runs the library's `.plant.sh`, and copies `.solve.sh` where the reference finds it, when this agent is the reference. Then the library is removed."""
-        keep = f'if [ -f "{LIBRARIES}/$stash/.solve.sh" ]; then install -m 0755 "{LIBRARIES}/$stash/.solve.sh" {SOLVE}; fi; ' if self.options.script == "reference" else ""
-        return (
-            "set -euo pipefail; " + NVM + 'stash="$(printenv AKM_TASK_STASH || true)"; '
-            '[[ "$stash" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "AKM-SETUP FATAL: AKM_TASK_STASH=$stash is not a library name" >&2; exit 1; }; '
-            f'planted=no; if [ -f "{LIBRARIES}/$stash/.plant.sh" ]; then bash "{LIBRARIES}/$stash/.plant.sh" >&2; planted=yes; fi; '
-            + keep + f'rm -rf {LIBRARIES}; echo "{SETUP_PLANTED}$planted"'
-        )
+    @override
+    def _plant_extra(self) -> str:
+        """The reference's recipe, `.solve.sh`, is copied where it finds it; no other arm ever has it."""
+        return f'if [ -f "{LIBRARIES}/$stash/.solve.sh" ]; then install -m 0755 "{LIBRARIES}/$stash/.solve.sh" {SOLVE}; fi; ' if self.options.script == "reference" else ""
 
     def _check_command(self) -> str:
         return f'set -euo pipefail; {NVM}version="$(akm --version | tr -d "[:space:]")"; [ -n "$version" ] || {{ echo "AKM-SETUP FATAL: akm printed no version" >&2; exit 1; }}; echo "AKM-SETUP akm=$version"'
@@ -143,12 +137,9 @@ class AkmCli(AkmOpenCode):
         await environment.upload_dir(Path(self.options.libraries_dir), LIBRARIES)
         await self.exec_as_root(environment, command=f"chown -R {owner} {LIBRARIES}")
         semantic_files = await self._restore_semantic_files(environment)
-        seeded = await self.exec_as_agent(environment, command=self._seed_command())  # removes LIBRARIES
+        seeded = await self.exec_as_agent(environment, command=self._seed_command())
         if semantic_files:
             await self._save_semantic_files(environment, semantic_files)
-        # The seed removed the upload; the plant script and the reference's recipe are in it, so it goes up once more.
-        await environment.upload_dir(Path(self.options.libraries_dir), LIBRARIES)
-        await self.exec_as_root(environment, command=f"chown -R {owner} {LIBRARIES}")
         planted = await self.exec_as_agent(environment, command=self._plant_command())
         # akm's launcher finds node on the PATH; a later command, such as the verifier's, does not source nvm.
         await self.exec_as_root(environment, command=f'{NVM}ln -sf "$(command -v node)" /usr/local/bin/node')
