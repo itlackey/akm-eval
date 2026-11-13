@@ -53,7 +53,8 @@ from harbor.models.agent.context import AgentContext
 # akm lives under /opt, not /tmp: akm treats a bundle under /tmp as transient and moves its config.
 AKM_ROOT = "/opt/akm"
 BUNDLE = f"{AKM_ROOT}/bundle"
-LIBRARIES = f"{AKM_ROOT}/libraries"  # uploaded for the seed, removed after it
+LIBRARIES = f"{AKM_ROOT}/libraries"  # uploaded for the seed and the plant step, removed after the latter
+SETUP_PLANTED = "AKM-SETUP planted="
 PACKAGES = f"{AKM_ROOT}/packages"  # the tarballs of a checkout, uploaded for the install, removed after it
 CLI_PREFIX = f"{AKM_ROOT}/cli"  # where akm-cli is installed: npm puts the package and its dependencies in node_modules under it
 CLI_BIN = f"{CLI_PREFIX}/node_modules/.bin/akm"
@@ -192,19 +193,21 @@ def tree_sha256(trees: dict[str, str]) -> str:
     return hashlib.sha256("".join(f"{name}={trees[name]}\n" for name in sorted(trees)).encode()).hexdigest()
 
 
-def install_record(seeded: str, checked: str, env: dict[str, str], trees: str = "", lockfiles: dict[str, str | None] | None = None) -> dict:
+def install_record(seeded: str, checked: str, env: dict[str, str], trees: str = "", lockfiles: dict[str, str | None] | None = None, planted: str = "") -> dict:
     """What the setup printed, as the record kept with the trial: `akm --version`, the akm-cli the plugin carries, the assets indexed,
     the lockfile each install came from (None: it came from no lockfile) and the digest of the dependency tree each one holds."""
     check = re.search(r"^AKM-SETUP akm=(\S*) plugin_akm_cli=(\S*)$", checked, re.MULTILINE)
     assets = re.search(r"^AKM-SETUP assets=(\d+)$", seeded, re.MULTILINE)
     tree = re.search(r"^AKM-SETUP tree_akm_cli=([0-9a-f]{64}) tree_plugin=([0-9a-f]{64})$", trees, re.MULTILINE)
     found = {"akm_cli": tree.group(1), "plugin": tree.group(2)} if tree else None
+    plant = re.search(rf"^{SETUP_PLANTED}(yes|no)$", planted, re.MULTILINE)
     embeddings = re.search(r"^AKM-SETUP embeddings=(\d+)$", seeded, re.MULTILINE)
     semantic = re.search(r"^AKM-SETUP search_mode=semantic$", seeded, re.MULTILINE)
     return {
         "akm_version": check.group(1) if check else None,
         "plugin_akm_cli": check.group(2) if check else None,
         "assets_indexed": int(assets.group(1)) if assets else None,
+        **({"planted": plant.group(1) == "yes"} if plant else {}),
         "env": dict(env),
         "lockfiles": dict(lockfiles or {"akm_cli": None, "plugin": None}),
         "dependency_trees": found,
@@ -290,8 +293,9 @@ class AkmOpenCode(EvalOpenCode):
             env={"XDG_DATA_HOME": WARM_DATA, "XDG_STATE_HOME": f"{AKM_ROOT}/opencode-warm-state"},
         )
         checked = await self.exec_as_agent(environment, command=self._check_command())
+        planted = await self.exec_as_agent(environment, command=self._plant_command())  # last, so nothing above can undo what it plants
         locks = {"akm_cli": lock_sha256(self._akm_lock), "plugin": lock_sha256(self._plugin_lock)}
-        self._installed = install_record(seeded.stdout or "", checked.stdout or "", {**AKM_ENV, **self.options.akm_env}, trees.stdout or "", locks)
+        self._installed = install_record(seeded.stdout or "", checked.stdout or "", {**AKM_ENV, **self.options.akm_env}, trees.stdout or "", locks, planted.stdout or "")
         if semantic_files:
             self._installed["semantic_files"] = semantic_files[1]
         self._record(INSTALL_FILE, self._installed)
@@ -394,6 +398,19 @@ class AkmOpenCode(EvalOpenCode):
             'echo "AKM-SETUP tree_akm_cli=$cli tree_plugin=$plugin"'
         )
 
+    def _plant_extra(self) -> str:
+        """Shell run before the library is removed, with `$stash` set: what an arm takes from it besides the plant script."""
+        return ""
+
+    def _plant_command(self) -> str:
+        """Runs the library's `.plant.sh` once, as the agent's user (it plants the fault a task is about; a library may have none), and removes the library."""
+        return (
+            "set -euo pipefail; " + NVM + 'stash="$(printenv AKM_TASK_STASH || true)"; '
+            '[[ "$stash" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "AKM-SETUP FATAL: AKM_TASK_STASH=$stash is not a library name" >&2; exit 1; }; '
+            f'planted=no; if [ -f "{LIBRARIES}/$stash/.plant.sh" ]; then bash "{LIBRARIES}/$stash/.plant.sh" >&2; planted=yes; fi; '
+            + self._plant_extra() + f'rm -rf {LIBRARIES}; echo "{SETUP_PLANTED}$planted"'
+        )
+
     def _seed_command(self) -> str:
         # A bundle with the fact templates akm scaffolds, then the library's type folders copied in (never loose files
         # such as a README), then a full index. No registry: the agent searches the library and nothing else. Every
@@ -434,7 +451,7 @@ class AkmOpenCode(EvalOpenCode):
             "akm config set improve.enabled false --silent && "
             + semantic_config + projects +
             f'for d in {LIBRARIES}/"$stash"/*/; do cp -a "$d" {BUNDLE}/; done; '
-            f"want={want}; rm -rf {LIBRARIES}; "
+            f"want={want}; "
             + index +
             "got=$(akm info --format json -q | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{"
             "const t=JSON.parse(s).indexStats.byType;console.log(Object.entries(t).reduce((n,[k,v])=>n+(k===\"fact\"?0:v),0))})') && "

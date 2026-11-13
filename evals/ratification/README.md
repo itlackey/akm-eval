@@ -14,7 +14,7 @@ evals/ratification/run --model NAME --akm akm-cli@0.10.261120   # another akm: a
 evals/ratification/generate [--check]                            # rewrite tasks/ and libraries/ from src/tasks.ts
 ```
 
-`--model` is required and is resolved as in the other evals; `opencode/<id>` is an OpenCode Zen model and reads `OPENCODE_API_KEY` (Zen's key, which `.env` may hold as `ZEN_API_KEY`: copy it to that name in the environment of the run). `--akm`, `--akm-env` and `--semantic` are agent-ab's. The default is the current stable, `akm-cli@0.10.261120`, with the plugin `RELEASE_PLUGINS` pairs it with (`akm-opencode@0.10.261122`). For the 0.11 candidate give its release or checkout; add its pair to `RELEASE_PLUGINS` in `lib/harbor/harbor.ts` first, and check the tasks' reference forms against the candidate's `docs/reference/cli.md` (`run --check` fails a task whose reference no longer works).
+`--model` is required and is resolved as in the other evals; `opencode/<id>` is an OpenCode Zen model and reads `OPENCODE_API_KEY` (Zen's key, which `.env` may hold as `ZEN_API_KEY`: nothing maps that name, so export it as `OPENCODE_API_KEY` for the run; a gateway's key is checked with `GET /models` before the first container, and a 401 or 403 stops the run). `--akm`, `--akm-env` and `--semantic` are agent-ab's. The default is the current stable, `akm-cli@0.10.261120`, with the plugin `RELEASE_PLUGINS` pairs it with (`akm-opencode@0.10.261122`). For the 0.11 candidate give its release or checkout; add its pair to `RELEASE_PLUGINS` in `lib/harbor/harbor.ts` first, and check the tasks' reference forms against the candidate's `docs/reference/cli.md` (`run --check` fails a task whose reference no longer works).
 
 ## The arms
 

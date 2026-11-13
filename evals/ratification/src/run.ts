@@ -119,15 +119,12 @@ async function main(): Promise<void> {
     const got = await collect({ assets: EVAL_DIR, tasks, arms, attempts, dir, model: settings.model, modelLimits: settings.modelLimits, modelReasoningEffort: settings.modelReasoningEffort, concurrency, env: settings.env, arm, akmEnv });
     const completion = Object.fromEntries(arms.map((a) => [a, cellsOf(got.trials, a, tasks, attempts)]));
     const outside = got.trials.filter((t) => !arms.includes(t.ratification_arm as Arm)).length;
-    // Every arm installs the same akm-cli; the plugin arm's record also digests the plugin, which the others do not have, so the trees compared are akm-cli's.
-    const trees = [...new Set(got.trials.map((t) => t.tree).filter((t): t is string => t !== null))];
-    const run = statusOf({ exit: got.exit, jobWritten: existsSync(got.jobDir), trees: trees.length, completion, outside });
+    const run = statusOf({ exit: got.exit, jobWritten: existsSync(got.jobDir), trees: got.observed.dependency_trees?.length ?? 0, completion, outside });
     const verdict = check ? checkVerdict(got.trials, tasks) : null;
     const status = run.status === "complete" && verdict && !verdict.ok ? "aborted" : run.status;
     const aborted_reason = run.aborted_reason ?? (verdict && !verdict.ok ? `the check failed: ${verdict.problems.join("; ")}` : null);
     const job = jobRecord(got.cfg, dir, ROOT);
-    const observed = { ...got.observed, dependency_trees: trees };
-    const akmFields = akmSummary(arm, akmEnv, got.staged?.files ?? [], observed);
+    const akmFields = akmSummary(arm, akmEnv, got.staged?.files ?? [], got.observed);
     const report = reportOf(got.trials, arms, tasks);
     const summary = {
       eval: NAME,

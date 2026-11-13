@@ -1,6 +1,6 @@
 // The collector of the ratification suite: copies the tasks and libraries the run selected, writes the Harbor job (one agent per arm: minimal,
 // guided and plugin call a model; reference and noop do not), runs Harbor and reads the trials it left, with the verifier's checks and the
-// metrics of the agent's session (metrics.ts). The job and the agents are lib/harbor's (akm_ratify.py, akm_cli.py, akm_opencode.py).
+// metrics of the agent's session (metrics.ts). The job and the agents are lib/harbor's (akm_ratify.py for the guided arm, akm_cli.py, akm_opencode.py).
 
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -33,7 +33,7 @@ export function jobConfig(o: { name: string; model: string | null; modelLimits?:
       const { model_name: _model, ...agent } = akm;
       return { ...agent, import_path: "akm_cli:AkmCli", kwargs: { ...bare, arm: label, script: label } };
     }
-    if (label === "plugin") return { ...akm, import_path: "akm_ratify:AkmRatifyPlugin", kwargs: { ...akm.kwargs, arm: label, ...prompt } };
+    if (label === "plugin") return { ...akm, import_path: "akm_opencode:AkmOpenCode", kwargs: { ...akm.kwargs, arm: label, ...prompt } };
     return { ...akm, import_path: "akm_ratify:AkmRatifyCli", kwargs: { ...cli, arm: label, guide: label === "guided", ...prompt } };
   });
   return { ...job, agents };
@@ -62,8 +62,6 @@ export interface RatTrial extends RunTrial {
   family: string;
   failed_checks: string[] | null;
   metrics: Metrics | null;
-  /** The akm-cli dependency tree the trial's container installed. */
-  tree: string | null;
 }
 
 export function loadRatTrials(jobDir: string, specs: Map<string, Spec & { family: string }>): { trials: RatTrial[]; observed: ReturnType<typeof loadRunTrials>["observed"] } {
@@ -77,14 +75,12 @@ export function loadRatTrials(jobDir: string, specs: Map<string, Spec & { family
       const checks = readJson(join(jobDir, t.trial, "verifier", "checks.json"))?.checks as Record<string, { ok: boolean }> | undefined;
       const streamFile = join(jobDir, t.trial, "agent", "opencode.txt");
       const stream = existsSync(streamFile) ? readFileSync(streamFile, "utf8") : null;
-      const tree = readJson(join(jobDir, t.trial, "agent", "akm_install.json"))?.dependency_trees?.akm_cli;
       return {
         ...t,
         ratification_arm: armOf(r?.agent_info?.name) ?? String(r?.agent_info?.name),
         family: spec.family,
         failed_checks: checks ? Object.entries(checks).filter(([, c]) => !c.ok).map(([name]) => name) : null,
         metrics: stream === null ? null : metricsOf(parseCalls(stream), spec, t.reward === null ? null : t.reward === 1),
-        tree: typeof tree === "string" ? tree : null,
       };
     }),
   };

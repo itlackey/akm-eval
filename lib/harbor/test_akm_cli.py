@@ -78,7 +78,7 @@ def test_only_the_reference_gets_the_recipe_and_every_arm_gets_the_plant_script(
         assert f'bash "{m.LIBRARIES}/$stash/.plant.sh"' in plant and f"rm -rf {m.LIBRARIES}" in plant
 
 
-def test_the_install_has_no_plugin_and_no_warm_up_and_the_library_is_uploaded_for_the_seed_and_again_for_the_plant_script(tmp_path, monkeypatch):
+def test_the_install_has_no_plugin_and_no_warm_up_and_the_library_is_uploaded_once_for_the_seed_and_the_plant_script(tmp_path, monkeypatch):
     no_opencode_install(monkeypatch)
     agent = make(tmp_path, akm_env={"AKM_VERBOSE": "1"})
     env = ScriptedEnvironment(REPLIES)
@@ -87,7 +87,7 @@ def test_the_install_has_no_plugin_and_no_warm_up_and_the_library_is_uploaded_fo
     joined = "\n".join(commands)
     assert "opencode --model" not in joined and "warmup" not in joined  # no warm-up session
     assert "akm-opencode" not in joined and "npm install --prefix " + m.PLUGIN_PREFIX not in joined and "npm ci --prefix " + m.PLUGIN_PREFIX not in joined
-    assert [u[1] for u in env.uploads] == [m.LIBRARIES, m.LIBRARIES]
+    assert [u[1] for u in env.uploads] == [m.LIBRARIES]
     at = lambda text: next(i for i, cmd in enumerate(commands) if text in cmd)
     assert at(f"npm install --prefix {m.CLI_PREFIX}") < at("npm ls") < at(f"rm -rf {m.PACKAGES}") < at("akm bundle create") < at(c.SETUP_PLANTED)
     assert at(c.SETUP_PLANTED) < at("/usr/local/bin/node") < at('echo "AKM-SETUP akm=$version"')

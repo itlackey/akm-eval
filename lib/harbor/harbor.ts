@@ -153,9 +153,26 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
   return { model, env };
 }
 
+/** The HTTP status of `GET <base>/models` with the key (sent on curl's stdin, not on its command line), or null when there is no answer. */
+function probeModels(base: string, key: string): number | null {
+  const r = Bun.spawnSync(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "15", "-H", "@-", `${base.replace(/\/+$/, "")}/models`], { stdin: new TextEncoder().encode(`Authorization: Bearer ${key}\n`), stdout: "pipe", stderr: "ignore" });
+  const code = Number(r.stdout.toString());
+  return code > 0 ? code : null;
+}
+
+/** One cheap authenticated call to the endpoint of a model reached through a gateway (OPENAI_BASE_URL with a key): a 401 or 403 stops the run here, and not at every trial after its setup. Any other answer, or none, lets it go on. */
+export function checkModelAuth(env: Record<string, string>, probe: (base: string, key: string) => number | null = probeModels): void {
+  const base = env.OPENAI_BASE_URL;
+  const key = env.OPENAI_API_KEY;
+  if (!base || !key || key === "unused") return;
+  const status = probe(base, key);
+  if (status === 401 || status === 403) fail(`${hostnameOf(base) || "the model endpoint"} refused the model key (HTTP ${status} on GET /models). Every trial would fail at its first model call, after its setup. Check the key for this endpoint.`);
+}
+
 /** What a run needs besides the model, checked before the first container starts. `values` are the parsed flags. */
 export function preflight(values: { model?: string } = {}): ReturnType<typeof modelSettings> {
   const settings = modelSettings(values.model, process.env);
+  checkModelAuth(settings.env);
   if (!Bun.which("uv")) fail("uv is needed. See https://docs.astral.sh/uv/");
   if (Bun.spawnSync(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exitCode !== 0) fail("Docker is not reachable: `docker info` failed. Every trial runs in a container.");
   return settings;
@@ -525,6 +542,7 @@ const distinct = <T>(xs: T[]): T[] => [...new Set(xs)].sort();
 export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: Observed } {
   const observed: Observed & { dependency_trees: string[] } = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null, dependency_trees: [], lockfiles: null };
   if (!existsSync(jobDir)) return { trials: [], observed }; // Harbor never made the job: every cell of the grid is missing
+  const installed: { digest: string; cli?: string; plugin?: string }[] = [];
   const trials = loadTrials(jobDir).map((t): RunTrial => {
     const row: RunTrial = { ...t, timed_out: t.error !== null && TIMEOUT_ERRORS.has(t.error), agent_exit: t.error === AGENT_EXIT };
     if (t.arm !== "akm") return row;
@@ -543,12 +561,18 @@ export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: O
       if (typeof install.search_mode === "string") (observed.search_mode ??= []).push(install.search_mode);
       if (typeof install.embeddings_indexed === "number") (observed.embeddings_indexed ??= []).push(install.embeddings_indexed);
       if (observed.env === null && typeof install.env === "object" && install.env !== null) observed.env = install.env;
-      if (typeof install.dependency_tree_sha256 === "string") observed.dependency_trees.push(install.dependency_tree_sha256);
+      if (typeof install.dependency_tree_sha256 === "string") installed.push({ digest: install.dependency_tree_sha256, cli: install.dependency_trees?.akm_cli, plugin: install.dependency_trees?.plugin });
       const locks = install.lockfiles;
       if (observed.lockfiles === null && typeof locks === "object" && locks !== null) observed.lockfiles = { akm_cli: locks.akm_cli ?? null, plugin: locks.plugin ?? null };
     }
     return row;
   });
+  // A plugin trial's digest folds in the plugin's tree and a CLI trial's does not, so a job that mixes them would always show two. There the
+  // trials are compared by the akm-cli tree they share (and by the plugin trials' plugin tree); a job of one kind keeps the digest it recorded.
+  const kinds = new Set(installed.map((i) => typeof i.plugin === "string"));
+  const plugins = distinct(installed.flatMap((i) => (i.plugin ? [i.plugin] : [])));
+  if (kinds.size > 1) observed.dependency_trees.push(...installed.map((i) => i.cli ?? i.digest), ...(plugins.length > 1 ? plugins : []));
+  else observed.dependency_trees.push(...installed.map((i) => i.digest));
   return { trials, observed: { ...observed, akm_version: distinct(observed.akm_version), plugin_akm_cli: distinct(observed.plugin_akm_cli), assets_indexed: distinct(observed.assets_indexed), dependency_trees: distinct(observed.dependency_trees), ...(observed.search_mode ? { search_mode: distinct(observed.search_mode) } : {}), ...(observed.embeddings_indexed ? { embeddings_indexed: distinct(observed.embeddings_indexed) } : {}) } };
 }
 

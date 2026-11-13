@@ -55,6 +55,8 @@ const testSh = `#!/bin/bash
 # /logs/verifier/reward.json and checks.json. A missing node is an unscored trial, not a failed one.
 set -uo pipefail
 mkdir -p /logs/verifier
+# node and akm are under the nvm the agent's setup installed.
+[ -f ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh
 exec node /tests/verify.mjs /tests/expected.json
 `;
 

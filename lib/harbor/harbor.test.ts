@@ -17,6 +17,7 @@ import {
   akmSummary,
   assetsSha256,
   buildFingerprint,
+  checkModelAuth,
   checkoutBuild,
   completionOf,
   findPlugin,
@@ -798,6 +799,21 @@ describe("loadRunTrials", () => {
     expect(loadRunTrials(tmp()).observed).toEqual({ akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null, dependency_trees: [], lockfiles: null });
   });
 
+  test("a job that mixes plugin and CLI trials compares them by the akm-cli tree they share, and still sees two plugin trees", () => {
+    const record = (cli: string, plugin?: string) => ({ "akm_install.json": { akm_version: "0.10.1", assets_indexed: 8, dependency_trees: plugin ? { akm_cli: cli, plugin } : { akm_cli: cli }, dependency_tree_sha256: (plugin ? "p" : "c").repeat(64) } });
+    const mixed = (plugins: string[]) => {
+      const job = tmp();
+      trialDir(job, "a__cli", "akm-cli", {}, record("a".repeat(64)));
+      plugins.forEach((p, i) => trialDir(job, `b${i}__plugin`, "akm-opencode", {}, record("a".repeat(64), p.repeat(64))));
+      return loadRunTrials(job).observed.dependency_trees;
+    };
+    expect(mixed(["1", "1"])).toEqual(["a".repeat(64)]);
+    expect(mixed(["1", "2"])).toHaveLength(3);
+    const only = tmp(); // one kind: the digest as recorded
+    trialDir(only, "a__plugin", "akm-opencode", {}, record("a".repeat(64), "1".repeat(64)));
+    expect(loadRunTrials(only).observed.dependency_trees).toEqual(["p".repeat(64)]);
+  });
+
   test("copes with a record or a verdict that is not JSON", () => {
     const job = tmp();
     trialDir(job, "a__b", "akm-opencode");
@@ -1081,4 +1097,26 @@ test("forwards explicitly selected model reasoning effort to both Harbor arms", 
   expect(settings.modelReasoningEffort).toBe("none");
   const cfg = jobConfig({ name: "no-thinking", model: settings.model, modelReasoningEffort: settings.modelReasoningEffort, jobsDir: "/jobs", attempts: 1, librariesDir: "/libraries", datasets: [] }) as any;
   for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["shredder-eval/qwen"].options).toEqual({ reasoningEffort: "none" });
+});
+
+describe("checkModelAuth", () => {
+  const env = { OPENAI_BASE_URL: "https://gw.example.net/v1", OPENAI_API_KEY: "sk-secret-key" };
+  test("stops on a 401 or 403 and names the host, never the key", () => {
+    for (const code of [401, 403]) {
+      let said = "";
+      try {
+        checkModelAuth(env, () => code);
+      } catch (e) {
+        said = (e as Error).message;
+      }
+      expect(said).toContain(`gw.example.net refused the model key (HTTP ${code}`);
+      expect(said).not.toContain("sk-secret-key");
+    }
+  });
+  test("goes on for any other answer, no answer, no gateway and a keyless server", () => {
+    for (const code of [200, 404, 500, null]) expect(() => checkModelAuth(env, () => code)).not.toThrow();
+    const never = () => { throw new Error("probed"); };
+    expect(() => checkModelAuth({ OPENAI_API_KEY: "sk" }, never)).not.toThrow();
+    expect(() => checkModelAuth({ ...env, OPENAI_API_KEY: "unused" }, never)).not.toThrow();
+  });
 });
