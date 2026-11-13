@@ -24,7 +24,7 @@ evals/distill/run --cases ~/notes/distill
 Each case gets its own akm bundle with the memory and any asset or lesson the case includes, then:
 
 ```
-akm improve memories/<name> --strategy distill-only --no-sync --require-engines --json-to-stdout --format json
+akm improve memories/<name> --strategy distill-only --no-sync --require-engines --json-to-stdout --format json   # no --require-engines from 0.10.261014-beta, where it does nothing
 akm proposal list --status <state> --detail full      # pending, accepted, rejected, reverted
 ```
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, connectionsConfig, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, useConfigForm, writeConfig, writtenConfigForm } from "./akm.ts";
+import { ENRICH_REMOVED_FROM, SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, connectionsConfig, createSandbox, doctorArgs, engineConfig, extractSessionsArgs, improveTimeoutFlag, requireEnginesArgs, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, useConfigForm, writeConfig, writtenConfigForm } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -574,6 +574,42 @@ describe("atLeast", () => {
 
   test("refuses a string that is not a version", () => {
     expect(() => atLeast("latest", min)).toThrow("not a version");
+  });
+});
+
+describe("the form of a deprecated command by the akm under test", () => {
+  const forms = () => ({ engines: requireEnginesArgs(), timeout: improveTimeoutFlag(), sessions: extractSessionsArgs("claude"), doctor: doctorArgs() });
+  afterEach(() => void useConfigForm("0.9.99"));
+
+  test("is the old form before the replacement exists, and for an akm whose version is not known", () => {
+    const old = { engines: ["--require-engines"], timeout: "--timeout-ms", sessions: ["--type", "claude"], doctor: [] };
+    for (const v of ["0.9.26", "0.9.31", "0.10.261003-beta", "0.10.261013-beta"]) {
+      useConfigForm(v);
+      expect(forms()).toEqual(old);
+    }
+    useConfigForm("not a version");
+    expect(forms()).toEqual(old);
+  });
+
+  test("changes form at the first release of each replacement: --require-engines at 0.10.261014-beta, --timeout and doctor at 0.10.261119, --sessions at 0.10.261120", () => {
+    useConfigForm("0.10.261118");
+    expect(forms()).toEqual({ engines: [], timeout: "--timeout-ms", sessions: ["--type", "claude"], doctor: [] });
+    useConfigForm("0.10.261119");
+    expect(forms()).toEqual({ engines: [], timeout: "--timeout", sessions: ["--type", "claude"], doctor: ["doctor"] });
+    useConfigForm("0.10.261120-beta.3"); // a prerelease is below its release, so it gets the form that every 0.10 accepts
+    expect(forms().sessions).toEqual(["--type", "claude"]);
+    useConfigForm("0.10.261120");
+    expect(forms()).toEqual({ engines: [], timeout: "--timeout", sessions: ["--sessions", "claude"], doctor: ["doctor"] });
+    useConfigForm("0.11.0");
+    expect(forms()).toEqual({ engines: [], timeout: "--timeout", sessions: ["--sessions", "claude"], doctor: ["doctor"] });
+  });
+
+  test("takes the version of the caller where it has one, and `remember --enrich` is gone from the first prerelease of 0.11.0", () => {
+    expect(doctorArgs("0.10.261120")).toEqual(["doctor"]);
+    expect(doctorArgs("0.9.26")).toEqual([]);
+    expect(atLeast("0.10.261120", ENRICH_REMOVED_FROM)).toBe(false);
+    expect(atLeast("0.11.0-alpha.1", ENRICH_REMOVED_FROM)).toBe(true);
+    expect(atLeast("0.11.0", ENRICH_REMOVED_FROM)).toBe(true);
   });
 });
 

@@ -13,7 +13,7 @@
 import { appendFileSync, cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, useAkm, useConfigForm, writeConfig } from "../../../lib/akm/akm.ts";
+import { akmVersion, createSandbox, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, useAkm, useConfigForm, writeConfig } from "../../../lib/akm/akm.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
 import { useModel } from "../../../lib/models.ts";
 import { configFor, memoryRef, trimImprove } from "../../distill/src/collect.ts";
@@ -56,7 +56,7 @@ for (const { key, c } of runs) {
     const fb = feedback[key] ?? feedback[c.id] ?? [];
     if (fb.length) await runAkmJson(sandbox, ["index"], { timeoutMs: 600_000 });
     for (const f of fb) await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])], { timeoutMs: 600_000 });
-    const run = await runAkm(sandbox, ["improve", memoryRef(c), "--strategy", "distill-only", "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"], { timeoutMs: 900_000 });
+    const run = await runAkm(sandbox, ["improve", memoryRef(c), "--strategy", "distill-only", "--no-sync", ...requireEnginesArgs(), "--json-to-stdout", "--format", "json"], { timeoutMs: 900_000 });
     let improve: unknown = null;
     try {
       improve = JSON.parse(run.stdout);

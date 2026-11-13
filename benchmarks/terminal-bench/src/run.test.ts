@@ -349,7 +349,8 @@ if (process.env.FAKE_AKM_FAIL === args[0]) { console.error("akm cannot " + args[
 if (args[0] === "--version") console.log("akm " + (process.env.FAKE_AKM_VERSION ?? "0.9.99-test"));
 else if (args[0] === "bundle") mkdirSync(args[args.indexOf("--dir") + 1], { recursive: true });
 else if (args[0] === "index") {}
-else if (args[0] === "info") console.log(JSON.stringify({ indexStats: { byType: { skill: walk(process.env.AKM_BUNDLE_DIR as string), fact: 5 } } }));
+// \`info\` moved under \`doctor\` in 0.10.261119 and 0.11 has only the new spelling, so the fake answers the one spelling of its FAKE_AKM_VERSION.
+else if ((process.env.FAKE_AKM_VERSION === "0.10.261120" ? args[0] === "doctor" && args[1] === "info" : args[0] === "info")) console.log(JSON.stringify({ indexStats: { byType: { skill: walk(process.env.AKM_BUNDLE_DIR as string), fact: 5 } } }));
 else { console.error("unknown command " + args[0]); process.exit(1); }
 `;
 
@@ -390,6 +391,20 @@ describe("measureLibrary", () => {
     expect((await measureLibrary(lib)).assets).toBe(4);
     rmSync(join(lib, "skills"), { recursive: true });
     expect((await measureLibrary(lib)).assets).toBe(2);
+  });
+
+  test("asks `doctor info` of an akm that has it, and `info` of one that does not, and counts the same", async () => {
+    fakeAkm(true);
+    const lib = library();
+    const old = await measureLibrary(lib);
+    process.env.FAKE_AKM_VERSION = "0.10.261120";
+    try {
+      const current = await measureLibrary(lib);
+      expect(current.assets).toBe(old.assets as number);
+      expect(current.measured_with).toMatchObject({ akm_version: "0.10.261120" });
+    } finally {
+      delete process.env.FAKE_AKM_VERSION;
+    }
   });
 
   test("is null, with the reason, when there is no akm to count with or it cannot index", async () => {

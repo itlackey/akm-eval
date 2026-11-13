@@ -7,7 +7,7 @@
 
 import { cpSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { createSandbox, engineConfig, extractSessionsArgs, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import type { LoadedCase } from "./lib.ts";
@@ -136,7 +136,7 @@ export async function runCase(c: LoadedCase, ctx: CaseContext): Promise<Row> {
     cpSync(c.file, join(projects, c.project, `${c.id}.jsonl`));
     sandbox.env.AKM_CLAUDE_PROJECTS_DIR = projects;
     const strategy = (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy;
-    const args = ["proposal", "extract", "--type", "claude", "--location", projects, "--session-id", c.id, "--strategy", strategy, "--format", "json"];
+    const args = ["proposal", "extract", ...extractSessionsArgs("claude"), "--location", projects, "--session-id", c.id, "--strategy", strategy, "--format", "json"];
     const { stdout, stderr, code, timedOut } = await runAkm(sandbox, args, { timeoutMs });
     if (timedOut) return failed(`akm proposal extract timed out after ${+(timeoutMs / 1000).toFixed(1)}s`, true);
     let result;

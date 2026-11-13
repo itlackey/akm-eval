@@ -436,7 +436,10 @@ class AkmOpenCode(EvalOpenCode):
             f'for d in {LIBRARIES}/"$stash"/*/; do cp -a "$d" {BUNDLE}/; done; '
             f"want={want}; rm -rf {LIBRARIES}; "
             + index +
-            "got=$(akm info --format json -q | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{"
+            # `info` moved under `doctor` in 0.10.261119 and 0.11 has only the new spelling; an akm that lacks `doctor info` does not print the index stats, so it is asked `info`.
+            "info=$(akm doctor info --format json -q 2>/dev/null || true); "
+            "[[ \"$info\" == *indexStats* ]] || info=$(akm info --format json -q); "
+            "got=$(printf '%s' \"$info\" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{"
             "const t=JSON.parse(s).indexStats.byType;console.log(Object.entries(t).reduce((n,[k,v])=>n+(k===\"fact\"?0:v),0))})') && "
             '[ "$got" -ge "$want" ] || { echo "AKM-SETUP FATAL: $got of the $want library assets are indexed" >&2; exit 1; }; '
             'echo "AKM-SETUP assets=$got"'

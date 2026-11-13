@@ -17,7 +17,7 @@ import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
  * each group by id, last first, as a vector search does. It answers with keyword search alone, "fts-fallback", to a
  * query that says FALLBACK.
  *
- * It keeps files in its data folder that say how often it has indexed and when it built the index, and answers `akm info`
+ * It keeps files in its data folder that say how often it has indexed and when it built the index, and answers `akm info` (`akm doctor info` with FAKE_AKM_NEW)
  * from them and from its bundle, as akm does.
  */
 const FAKE_AKM = `
@@ -37,7 +37,7 @@ else if (cmd === "index") {
   writeFileSync(join(data, "built-at"), "build " + n);
   const left = ids.filter((id) => readFileSync(join(skills, id, "SKILL.md"), "utf8").includes("NOEMBED")).length;
   console.log(JSON.stringify({ ok: true, totalEntries: ids.length, verification: { embeddingCount: semantic ? ids.length - left : 0, message: "embedded" } }));
-} else if (cmd === "info") {
+} else if (process.env.FAKE_AKM_NEW ? cmd === "doctor" && rest[0] === "info" : cmd === "info") { // info moved under doctor in 0.10.261119; with FAKE_AKM_NEW the fake has only the new spelling, as 0.11 does
   const built = join(process.env.AKM_DATA_DIR as string, "built-at");
   console.log(JSON.stringify({ ok: true, indexStats: { entryCount: ids.length, lastBuiltAt: existsSync(built) ? readFileSync(built, "utf8") : "never", hasEmbeddings: semantic } }));
 } else if (cmd === "search" || cmd === "curate") {

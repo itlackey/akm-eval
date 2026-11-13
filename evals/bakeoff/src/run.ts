@@ -9,6 +9,7 @@
 // and how it is shown, and the --process flag. Bakeoff has no strategy: each process has its own, so it has no --strategy.
 
 import { relative, resolve } from "node:path";
+import { ENRICH_REMOVED_FROM, atLeast } from "../../../lib/akm/akm.ts";
 import { fail } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { type CtxInput, type EvalSpec, type Summary, runCorpus as runIn, runEval } from "../../../lib/run.ts";
@@ -66,7 +67,13 @@ const SPEC: EvalSpec<LoadedCase, Row, Extra> = {
   casesFile: CASES_FILE,
   loadCases,
   selectCases: (all, limit, ctx) => {
-    const cases = selectCases(all, limit, ctx.process);
+    // remember-enrich is not applicable on an akm without `remember --enrich` (removed in 0.11, no replacement yet): it is left out and said so, not run and not scored as a failure.
+    const enrich = !atLeast(ctx.version, ENRICH_REMOVED_FROM);
+    if (!enrich) {
+      if (ctx.process === "remember-enrich") fail(`remember-enrich is not applicable on akm ${ctx.version}: \`akm remember --enrich\` is removed in 0.11 and has no replacement yet. Nothing was run.`);
+      if (all.some((c) => c.process === "remember-enrich")) console.log(`remember-enrich: not applicable on akm ${ctx.version} (\`akm remember --enrich\` is removed in 0.11, no replacement yet); its cases are not run or scored`);
+    }
+    const cases = selectCases(enrich ? all : all.filter((c) => c.process !== "remember-enrich"), limit, ctx.process);
     if (cases.length === 0) fail(`no case to run: the corpus has none for ${ctx.process}`);
     return cases;
   },

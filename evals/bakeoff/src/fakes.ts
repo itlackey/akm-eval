@@ -31,7 +31,17 @@ const put = (path, text) => { mkdirSync(dirname(path), { recursive: true }); wri
 const usage = (process_, failures = 0) => ({ byProcessEngineModel: [{ process: process_, engine: "bakeoff", model: plan.served ?? "served-model", calls: 1, failures }] });
 const crash = () => { console.error(JSON.stringify({ error: "boom", code: "INTERNAL" })); process.exit(70); };
 
-if (cmd === "--version") console.log("akm 0.9.99-test");
+// FAKE_AKM_VERSION picks the generation of akm: before 0.10.261120 (the default, 0.9.99-test) only the old forms of the deprecated flags exist; from 0.10.261120 only the replacements do,
+// and 0.11 has no \`remember --enrich\`. The fake refuses the form the version lacks, as akm does, so a test shows which form the collector picked.
+const version = process.env.FAKE_AKM_VERSION ?? "0.9.99-test";
+const modern = version !== "0.9.99-test";
+const refuse = (what) => { console.error("unknown option " + what); process.exit(2); };
+if (cmd !== "--version") {
+  if (modern) for (const old of ["--type", "--require-engines", "--timeout-ms"]) if (args.includes(old)) refuse(old);
+  if (!modern) for (const added of ["--sessions", "--timeout"]) if (args.includes(added)) refuse(added);
+  if (version.startsWith("0.11") && args.includes("--enrich")) refuse("--enrich");
+}
+if (cmd === "--version") console.log("akm " + version);
 else if (cmd === "index") out({ ok: true });
 else if (cmd === "improve") {
   const strategy = flag("--strategy");

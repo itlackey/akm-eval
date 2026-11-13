@@ -9,9 +9,9 @@ Five of akm's model-backed jobs are scored by no other eval. This eval runs thos
 | Process | Cases | The command | What akm writes, and the eval reads |
 |---|---:|---|---|
 | `memory-inference` | 23 | `akm improve --strategy bakeoff-memory-inference` | `memories/<name>.derived.md`: title, description, tags, search hints, content; or no file and akm's count of a no-change decision, `memoryInference.noChange` |
-| `remember-enrich` | 8 | `akm remember --enrich --name <name>`, the memory on stdin | `memories/<name>.md` with the tags, description and date the model gave |
+| `remember-enrich` | 8 | `akm remember --enrich --name <name>`, the memory on stdin (not run on akm 0.11, which removed the flag with no replacement: the run says so, and the process has no row) | `memories/<name>.md` with the tags, description and date the model gave |
 | `schema-repair` | 8 | `akm improve <lesson> --strategy bakeoff-schema-repair` | a pending `schema-repair` proposal: the lesson with a `description` and a `when_to_use` |
-| `session-summary` | 8 | `akm proposal extract --type claude --session-id <id> --strategy bakeoff-session-summary` | `sessions/claude/<id>.md`: the summary and a `## Key topics` list |
+| `session-summary` | 8 | `akm proposal extract --sessions claude --session-id <id> --strategy bakeoff-session-summary` (`--type claude` before akm 0.10.261120) | `sessions/claude/<id>.md`: the summary and a `## Key topics` list |
 | `consolidate-promote` | 8 | `akm improve --strategy bakeoff-consolidate-promote` | the promotions in consolidate's plan, `consolidation.planned` |
 
 Each strategy runs its one process. Memory inference is behind `experimental.improveAutonomy`, which the config sets. Without `--semantic`, semantic search is off, so consolidate's pair pass finds no pairs.
