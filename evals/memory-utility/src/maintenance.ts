@@ -13,7 +13,8 @@ import { sourceFiles } from "./protocol.ts";
 import { scoreArm, type RawArm } from "./score.ts";
 
 export const EVAL = "memory-maintenance";
-export const VERSION = "0.1";
+export const VERSION = "0.2";
+export const SCORING_VERSION = "0.1";
 const ARMS = ["originals", "maintained"] as const;
 const STAGES = ["initial", "no-new-evidence", "follow-up"] as const;
 type Arm = typeof ARMS[number];
@@ -47,7 +48,7 @@ export function pendingHistory(history: History, ordinal: number) {
   };
 }
 
-type Native = { ok?: boolean; skipped?: unknown; skippedProcesses?: unknown[]; actions?: { result?: { ok?: boolean; outcome?: string; error?: unknown } }[];
+type Native = { ok?: boolean; skipped?: unknown; skippedProcesses?: unknown[]; actions?: { mode?: string; result?: { ok?: boolean; outcome?: string; error?: unknown } }[];
   usageReport?: { byProcessEngineModel?: { failures?: number }[] }; triage?: { failed?: number }; schemaRepairs?: { outcome?: string }[];
   validationFailures?: unknown[]; consolidation?: { failedChunks?: number } };
 
@@ -57,7 +58,10 @@ export function cycleOutcome(improved: unknown, drained: unknown, changed: strin
   const d = drained as { ok?: boolean; failed?: unknown[] } | null;
   if (i?.ok === false || d?.ok === false || d?.failed?.length || i?.triage?.failed ||
       i?.validationFailures?.length || i?.consolidation?.failedChunks ||
-      i?.actions?.some((a) => a.result?.ok === false || a.result?.outcome === "error" || !!a.result?.error) ||
+      // AKM's action mode separates normal content refusals/skips from
+      // execution errors, even though their command results all say ok:false.
+      i?.actions?.some((a) => a.mode !== "reflect-guard-rejected" && a.mode !== "reflect-skipped" &&
+        (a.result?.ok === false || a.result?.outcome === "error" || !!a.result?.error)) ||
       i?.schemaRepairs?.some((r) => r.outcome === "error") ||
       i?.usageReport?.byProcessEngineModel?.some((r) => typeof r.failures === "number" && r.failures > 0)) return "failed";
   if (i?.skipped || i?.skippedProcesses?.length) return "skipped";

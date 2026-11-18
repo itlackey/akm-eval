@@ -18,6 +18,8 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- memory-maintenance collection 0.1 → 0.2, scoring unchanged: native reflect guard rejections and per-item skips are recorded decisions, not failed maintenance cycles. Runs continue after them; actual execution failures still stop the maintained arm.
+
 - memory-maintenance collection/scoring 0.1: opt-in development pilot in `evals/memory-utility/run-maintenance`. Seven questions over three synthetic histories compare original notes with the active library after three native nightly maintenance cycles. Scores are paired by history, with explicit operational failures and no score for incomplete or unsupported collections. This is a separate measurement and changes no existing score, corpus, default run or published result.
 
 - agent-ab and terminal-bench, no version change (rule of the 0.5 entry: every new akm beta gets an entry): a run with `--akm akm-cli@0.10.261112-beta` gets plugin akm-opencode 0.10.261111-beta, the release that pins that CLI (`RELEASE_PLUGINS`), and the lockfile of that plugin is committed in `lib/harbor/locks/`. No lockfile is committed for the CLI release: `npm ci` from a lockfile of akm-cli 0.10.261112-beta runs better-sqlite3's inferred `node-gyp rebuild` (its `binding.gyp`, `gypfile: false` not read from a lockfile by npm 10.9.9), which fails in the task image, npm drops the optional dependency, and akm cannot open its database on Node (18 of 18 akm-arm trials failed this way); an unlocked install does not run it. The measurement changes only for that release.

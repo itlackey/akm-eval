@@ -63,6 +63,26 @@ test("successful exit does not erase native failures, budget exhaustion, unavail
   expect(h.cycles[0]!.error).toContain("timed out");
 });
 
+test("reflect's reported content rejection and per-item skip do not stop a maintenance history", async () => {
+  const h = pendingHistory(retention, 0);
+  const refused = { mode: "reflect-guard-rejected", result: { ok: false, reason: "quality_rejected", error: "placeholder_added" } };
+  const unchanged = { mode: "reflect-skipped", result: { ok: false, reason: "no_change", error: "empty diff" } };
+  const failed = { mode: "reflect-failed", result: { ok: false, reason: "aborted", error: "budget exhausted" } };
+  let files = {};
+  const observed = await replay(h.originals, retention.initial.length, h.cycles, {
+    append: (newFiles) => { files = { ...files, ...newFiles }; },
+    snapshot: () => files,
+    run: async (cycle) => {
+      cycle.improve = { ...ok, actions: [refused, unchanged] };
+      cycle.drain = drain;
+    },
+    sanitize: String,
+  });
+  expect(observed).toEqual(h.originals);
+  expect(h.cycles.map(c => c.outcome)).toEqual(["no-change", "no-change", "no-change"]);
+  expect(cycleOutcome({ ...ok, actions: [refused, failed] }, drain, [])).toBe("failed");
+});
+
 function answer(arm: RawArm, fields: Record<string, string | null>) {
   const text = JSON.stringify({ answers: fields, citations: Object.fromEntries(Object.keys(fields).map(k => [k, []])) });
   const usage = { prompt_tokens: null, completion_tokens: null, cached_tokens: null, reasoning_tokens: null, cost_usd: null, seconds: 0, retries: 0, failed: false };

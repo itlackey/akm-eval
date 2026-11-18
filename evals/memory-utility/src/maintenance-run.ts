@@ -8,7 +8,7 @@ import { useModel } from "../../../lib/models.ts";
 import { endpointDigest, redactActors, redactConfig, sha256Json } from "../../../lib/provenance.ts";
 import { clearRunning, makeResultsDir } from "../../../lib/results.ts";
 import { effectiveConfig } from "../../nightly/src/collect.ts";
-import { collectHistory, EVAL, pendingHistory, scoreHistory, VERSION, type History } from "./maintenance.ts";
+import { collectHistory, EVAL, pendingHistory, scoreHistory, SCORING_VERSION, VERSION, type History } from "./maintenance.ts";
 import { PROMPT, readerSettings } from "./protocol.ts";
 
 const usage = `Usage: bash evals/memory-utility/run-maintenance [options]
@@ -43,7 +43,7 @@ async function main() {
   const pending = histories.map(pendingHistory);
   const start = performance.now();
   const identity = {
-    eval: EVAL, version: VERSION, scoring_version: VERSION, corpus: "public-development", label,
+    eval: EVAL, version: VERSION, scoring_version: SCORING_VERSION, corpus: "public-development", label,
     git_commit: gitCommit(REPO_ROOT), collector_fingerprint: dirtyFingerprint(REPO_ROOT),
     akm_version: version, ...akmBuild(), config_form: writtenConfigForm(),
     assets_sha256: sha256Json(histories), reader_prompt_sha256: sha256Json(PROMPT),
