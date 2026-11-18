@@ -32,6 +32,7 @@ describe("memory utility protocol", () => {
     expect(prompt).toContain("Do not include explanations, Markdown, or triple backticks.");
     expect(prompt).toContain("A shortlist, suspicion, or rehearsal does not establish approval or confirmation.");
     expect(prompt).toContain("A recovery step alone does not establish the cause.");
+    expect(prompt).toContain("A later correction applies from its stated effective date, not before.");
     expect(prompt).not.toContain("gold-value");
     expect(prompt).not.toContain("gold-anchor");
     expect(MEASUREMENT).toMatchObject({ version: "0.3", scoringVersion: "0.2" });
