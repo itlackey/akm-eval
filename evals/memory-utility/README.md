@@ -17,6 +17,45 @@ incremental native-inference utility, including parent metadata changes. It does
 not isolate child files alone. The controls have the same output schema, tools
 (no reader tools), and memory-context allowance, not artificially padded prompts.
 
+## Repeated maintenance pilot (opt-in)
+
+```sh
+evals/memory-utility/run-maintenance --model my-model --label pilot
+```
+
+`memory-maintenance` is a separate measurement, not a fourth arm above. Three
+public development histories cover a dated correction, a project-only
+exception, and recovery with an unconfirmed cause (seven questions). For each
+history, **originals** keeps every observation as written; **maintained** gets
+those same observations but runs the native nightly improve and proposal drain
+in one isolated sandbox: after the initial notes, again without new evidence,
+and after appending the follow-up notes. It does not force proposal acceptance,
+advance the clock, seed feedback, sync, or read live bundles.
+
+At the end, both arms use fresh indexes of their active Markdown, not archives,
+with the same keyword search, top 10 candidates, 1,024 estimated context tokens,
+prompt and reader settings. The writer uses nightly's deterministic embedder;
+this pilot is not an estimate of a production embedding model. Questions and
+gold never reach maintenance. The arms alternate first-reader order by
+history. `--timeout-ms` defaults to 120,000 for a reader request or index and
+the native improve budget, with 30 seconds of hard-kill slack for improve; the
+existing nightly drain has its own five-minute command timeout.
+
+Results go to `results/memory-maintenance/<date>-<label>/`, separately from
+the regular eval. Each sample holds the actual native reports, paths changed
+within each cycle, final library snapshots, reader requests/responses and
+per-question scores. Usage AKM omits is unknown, not zero. Scoring reuses the
+existing strict answer and literal-citation checks. Each arm's accuracy uses
+all planned questions; the primary delta is the mean of per-history
+maintained-minus-originals accuracy (each history has equal weight). A failed
+or skipped whole cycle stops that maintained arm; failed arms earn zero and
+are counted apart from wrong answers. Skips inside a completed cycle are
+retained in the native report. Interrupted or unsupported runs do not produce
+an aggregate delta. If the final libraries match, the pilot has not measured a
+change to active content even if there were intermediate edits. These fixtures
+check the measurement, not release quality. Existing default, saved-score,
+and LongMemEval comparisons are unchanged.
+
 ## Run
 
 Use the repository's [Docker/native setup](../../README.md). The reader and

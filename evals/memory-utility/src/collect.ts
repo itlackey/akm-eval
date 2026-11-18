@@ -39,12 +39,12 @@ export function place(s: Sandbox, files: Record<string, string>): void {
   }
 }
 /** Keep the exact corpus, including rewritten parent metadata. Never follow links out of an owned sandbox. */
-export function snapshot(s: Sandbox): Record<string, string> {
+export function snapshot(s: Sandbox, excludeRoot?: string): Record<string, string> {
   const root = join(s.dir, "bundle");
   const out: Record<string, string> = {};
   function walk(path: string, relative: string) {
     for (const e of readdirSync(path).sort()) {
-      if (e === ".git") continue;
+      if (e === ".git" || (!relative && e === excludeRoot)) continue;
       const file = join(path, e), rel = relative ? `${relative}/${e}` : e, stat = lstatSync(file);
       if (stat.isSymbolicLink()) throw new Error(`unexpected link in inference snapshot: ${rel}`);
       if (stat.isDirectory()) walk(file, rel);
@@ -65,9 +65,11 @@ export function sandboxRelative<T>(value: T, dir: string): T {
   const escaped = JSON.stringify(dir).slice(1, -1);
   return JSON.parse(JSON.stringify(value).replaceAll(escaped, "<sandbox>"));
 }
-export async function index(s: Sandbox, o: Options): Promise<void> {
+type ReadOptions = Pick<Options, "endpoint" | "semantic" | "contextTokens" | "searchLimit" | "timeoutMs">;
+
+export async function index(s: Sandbox, o: Pick<ReadOptions, "semantic" | "timeoutMs">, allowEmpty = false): Promise<void> {
   const out = await runAkmJson<any>(s, ["index", "--full"], { timeoutMs: o.timeoutMs });
-  if (!(out.totalEntries > 0)) throw new Error("AKM indexed no entries");
+  if (!(out.totalEntries > 0) && !(allowEmpty && out.totalEntries === 0)) throw new Error("AKM indexed no entries");
   if (o.semantic && (out.verification?.embeddingCount !== out.totalEntries || out.verification?.missingEmbeddings > 0)) throw new Error(`incomplete embedding coverage: ${out.verification?.embeddingCount ?? "unknown"}/${out.totalEntries}`);
 }
 export function inferenceOutcome(report: any, before: Record<string, string>, after: Record<string, string>): "output" | "no-change" {
@@ -114,7 +116,7 @@ export async function runInference(raw: Pick<Raw, "source" | "post_inference" | 
  * Search the question in the indexed sandbox and `akm show` each hit, in rank order. Search and show must not change the corpus, and in
  * semantic mode the search must have been semantic. `arm.search` keeps akm's answer with the sandbox folder written as <sandbox>.
  */
-export async function retrieve(s: Sandbox, question: string, o: Options, arm: { search: unknown }): Promise<Document[]> {
+export async function retrieve(s: Sandbox, question: string, o: Pick<ReadOptions, "searchLimit" | "semantic" | "timeoutMs">, arm: { search: unknown }): Promise<Document[]> {
   const before = sha256Json(snapshot(s));
   const found = await runAkmJson<any>(s, ["search", "--limit", String(o.searchLimit), ...(await agentDetailArgs(s)), "--", question], { timeoutMs: o.timeoutMs });
   arm.search = sandboxRelative(found, s.dir);
@@ -131,6 +133,23 @@ export async function retrieve(s: Sandbox, question: string, o: Options, arm: { 
   if (sha256Json(snapshot(s)) !== before) throw new Error("answer-phase AKM commands changed the frozen corpus");
   return docs;
 }
+
+/** The same bounded reader in both controlled memory experiments. */
+export async function readAnswer(
+  s: Sandbox | null, c: Case, arm: RawArm, o: ReadOptions, checkpoint: () => void = () => {}, allowEmptyIndex = false,
+): Promise<void> {
+  if (s) {
+    let t = performance.now();
+    try { await index(s, o, allowEmptyIndex); } finally { arm.seconds.index = seconds(t); }
+    t = performance.now();
+    try { arm.context = pack(await retrieve(s, c.question, o, arm), o.contextTokens); } finally { arm.seconds.retrieval = seconds(t); }
+  }
+  arm.prompt = promptFor(c, arm.context); checkpoint();
+  const t = performance.now();
+  try { arm.answer = await chat(o.endpoint, arm.prompt, { ...READER_DEFAULTS, timeoutMs: o.timeoutMs }); }
+  finally { arm.seconds.answer = seconds(t); }
+  arm.state = "complete";
+}
 /** Persist after each phase/arm. All future-question labels stay in the caller, never in the inference sandbox. */
 export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => void = () => {}): Promise<Raw> {
   const config = configFor(o);
@@ -145,16 +164,8 @@ export async function collect(c: Case, raw: Raw, o: Options, checkpoint: () => v
       if (s) {
         writeConfig(s, config);
         place(s, name === "source" ? raw.source : raw.post_inference!);
-        let t = performance.now();
-        try { await index(s, o); } finally { arm.seconds.index = seconds(t); }
-        t = performance.now();
-        try { arm.context = pack(await retrieve(s, c.question, o, arm), o.contextTokens); } finally { arm.seconds.retrieval = seconds(t); }
       }
-      arm.prompt = promptFor(c, arm.context); checkpoint();
-      const t = performance.now();
-      try { arm.answer = await chat(o.endpoint, arm.prompt, { ...READER_DEFAULTS, timeoutMs: o.timeoutMs }); }
-      finally { arm.seconds.answer = seconds(t); }
-      arm.state = "complete";
+      await readAnswer(s, c, arm, o, checkpoint);
     } catch (e) {
       arm.state = "error"; arm.error = hideEndpoint(String(e), o.endpoint.baseUrl);
       if (s) arm.error = sandboxRelative(arm.error, s.dir);

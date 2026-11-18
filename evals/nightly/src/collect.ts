@@ -186,21 +186,44 @@ export async function haveNight(items: Item[], files: Map<string, string>, ctx: 
   }
 }
 
-async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, string>, ctx: CollectContext): Promise<Collected> {
+async function step<T>(name: string, f: () => Promise<T>): Promise<[T, number]> {
+    const t0 = performance.now();
+    const value = await f();
+    console.log(`  ${name} ${seconds(performance.now() - t0)}s`);
+    return [value, seconds(performance.now() - t0)];
+}
+
+type Drained = { promoted?: unknown[]; rejected?: unknown[]; deferred?: unknown[]; failed?: unknown[] };
+
+/** Run the shipped maintenance and drain policy in an already configured, indexed sandbox. */
+export async function runMaintenanceCycle(
+  sandbox: Sandbox, ctx: Pick<CollectContext, "baseUrl" | "overrides" | "timeoutMs" | "improveTimeoutMs">,
+  onImprove?: (report: unknown) => void,
+) {
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
   const budget = ctx.timeoutMs ?? IMPROVE_BUDGET_MS;
   const improveTimeoutMs = ctx.improveTimeoutMs ?? budget + IMPROVE_KILL_SLACK_MS;
+  const improveArgs = ["improve", "--strategy", overrides.strategy, ...requireEnginesArgs(), "--no-sync", improveTimeoutFlag(), String(budget), "--json-to-stdout", "--format", "json"];
+  const [improved, improveSeconds] = await step("improve", () => runAkm(sandbox, improveArgs, { timeoutMs: improveTimeoutMs }));
+  if (improved.timedOut) fail(timeoutMessage("improve", improveTimeoutMs), 1); // no result to score
+  if (improved.code !== 0) fail(hideEndpoint(failureMessage(`akm ${improveArgs[0]}`, improved.code, improved.stderr), ctx.baseUrl), 1);
+  let improve: unknown;
+  try {
+    improve = JSON.parse(improved.stdout);
+  } catch {
+    fail("akm improve printed no JSON result", 1);
+  }
+  onImprove?.(improve);
+  const [drained, drain] = await step("drain", () => runAkmJson<Drained>(sandbox, ["proposal", "drain", "--promote", "--strategy", overrides.strategy, "--yes"], { timeoutMs: STEP_TIMEOUT_MS }));
+  return { improve, drained, improveSeconds, drain };
+}
+
+async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, string>, ctx: CollectContext): Promise<Collected> {
   writeConfig(sandbox, effectiveConfig(ctx));
   Object.assign(sandbox.env, embedderEnv(embedderOf(ctx)));
   plant(sandbox, items, files);
   const bundle = join(sandbox.dir, "bundle");
   const before = readLibrary(bundle);
-  const step = async <T>(name: string, f: () => Promise<T>): Promise<[T, number]> => {
-    const t0 = performance.now();
-    const value = await f();
-    console.log(`  ${name} ${seconds(performance.now() - t0)}s`);
-    return [value, seconds(performance.now() - t0)];
-  };
 
   const [, index] = await step("index", () => runAkmJson(sandbox, ["index", "--full"], { timeoutMs: embedderOf(ctx) === "real" ? REAL_INDEX_TIMEOUT_MS : STEP_TIMEOUT_MS }));
   const refs = indexedRefs(sandbox);
@@ -212,18 +235,7 @@ async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, stri
       await runAkmJson(sandbox, feedbackArgs({ ...f, ref }), { timeoutMs: STEP_TIMEOUT_MS });
     }
   });
-  const improveArgs = ["improve", "--strategy", overrides.strategy, ...requireEnginesArgs(), "--no-sync", improveTimeoutFlag(), String(budget), "--json-to-stdout", "--format", "json"];
-  const [improved, improveSeconds] = await step("improve", () => runAkm(sandbox, improveArgs, { timeoutMs: improveTimeoutMs }));
-  if (improved.timedOut) fail(timeoutMessage("improve", improveTimeoutMs), 1); // it was killed in the middle of the night: there is no result to score
-  if (improved.code !== 0) fail(hideEndpoint(failureMessage(`akm ${improveArgs[0]}`, improved.code, improved.stderr), ctx.baseUrl), 1);
-  let improve: unknown;
-  try {
-    improve = JSON.parse(improved.stdout);
-  } catch {
-    fail("akm improve printed no JSON result", 1);
-  }
-  type Drained = { promoted?: unknown[]; rejected?: unknown[]; deferred?: unknown[]; failed?: unknown[] };
-  const [drained, drain] = await step("drain", () => runAkmJson<Drained>(sandbox, ["proposal", "drain", "--promote", "--strategy", overrides.strategy, "--yes"], { timeoutMs: STEP_TIMEOUT_MS }));
+  const { improve, drained, improveSeconds, drain } = await runMaintenanceCycle(sandbox, ctx);
   const listed = [];
   for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"], { timeoutMs: STEP_TIMEOUT_MS })) });
   const count = (x: unknown[] | undefined) => (Array.isArray(x) ? x.length : 0);

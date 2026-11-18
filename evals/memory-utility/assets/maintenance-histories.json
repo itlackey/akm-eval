@@ -1,0 +1,43 @@
+[
+  {
+    "id": "merrow-retention",
+    "initial": [
+      "---\ntype: memory\ndescription: The Merrow production trace retention decision effective September 1.\ntags: [merrow, retention]\nupdated: 2026-09-01\n---\n\n# Merrow trace retention\nThe Merrow trace retention decision effective September 1, 2026 keeps traces for 14 days. This is the approved retention policy for Merrow production traces.",
+      "---\ntype: memory\ndescription: The Merrow production trace retention decision effective September 1.\ntags: [merrow, retention]\nupdated: 2026-09-01\n---\n\n# Merrow trace retention\nThe Merrow trace retention decision effective September 1, 2026 keeps traces for 14 days. This is the approved retention policy for Merrow production traces."
+    ],
+    "followUp": [
+      "---\ntype: memory\ndescription: The Merrow production trace retention correction effective September 22.\ntags: [merrow, retention]\nupdated: 2026-09-22\n---\n\n# Merrow trace retention correction\nThe Merrow trace retention policy changed to 30 days effective September 22, 2026. The old 14-day policy applied through September 21. The new policy is not retroactive."
+    ],
+    "questions": [
+      {"id":"before","question":"What Merrow trace retention period applied on September 15, 2026? Answer in days.","fields":{"retention":{"values":["14 days","14"],"evidence":[["14 days","14-day policy applied through September 21"]],"outdated":["30 days","30"]}}},
+      {"id":"after","question":"What Merrow trace retention period applied on September 23, 2026? Answer in days.","fields":{"retention":{"values":["30 days","30"],"evidence":[["30 days effective September 22"]],"outdated":["14 days","14"]}}}
+    ]
+  },
+  {
+    "id": "sallow-approval",
+    "initial": [
+      "---\ntype: memory\ndescription: The general Sallow deployment approval policy.\ntags: [sallow, approval]\nupdated: 2026-09-01\n---\n\n# Sallow deployment approvals\nThe general Sallow deployment approval policy uses a service owner as the approver. This applies to Sallow jobs that have no documented project-specific exception."
+    ],
+    "followUp": [
+      "---\ntype: memory\ndescription: The deployment approval exception specific to Sallow Ledger.\ntags: [sallow, approval]\nupdated: 2026-09-22\n---\n\n# Sallow deployment approval exception\nThe Sallow Ledger project requires the security lead to approve a deployment instead of the service owner. This exception only applies to Ledger; the general Sallow approval rule is unchanged."
+    ],
+    "questions": [
+      {"id":"general","question":"Who approves deployment for a Sallow project without a project-specific approval exception?","fields":{"approver":{"values":["service owner","the service owner"],"evidence":[["uses a service owner as the approver"]],"wrong_scope":["security lead","the security lead"]}}},
+      {"id":"ledger","question":"Who approves deployment for the Sallow Ledger project?","fields":{"approver":{"values":["security lead","the security lead"],"evidence":[["Ledger project requires the security lead"]],"wrong_scope":["service owner","the service owner"]}}}
+    ]
+  },
+  {
+    "id": "pebble-timeouts",
+    "initial": [
+      "---\ntype: memory\ndescription: The initial observations recorded during the Pebble worker timeout incident.\ntags: [pebble, incident]\nupdated: 2026-10-05\n---\n\n# Pebble worker timeout incident\nDuring the Pebble worker timeout incident on October 5, 2026, the operators initially suspected DNS. They had not confirmed any cause."
+    ],
+    "followUp": [
+      "---\ntype: memory\ndescription: How Pebble worker recovered and what remains unconfirmed.\ntags: [pebble, incident]\nupdated: 2026-10-06\n---\n\n# Pebble worker timeout incident follow-up\nA rollback restored service during the Pebble worker timeout incident. Root cause remains unconfirmed. Service recovery after rollback does not prove the deploy or DNS caused the timeouts."
+    ],
+    "questions": [
+      {"id":"recovery","question":"What action restored service during the Pebble worker timeout incident?","fields":{"action":{"values":["rollback","a rollback","the rollback"],"evidence":[["A rollback restored service"]]}}},
+      {"id":"hypothesis","question":"What cause did operators initially suspect during the Pebble worker timeout incident?","fields":{"suspected":{"values":["DNS"],"evidence":[["operators initially suspected DNS"]]}}},
+      {"id":"confirmed","question":"What cause was confirmed for the Pebble worker timeout incident? Return null if none was confirmed.","fields":{"confirmed":{"values":null,"evidence":[]}}}
+    ]
+  }
+]
