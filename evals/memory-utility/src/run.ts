@@ -17,7 +17,7 @@ import { READER_INSTRUCTION } from "../../../benchmarks/longmemeval/src/prompts.
 import { loadCases, type Case } from "./inputs.ts";
 import { collect, configFor, pending, type Options } from "./collect.ts";
 import { ARMS, PROMPT, readerSettings } from "./protocol.ts";
-import { MEASUREMENT } from "./measurement.ts";
+import { LME_MEASUREMENT, MEASUREMENT } from "./measurement.ts";
 import { makeRow, summarize } from "./score.ts";
 import { DEFAULT_BUDGETS, DEFAULT_HAYSTACK, DEFAULT_SAMPLE_SEED, NOTES_BUDGET, PRIMARY_BUDGET, HALVES_SALT, SPLIT_SALT, SPLITS, isHeldout, isLmeCase, lmeCases, preregistrationDifferences, type LmeCase, type Split } from "./lme.ts";
 import { lmeCollect, lmePending, type LmeOptions } from "./lme-collect.ts";
@@ -168,10 +168,11 @@ async function main() {
         header: `memory-utility (${corpusName}) | ${cases.length} cases × 3 arms | ${model.name} | AKM ${version} | ${o.semantic ? "semantic" : "keyword"} | ${o.contextTokens} estimated context tokens | one sequential case at a time`,
         evalSettings: { context_tokens_estimated: o.contextTokens }, summaryExtra: {}, progress: (row: any) => ARMS.map(a => `${a}=${row.raw.arms[a].state}`).join(" ") };
     }
-    const cases = plan.cases, selected = cases.map(c => c.id), digests = caseDigests(MEASUREMENT, cases);
+    const measurement = lme ? LME_MEASUREMENT : MEASUREMENT;
+    const cases = plan.cases, selected = cases.map(c => c.id), digests = caseDigests(measurement, cases);
     const evalSettings = { ...plan.evalSettings, search_limit: o.searchLimit, search_mode: o.semantic ? "semantic" : "keyword", reader_settings_sha256: sha256Json(readerSettings(model.chat)), reader_endpoint_sha256: endpointDigest(model.baseUrl), embedding_settings_sha256: sha256Json(redactConfig(config.embedding ?? null)), embedding_endpoint_sha256: endpointDigest(config.embedding?.endpoint), embedding_model: config.embedding?.model ?? config.embedding?.localModel ?? null, prompt_sha256: sha256Json(lme ? READER_INSTRUCTION : PROMPT), corpus_input_sha256: sha256Json(Object.fromEntries(Object.entries(digests).map(([id, d]) => [id, d.input_sha256]))), corpus_labels_sha256: sha256Json(Object.fromEntries(Object.entries(digests).map(([id, d]) => [id, d.label_sha256]))), ordering: "six counterbalanced permutations; seed offsets case ordinal" };
     console.log(plan.header);
-    const manifestOf = (completion: { selected: string[]; scored: string[]; errored: string[] }): RunManifest => buildManifest({ measurement: MEASUREMENT, corpus: corpusName, cases: digests, config,
+    const manifestOf = (completion: { selected: string[]; scored: string[]; errored: string[] }): RunManifest => buildManifest({ measurement, corpus: corpusName, cases: digests, config,
       akm: { version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
       engines: { ...engineSettings(config).engines, reader: { model: model.name, endpoint: "<MODEL_BASE_URL>", endpoint_sha256: endpointDigest(model.baseUrl), temperature: readerSettings(model.chat).temperature, enableThinking: null, timeoutMs: o.timeoutMs },
         ...(judge ? { judge: { model: judge.name, endpoint: "<MODEL_BASE_URL>", endpoint_sha256: endpointDigest(judge.baseUrl), temperature: judge.chat?.temperature ?? 0, enableThinking: null, timeoutMs: 900_000, ...(judge.chat ? { chat: judge.chat } : {}) } } : {}) },
@@ -190,7 +191,7 @@ async function main() {
       const writeRows = () => writeFileSync(samples, rows.map(r => JSON.stringify(redactActors(r))).join("\n") + "\n");
       const save = (final = false) => {
         if (current >= 0) rows[current] = plan.row(cases[current]!, raw[current]);
-        const summary: any = { eval: MEASUREMENT.eval, version: MEASUREMENT.version, scoring_version: MEASUREMENT.scoringVersion ?? MEASUREMENT.version, harness_version: HARNESS_VERSION, date: new Date().toISOString(), label, corpus: corpusName, corpus_folder: corpusName === "custom" ? corpusFolderOf(folder) : null,
+        const summary: any = { eval: measurement.eval, version: measurement.version, scoring_version: measurement.scoringVersion ?? measurement.version, harness_version: HARNESS_VERSION, date: new Date().toISOString(), label, corpus: corpusName, corpus_folder: corpusName === "custom" ? corpusFolderOf(folder) : null,
           git_commit: collectorCommit, collector_fingerprint: collectorFingerprint, model: model.name, akm_version: version, ...build, config_form: writtenConfigForm(),
           limit: v.limit ? Number(v.limit) : null, seed: o.seed, timeout_ms: o.timeoutMs, search_mode: evalSettings.search_mode, config: redactConfig(config), reader_settings: readerSettings(model.chat),
           assets_sha256: sha256Json(digests), status, aborted_reason: abortedReason, wall_seconds: (performance.now() - start) / 1000, resumed: v.resume !== undefined, ...plan.summaryExtra,

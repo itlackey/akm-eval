@@ -3,9 +3,10 @@ import { join } from "node:path";
 import { expect, test } from "bun:test";
 import type { ChatResult } from "../../../benchmarks/longmemeval/src/llm.ts";
 import { cycleOutcome, pendingHistory, replay, scoreHistory, type History } from "./maintenance.ts";
+import { pack } from "./protocol.ts";
 import type { RawArm } from "./score.ts";
 
-const [retention, approval, incident] = JSON.parse(readFileSync(join(import.meta.dir, "../assets/maintenance-histories.json"), "utf8")) as [History, History, History];
+const [retention, approval, incident, recovery] = JSON.parse(readFileSync(join(import.meta.dir, "../assets/maintenance-histories.json"), "utf8")) as [History, History, History, History];
 const ok = { ok: true };
 const drain = { ok: true, failed: [] };
 
@@ -90,6 +91,27 @@ function answer(arm: RawArm, fields: Record<string, string | null>) {
   arm.state = "complete";
   arm.answer = result;
 }
+
+test("a recovery note cannot replace the only record of the initial hypothesis", () => {
+  const h = pendingHistory(recovery, 3);
+  const [hypothesis, restored, confirmed] = h.questions;
+  const docs = (notes: string[]) => pack(notes.map((content, i) => ({ ref: `note-${i}`, content })), 1024);
+  const active = [recovery.initial[0]!, ...recovery.followUp];
+  for (const [q, value] of [[hypothesis!, "worn drive collar"], [restored!, "feed guide"], [confirmed!, null]] as const) {
+    q.arms.originals.context = docs(active);
+    q.arms.maintained.context = docs(recovery.followUp);
+    answer(q.arms.originals, { answer: value });
+    answer(q.arms.maintained, { answer: q === hypothesis ? null : value });
+  }
+  const score = scoreHistory(h);
+  expect(score.harmed).toBe(1);
+  expect(score.questions[0]).toMatchObject({
+    originals: { correct: true, all_required_evidence_in_context: true },
+    maintained: { correct: false, all_required_evidence_in_context: false },
+  });
+  expect(score.questions[1]!.maintained).toMatchObject({ correct: true, all_required_evidence_in_context: true });
+  expect(score.questions[2]!.maintained).toMatchObject({ correct: true, all_required_evidence_in_context: null });
+});
 
 test("scoring catches a lost historical answer and a suspected cause turned into a fact", () => {
   const dated = pendingHistory(retention, 0);

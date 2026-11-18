@@ -4,6 +4,7 @@ import { defaultOverrides } from "../../../lib/akm/overrides.ts";
 import { promptOf, startStub } from "../../../scripts/smoke/src/lib.ts";
 import { loadCases } from "./inputs.ts";
 import { collect, pending, type Options } from "./collect.ts";
+import { readerInstruction } from "./protocol.ts";
 import { makeRow } from "./score.ts";
 
 // Explicit opt-in only; an unsupported selected build FAILS, never silently skips.
@@ -13,7 +14,7 @@ describe.skipIf(process.env.AKM_EVAL_REAL_AKM !== "1")("memory-utility real AKM 
     const generationPrompts: string[] = [];
     const stub = startStub(req => {
       const prompt = promptOf(req);
-      if (prompt.startsWith("Answer the request using only")) {
+      if (prompt.startsWith(readerInstruction(c) + "\n\nCommon documentation:")) {
         const ref = /<document ref="([^"]+)">\n[^<]*Cedar image worker runs on host willow-07/.exec(prompt)?.[1];
         return JSON.stringify({ answers: { host: ref ? "willow-07" : null }, citations: { host: ref ? [{ ref, quote: "Cedar image worker runs on host willow-07" }] : [] } });
       }

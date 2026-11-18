@@ -38,7 +38,7 @@ describe("memory-utility --split", () => {
     expect(first.code).toBe(0);
     const dir = first.dir!;
     let s = summaryOf(dir);
-    expect(s).toMatchObject({ eval: "memory-utility", case_source: "longmemeval", split: "dev", haystack: 1, budgets: [250, 4096], primary_budget: 4096, judge_model: "fake-judge", model: "fake", n_cases: 3, n_scored: 0, n_errored: 3, status: "complete" });
+    expect(s).toMatchObject({ eval: "memory-utility", version: "0.2", scoring_version: "0.2", case_source: "longmemeval", split: "dev", haystack: 1, budgets: [250, 4096], primary_budget: 4096, judge_model: "fake-judge", model: "fake", n_cases: 3, n_scored: 0, n_errored: 3, status: "complete" });
     expect(s.manifest.eval_settings).toMatchObject({ case_source: "longmemeval", split: "dev", haystack: 1, budgets: "250,4096", primary_budget: 4096, sample_seed: 42, judge_model: "fake-judge", reader_model: "fake", context_tokens_estimated: 4096 });
     expect(s.manifest.engines.judge).toMatchObject({ model: "fake-judge", endpoint: "<MODEL_BASE_URL>" });
     expect(JSON.stringify(s)).not.toContain("localhost"); // the model's address is not saved
@@ -138,7 +138,7 @@ describe("memory-utility --split", () => {
     const first = await run(...args);
     expect(first.code).toBe(0);
     const s = summaryOf(first.dir!);
-    expect(s).toMatchObject({ corpus: "public", version: "0.2", n_cases: 2, n_scored: 2, n_errored: 0, status: "complete" });
+    expect(s).toMatchObject({ corpus: "public", version: "0.3", scoring_version: "0.2", n_cases: 2, n_scored: 2, n_errored: 0, status: "complete" });
     expect(s.case_source).toBeUndefined();
     expect(s.metrics.persistent_memory.failure_inclusive).toMatchObject({ n: 2, p_value: 1 });
     expect(s.metrics.persistent_memory.failure_inclusive.test).toContain("McNemar");
