@@ -13,7 +13,7 @@ import { sourceFiles } from "./protocol.ts";
 import { scoreArm, type RawArm } from "./score.ts";
 
 export const EVAL = "memory-maintenance";
-export const VERSION = "0.2";
+export const VERSION = "0.3";
 export const SCORING_VERSION = "0.1";
 const ARMS = ["originals", "maintained"] as const;
 const STAGES = ["initial", "no-new-evidence", "follow-up"] as const;

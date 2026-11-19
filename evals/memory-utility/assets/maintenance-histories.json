@@ -39,5 +39,20 @@
       {"id":"hypothesis","question":"What cause did operators initially suspect during the Pebble worker timeout incident?","fields":{"suspected":{"values":["DNS"],"evidence":[["operators initially suspected DNS"]]}}},
       {"id":"confirmed","question":"What cause was confirmed for the Pebble worker timeout incident? Return null if none was confirmed.","fields":{"confirmed":{"values":null,"evidence":[]}}}
     ]
+  },
+  {
+    "id": "wren-recovery-is-not-cause",
+    "initial": [
+      "---\ntype: memory\ndescription: Operational observation for the Wren mill handoff and the procedure it records.\ntags: [handoff, review]\nupdated: 2026-10-05\n---\n\n# Wren mill\n\nThe Wren mill checklist starts with the crossbench inspection and ends with the operator acknowledging receipt. The inspection record contains the run tag, work order, supervisor name, gate position, and clock reading. The operator mounts the record to the reference board and notifies the west shift at the end of review. Temporary notes stay in the control cabinet until the signed record arrives. Every inspection is indexed by the date printed on the original work order.\n\nA worn drive collar was suspected initially but never established as the cause of the Wren mill stop.\n",
+      "---\ntype: memory\ndescription: Operational observation for the Wren mill handoff and the procedure it records.\ntags: [handoff, review]\nupdated: 2026-10-05\n---\n\n# Wren mill\n\nThe Wren mill checklist starts with the crossbench inspection and ends with the operator acknowledging receipt. The inspection record contains the run tag, work order, supervisor name, gate position, and clock reading. The operator mounts the record to the reference board and notifies the west shift at the end of review. Temporary notes stay in the control cabinet until the signed record arrives. Every inspection is indexed by the date printed on the original work order.\n\nA worn drive collar was suspected initially but never established as the cause of the Wren mill stop.\n"
+    ],
+    "followUp": [
+      "---\ntype: memory\ndescription: Operational observation for the Wren mill handoff and the procedure it records.\ntags: [handoff, review]\nupdated: 2026-10-07\n---\n\n# Wren mill\n\nThe Wren mill checklist starts with the crossbench inspection and ends with the operator acknowledging receipt. The inspection record contains the run tag, work order, supervisor name, gate position, and clock reading. The operator mounts the record to the reference board and notifies the west shift at the end of review. Temporary notes stay in the control cabinet until the signed record arrives. Every inspection is indexed by the date printed on the original work order.\n\nReseating the feed guide restored the Wren mill. This does not establish what originally caused the stop.\n"
+    ],
+    "questions": [
+      {"id":"hypothesis","question":"What was the initial suspected cause of the Wren mill stop?","fields":{"answer":{"values":["worn drive collar","a worn drive collar","drive collar"],"evidence":[["A worn drive collar was suspected initially"]]}}},
+      {"id":"recovery","question":"What part did operators reseat to restore the Wren mill?","fields":{"answer":{"values":["feed guide","the feed guide"],"evidence":[["Reseating the feed guide restored the Wren mill"]]}}},
+      {"id":"cause","question":"What was confirmed as the cause of the Wren mill stop? Return null if none was confirmed.","fields":{"answer":{"values":null,"evidence":[]}}}
+    ]
   }
 ]

@@ -4,7 +4,7 @@ import { READER_INSTRUCTION } from "../../../benchmarks/longmemeval/src/prompts.
 import { loadCases, type Case } from "./inputs.ts";
 import { type LmeCase, isLmeCase, loadLmeCases } from "./lme.ts";
 import { type LmeRaw, type LmeRow, isLmeRow, lmeErrored, lmeRawOf, lmeUnfinished, makeLmeRow, summarizeLme } from "./lme-score.ts";
-import { PROMPT } from "./protocol.ts";
+import { readerInstruction } from "./protocol.ts";
 import { type Raw, type Row, errored, unfinished, makeRow, rawOf, summarize } from "./score.ts";
 
 type AnyCase = Case | LmeCase;
@@ -16,7 +16,7 @@ type AnyRow = Row | LmeRow;
  * arms at several budgets). A saved run holds one kind; the summary's `case_source` says which, and each row says its own.
  */
 export const MEASUREMENT: Measurement<AnyCase, AnyRaw, AnyRow> = {
-  eval: "memory-utility", version: "0.2",
+  eval: "memory-utility", version: "0.3", scoringVersion: "0.2",
   loadCases(root, summary) {
     if (summary.case_source === "longmemeval") return loadLmeCases(root, summary);
     if (summary.corpus === "public") return loadCases(join(root, "evals/memory-utility/assets"));
@@ -25,7 +25,7 @@ export const MEASUREMENT: Measurement<AnyCase, AnyRaw, AnyRow> = {
   },
   caseId: c => c.id,
   input: c => isLmeCase(c) ? { source: "longmemeval", notes: c.notes, question: c.question, question_date: c.question_date, prompt: READER_INSTRUCTION }
-    : { notes: c.notes, common: c.common, question: c.question, fields: Object.keys(c.fields).sort(), prompt: PROMPT },
+    : { notes: c.notes, common: c.common, question: c.question, fields: Object.keys(c.fields).sort(), prompt: readerInstruction(c) },
   labels: c => isLmeCase(c) ? { category: c.category, answer: c.answer, abstention: c.abstention, evidence_ids: c.evidence_ids, evidence_turns: c.evidence_turns }
     : { category: c.category, fields: c.fields },
   rawOf: row => isLmeRow(row) ? lmeRawOf(row) : rawOf(row),
@@ -34,3 +34,6 @@ export const MEASUREMENT: Measurement<AnyCase, AnyRaw, AnyRow> = {
   unfinished: row => isLmeRow(row) ? lmeUnfinished(row) : unfinished(row as Row),
   summarize: rows => rows.some(isLmeRow) ? summarizeLme(rows as LmeRow[]) : summarize(rows as Row[]),
 };
+
+// The judged LongMemEval path uses a different reader prompt and did not change.
+export const LME_MEASUREMENT = { ...MEASUREMENT, version: "0.2" };

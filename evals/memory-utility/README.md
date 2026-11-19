@@ -23,9 +23,10 @@ not isolate child files alone. The controls have the same output schema, tools
 evals/memory-utility/run-maintenance --model my-model --label pilot
 ```
 
-`memory-maintenance` is a separate measurement, not a fourth arm above. Three
-public development histories cover a dated correction, a project-only
-exception, and recovery with an unconfirmed cause (seven questions). For each
+`memory-maintenance` is a separate measurement, not a fourth arm above. Four
+public development histories (ten questions) cover a dated correction, a
+project-only exception, and both recall of an unconfirmed hypothesis and retention
+of its only source across a similar follow-up. For each
 history, **originals** keeps every observation as written; **maintained** gets
 those same observations but runs the native nightly improve and proposal drain
 in one isolated sandbox: after the initial notes, again without new evidence,
@@ -52,9 +53,10 @@ or skipped whole cycle stops that maintained arm; failed arms earn zero and
 are counted apart from wrong answers. Skips inside a completed cycle are
 retained in the native report. Interrupted or unsupported runs do not produce
 an aggregate delta. If the final libraries match, the pilot has not measured a
-change to active content even if there were intermediate edits. These fixtures
-check the measurement, not release quality. Existing default, saved-score,
-and LongMemEval comparisons are unchanged.
+change to active content even if there were intermediate edits. Check pair
+judgments, drain decisions and actual changed paths before drawing conclusions
+about retirement; a proposal without an applied change is not data loss.
+These fixtures check the measurement, not release quality.
 
 ## Run
 
@@ -82,6 +84,19 @@ Reader defaults are temperature 0, 1024 output tokens, no HTTP retries; a model'
 existing `chat` settings override temperature/output/reasoning settings.
 `--timeout-ms` bounds each command/request, not the whole run. Native engine
 retries remain AKM behavior and native usage evidence records observed calls.
+
+Collection 0.3 for the exact-scored cases and maintenance pilot uses a per-field
+JSON example and asks for bare JSON without Markdown fences. Scoring is unchanged:
+answer values, response format and supporting quotes are separate diagnostics.
+Old results keep their original identities; do not mix 0.2 and 0.3 as one
+measurement. The free-form LongMemEval reader and its collection are unchanged.
+
+When diagnosing a missed answer in a long document, use `akm search "<query>"`
+to find the document, `akm show <ref> --outline` to locate the relevant headings,
+and `akm show <ref>#<slug>` to check the passage and any separate exception or
+prerequisite. Read the whole file when it fits. A correct document hit is not
+proof that the required evidence fit in the reader context; check the packed
+input before attributing a miss to retrieval.
 
 `--resume DIR` carries on a stopped run in its folder (any case source): it keeps the cases that were scored and asks the rest again,
 including the ones that errored. The manifest has to be the one of the stored run (eval and scoring versions, AKM build and config,

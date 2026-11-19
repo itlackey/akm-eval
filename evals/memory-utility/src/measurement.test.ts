@@ -25,6 +25,18 @@ describe("memory utility protocol", () => {
     expect(prompt).not.toContain("willow-07");
     expect(prompt).toContain('ref="common"');
   });
+  test("reader supplies an exact per-field output shape without disclosing values or anchors", () => {
+    const request = { ...c, fields: { z: { values: null, evidence: [] }, a: { values: ["gold-value"], evidence: [["gold-anchor"]] } } };
+    const prompt = promptFor(request, pack([], 100));
+    expect(prompt).toContain('{"answers":{"a":null,"z":null},"citations":{"a":[],"z":[]}}');
+    expect(prompt).toContain("Do not include explanations, Markdown, or triple backticks.");
+    expect(prompt).toContain("A shortlist, suspicion, or rehearsal does not establish approval or confirmation.");
+    expect(prompt).toContain("A recovery step alone does not establish the cause.");
+    expect(prompt).toContain("A later correction applies from its stated effective date, not before.");
+    expect(prompt).not.toContain("gold-value");
+    expect(prompt).not.toContain("gold-anchor");
+    expect(MEASUREMENT).toMatchObject({ version: "0.3", scoringVersion: "0.2" });
+  });
   test("all six orders occur, with deterministic balanced positions", () => {
     const orders = Array.from({ length: 6 }, (_, i) => armOrder(i, "fixed"));
     expect(new Set(orders.map(o => o.join())).size).toBe(6);

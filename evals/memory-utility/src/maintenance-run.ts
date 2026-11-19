@@ -18,7 +18,7 @@ const usage = `Usage: bash evals/memory-utility/run-maintenance [options]
   --label NAME     Results label (defaults to model name).
   --timeout-ms N   Reader/command timeout and per-cycle improve budget (default 120000 ms).
 
-Runs only the three public development histories; no release claims or custom corpus.`;
+Runs only the public development histories; no release claims or custom corpus.`;
 
 async function main() {
   const { values: v } = parseArgs({ strict: true, options: {
