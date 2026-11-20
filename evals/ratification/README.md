@@ -11,6 +11,7 @@ evals/ratification/run --check                                   # reference and
 evals/ratification/run --model opencode/qwen3.8-flash --tasks find--prod-port,doctor--stuck-run --label pilot
 evals/ratification/run --model opencode/qwen3.8-flash --concurrency 4        # 9 tasks x 3 arms x 3 attempts = 81 trials
 evals/ratification/run --model NAME --akm akm-cli@0.10.261120   # another akm: an exact release, or a checkout (packed as in agent-ab)
+evals/ratification/run --model NAME --akm CANDIDATE --attempts 1  # the 0.11 repeat: one attempt per cell (owner, 2026-11-20); more only if a task looks flaky
 evals/ratification/generate [--check]                            # rewrite tasks/ and libraries/ from src/tasks.ts
 ```
 
@@ -57,6 +58,10 @@ A failed or errored trial gets a class before akm is touched: a bad verifier or 
 ## What the summary reports
 
 `summary.json`: `mode` (`run` or `check`), `status`, `aborted_reason`, `check`, `completion` per arm, `model`, `engine`, `pins`, `akm_version`, `akm_install`, `tasks_sha256`, `libraries_sha256`, `prompt_sha256`, `assets_sha256`, `job` config (credentials redacted) and `report` (per arm and per task). `samples.jsonl`: one line per trial. A run that did not finish every cell is `aborted`, exits 1 and is no result. Results are not published by this eval: copying them to `reports/` is the owner's step.
+
+## Limits
+
+The agent runs as root, its event stream (`agent/opencode.txt`, the source of every measure but completion) is in its reach, and the container has open network access (web tools are off; the shell is not). The verifier runs the container's own `akm`. An agent that rewrote its stream or replaced `akm` could change the measures and the verifier's answer; no trial so far has done either. The owner accepted these limits for the pilot on 2026-11-07 and for the 0.11 repeat on 2026-11-20. Removing them means a non-root agent and a root-owned stream in `lib/harbor`, a change shared by every Harbor eval; it is due if a result looks tampered with or this eval becomes a release gate.
 
 ## Licence
 
