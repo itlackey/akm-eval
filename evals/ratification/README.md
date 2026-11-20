@@ -1,6 +1,6 @@
 # ratification
 
-Does a fresh agent complete everyday akm jobs, recover when one goes wrong, and avoid needless calls: with the akm CLI alone, with the guide akm ships for agents, and with the akm plugin? This is the agent ratification of [akm#1629](https://github.com/itlackey/akm/issues/1629), made repeatable so it can be run again on the 0.11 candidate. Like [cli-ratification](../cli-ratification/README.md) it compares akm instructions with each other on one model; never put its figures beside a published benchmark score.
+Does a fresh agent complete everyday akm jobs, recover when one goes wrong, and avoid needless calls: with the akm CLI alone, with the guide akm ships for agents, and with the akm plugin? This is the agent ratification of [akm#1629](https://github.com/itlackey/akm/issues/1629), made repeatable so it can be run again on the 0.11 candidate. It compares akm instructions with each other on one model; never put its figures beside a published benchmark score.
 
 Every trial is opencode in a Docker container through Harbor, with `akm` installed and a seeded, indexed bundle. A verifier it never saw reads the container state afterwards (files, the bundle, akm's `state.db`) and decides; no model judges.
 
@@ -52,7 +52,7 @@ The last two and `run--stamp-release` and `doctor--stuck-run` are the recovery c
 
 Per trial, from opencode's event stream (`agent/opencode.txt`, `src/metrics.ts`): completed (the verifier's reward), akm calls (the plugin's tools and shell commands that run akm) and other tool calls, **unnecessary** calls (akm calls beyond the reference's), errors (an akm call that failed; `doctor`'s exit 4 is an answer), whether the agent **recovered** (it hit an error and still passed, with a successful akm call after it), deprecated forms (a `[deprecated]` notice, or the task's `old` pattern) and whether it moved on to the replacement, help lookups (`akm help`, `hints`, `--help`), repeated and usage-error calls, tokens. The report gives each per arm and per task and arm. There is no composite score and no significance test: nine tasks and three attempts give counts and means; read the transcripts (`samples.jsonl` keeps the akm commands in order).
 
-A failed or errored trial gets a class before akm is touched, as in cli-ratification: a bad verifier or leaking task (invalid, fix and run again), infrastructure, a product defect, discovery or execution, a model decision.
+A failed or errored trial gets a class before akm is touched: a bad verifier or leaking task (invalid, fix and run again), infrastructure, a product defect, discovery or execution, a model decision.
 
 ## What the summary reports
 

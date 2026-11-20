@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""The agents of evals/cli-ratification: opencode with the real akm CLI and no plugin, and two agents that call no model.
+"""The plugin-free agents of evals/ratification: opencode with the real akm CLI and no plugin, and two agents that call no model.
 
 `AkmCli` is `AkmOpenCode` (akm_opencode.py) without the plugin: the same Harbor setup, the same akm-cli install and the same seeded,
 indexed bundle, and nothing else. There is no plugin in opencode's config, so nothing is injected at session start and no tool is

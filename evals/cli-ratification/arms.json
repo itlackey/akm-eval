@@ -1,6 +1,0 @@
-{
-  "minimal": { "prompt": "prompts/minimal.md" },
-  "guidance": { "prompt": "prompts/guidance.md" },
-  "reference": { "script": "reference" },
-  "noop": { "script": "noop" }
-}

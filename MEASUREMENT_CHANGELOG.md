@@ -18,6 +18,8 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- cli-ratification removed. `evals/ratification` is the one agent ratification (akm#1629); on akm 0.11 four of cli-ratification's 14 cards tested removed surfaces and both its regression bugs are closed. Its published reports stay under `reports/`. ratification, no version change: its knowledge check reads a search's `results` first and keeps `hits` for earlier builds, the same check (akm 0.11 renamed the field; rule above on version-gated spellings).
+
 - Exact-scored memory-utility and memory-maintenance collection 0.2 → 0.3: the reader gets a per-field JSON example, explicit instructions to answer independently and distinguish tentative evidence from approval or confirmation, and an explicit prohibition on Markdown fences. Memory-maintenance also adds the Wren history: recovery does not replace a distinct historical hypothesis. Scorers remain at 0.2 and 0.1 respectively; saved results retain their original scores and collection identity. The LongMemEval path uses a different reader and remains at collection/scoring 0.2.
 
 - memory-maintenance collection 0.1 → 0.2, scoring unchanged: native reflect guard rejections and per-item skips are recorded decisions, not failed maintenance cycles. Runs continue after them; actual execution failures still stop the maintained arm.

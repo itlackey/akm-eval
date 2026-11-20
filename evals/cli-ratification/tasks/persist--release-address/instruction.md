@@ -1,1 +1,0 @@
-You are working in /work/orchid. The team has just decided that release notes of the fescue service go to fescue-finch@example.com. Record this decision so that anyone working on this project later can find it. Tag it `decision`. In REPORT.md, say where you recorded it.

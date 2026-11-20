@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Tests for the CLI arm of evals/cli-ratification. No Docker and no network. See test_akm_opencode.py for how to run them."""
+"""Tests for the CLI arm of evals/ratification. No Docker and no network. See test_akm_opencode.py for how to run them."""
 
 import asyncio
 import json
