@@ -99,7 +99,7 @@ function between(from: unknown, to: unknown): number | null {
 /**
  * One trial folder of a Harbor job, or null when it holds no result. The arm is the agent's name, which Harbor keeps in result.json:
  * `akm-opencode-<label>` is an akm arm too, one of the several of evals/project-intent, which reads the label itself; so is
- * `akm-cli-<label>`, the plugin-free arms of evals/cli-ratification.
+ * `akm-cli-<label>`, the plugin-free arms of evals/ratification.
  */
 export function readTrial(dir: string, trial: string): Trial | null {
   const file = join(dir, "result.json");

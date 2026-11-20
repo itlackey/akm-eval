@@ -116,8 +116,9 @@ const CHECKS = {
     if (!files.length) return { ok: false, saw: "no knowledge document holds the text" };
     if (!c.search) return { ok: true, saw: files.join(",") };
     const r = akm(ctx, ["search", c.search]);
-    const hit = (r.json?.hits ?? []).some((h) => files.some((f) => `knowledge/${f}`.replace(/\.md$/, "") === h.ref));
-    return { ok: hit, saw: `${files.join(",")}; search hits: ${(r.json?.hits ?? []).map((h) => h.ref).join(",")}` };
+    const listed = r.json?.results ?? r.json?.hits ?? []; // akm 0.11 says `results`, earlier builds `hits`
+    const hit = listed.some((h) => files.some((f) => `knowledge/${f}`.replace(/\.md$/, "") === h.ref));
+    return { ok: hit, saw: `${files.join(",")}; search hits: ${listed.map((h) => h.ref).join(",")}` };
   },
   feedback: (ctx, c) => {
     const rows = query(ctx, "SELECT ref, metadata_json FROM events WHERE event_type = 'feedback'");

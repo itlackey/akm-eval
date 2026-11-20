@@ -1,2 +1,0 @@
-deploy:
-	@echo deploying fescue

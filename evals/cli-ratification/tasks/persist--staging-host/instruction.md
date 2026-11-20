@@ -1,1 +1,0 @@
-You are working in /work/quill. The team has just decided that the tallow service's staging host is now heron-632.stage.internal. Record this decision so that anyone working on this project later can find it. In REPORT.md, say where you recorded it.

@@ -1,3 +1,0 @@
-# quill
-
-Release tooling.

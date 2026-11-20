@@ -1,6 +1,6 @@
 # ratification
 
-Does a fresh agent complete everyday akm jobs, recover when one goes wrong, and avoid needless calls: with the akm CLI alone, with the guide akm ships for agents, and with the akm plugin? This is the agent ratification of [akm#1629](https://github.com/itlackey/akm/issues/1629), made repeatable so it can be run again on the 0.11 candidate. Like [cli-ratification](../cli-ratification/README.md) it compares akm instructions with each other on one model; never put its figures beside a published benchmark score.
+Does a fresh agent complete everyday akm jobs, recover when one goes wrong, and avoid needless calls: with the akm CLI alone, with the guide akm ships for agents, and with the akm plugin? This is the agent ratification of [akm#1629](https://github.com/itlackey/akm/issues/1629), made repeatable so it can be run again on the 0.11 candidate. It compares akm instructions with each other on one model; never put its figures beside a published benchmark score.
 
 Every trial is opencode in a Docker container through Harbor, with `akm` installed and a seeded, indexed bundle. A verifier it never saw reads the container state afterwards (files, the bundle, akm's `state.db`) and decides; no model judges.
 
@@ -11,6 +11,7 @@ evals/ratification/run --check                                   # reference and
 evals/ratification/run --model opencode/qwen3.8-flash --tasks find--prod-port,doctor--stuck-run --label pilot
 evals/ratification/run --model opencode/qwen3.8-flash --concurrency 4        # 9 tasks x 3 arms x 3 attempts = 81 trials
 evals/ratification/run --model NAME --akm akm-cli@0.10.261120   # another akm: an exact release, or a checkout (packed as in agent-ab)
+evals/ratification/run --model NAME --akm CANDIDATE --attempts 1  # the 0.11 repeat: one attempt per cell (owner, 2026-11-20); more only if a task looks flaky
 evals/ratification/generate [--check]                            # rewrite tasks/ and libraries/ from src/tasks.ts
 ```
 
@@ -52,11 +53,15 @@ The last two and `run--stamp-release` and `doctor--stuck-run` are the recovery c
 
 Per trial, from opencode's event stream (`agent/opencode.txt`, `src/metrics.ts`): completed (the verifier's reward), akm calls (the plugin's tools and shell commands that run akm) and other tool calls, **unnecessary** calls (akm calls beyond the reference's), errors (an akm call that failed; `doctor`'s exit 4 is an answer), whether the agent **recovered** (it hit an error and still passed, with a successful akm call after it), deprecated forms (a `[deprecated]` notice, or the task's `old` pattern) and whether it moved on to the replacement, help lookups (`akm help`, `hints`, `--help`), repeated and usage-error calls, tokens. The report gives each per arm and per task and arm. There is no composite score and no significance test: nine tasks and three attempts give counts and means; read the transcripts (`samples.jsonl` keeps the akm commands in order).
 
-A failed or errored trial gets a class before akm is touched, as in cli-ratification: a bad verifier or leaking task (invalid, fix and run again), infrastructure, a product defect, discovery or execution, a model decision.
+A failed or errored trial gets a class before akm is touched: a bad verifier or leaking task (invalid, fix and run again), infrastructure, a product defect, discovery or execution, a model decision.
 
 ## What the summary reports
 
 `summary.json`: `mode` (`run` or `check`), `status`, `aborted_reason`, `check`, `completion` per arm, `model`, `engine`, `pins`, `akm_version`, `akm_install`, `tasks_sha256`, `libraries_sha256`, `prompt_sha256`, `assets_sha256`, `job` config (credentials redacted) and `report` (per arm and per task). `samples.jsonl`: one line per trial. A run that did not finish every cell is `aborted`, exits 1 and is no result. Results are not published by this eval: copying them to `reports/` is the owner's step.
+
+## Limits
+
+The agent runs as root, its event stream (`agent/opencode.txt`, the source of every measure but completion) is in its reach, and the container has open network access (web tools are off; the shell is not). The verifier runs the container's own `akm`. An agent that rewrote its stream or replaced `akm` could change the measures and the verifier's answer; no trial so far has done either. The owner accepted these limits for the pilot on 2026-11-07 and for the 0.11 repeat on 2026-11-20. Removing them means a non-root agent and a root-owned stream in `lib/harbor`, a change shared by every Harbor eval; it is due if a result looks tampered with or this eval becomes a release gate.
 
 ## Licence
 
