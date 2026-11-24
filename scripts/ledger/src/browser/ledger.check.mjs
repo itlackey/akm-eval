@@ -473,6 +473,7 @@ test('links tolerate malformed conditions and restore filters on browser Back an
 });
 
 test('shared views restore chosen columns, dragged order and multiple sort keys', async ({ page }, info) => {
+  test.setTimeout(60_000); // Multiple full-ledger reloads and exports; assertion timeouts are unchanged.
   const visible = target => target.locator('.tabulator-header [tabulator-field]').evaluateAll(elements => elements.filter(element => element.offsetWidth).map(element => element.getAttribute('tabulator-field')));
   const params = new URLSearchParams({ role: 'Full suite', latest: '1', campaign: 'shared' });
   for (const key of ['model', 'suite', 'akm_version', 'quality_percent', 'quality_metric', 'latency_p50_s']) params.append('column', key);
@@ -519,6 +520,7 @@ test('shared views restore chosen columns, dragged order and multiple sort keys'
 });
 
 test('column and sort links handle metric keys, browser history and touch controls', async ({ page, request, browser }, info) => {
+  test.setTimeout(60_000); // Exercises the full ledger in both desktop and touch contexts.
   const data = await request.get('./data.json').then(response => response.json());
   const metric = data.columns.find(column => column.key.startsWith('score:') && column.label.includes('Semantic ranking') && column.label.includes('10'));
   const keys = ['model', 'akm_version', metric.key];
