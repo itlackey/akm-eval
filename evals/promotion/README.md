@@ -66,7 +66,7 @@ An unreadable reply is a defer, so the eval cannot tell the two apart. One good 
 
 ## Depends on akm's private schema
 
-No command queues a proposal without a model, so the eval writes rows into the `proposals` table of the sandbox's `state.db` (ten columns: `id`, `stash_dir`, `ref`, `status`, `source`, `created_at`, `updated_at`, `content`, `frontmatter_json`, `metadata_json`), and reads `event_type` and `metadata_json` of `events` to count calls. It checks the columns first and stops with a message naming what is missing. akm does not promise this schema, so a new build can break the eval without a word in its changelog; the tests use a fake akm and cannot see it. A run against the new build is the check.
+No command queues a proposal without a model, so the eval writes rows into the `proposals` table of the sandbox's `state.db` (ten columns: `id`, `stash_dir`, `ref`, `status`, `source`, `created_at`, `updated_at`, `content`, `frontmatter_json`, `metadata_json`; akm's migration 031, from akm#1746, renames `stash_dir` to `bundle_id`, the bundle's id; the eval writes the bundle's root in whichever the table has, and akm rewrites a root in `bundle_id` to its bundle's id when it opens `state.db`), and reads `event_type` and `metadata_json` of `events` to count calls. It checks the columns first and stops with a message naming what is missing. akm does not promise this schema, so a new build can break the eval without a word in its changelog; the tests use a fake akm and cannot see it. A run against the new build is the check.
 
 ## Results so far
 
