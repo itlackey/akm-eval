@@ -1,0 +1,962 @@
+{
+  "eval": "memory-utility",
+  "version": "0.3",
+  "scoring_version": "0.2",
+  "harness_version": 3,
+  "date": "2026-11-24T09:29:21.860Z",
+  "label": "b70-mini2-20261124-memory-utility",
+  "corpus": "public",
+  "corpus_folder": null,
+  "git_commit": "581a559-dirty",
+  "collector_fingerprint": "476cd55dbc18ec3f218faf013c2ce4c0456fd8c951f05e86c513511f1ea92df7",
+  "model": "inkling2-mini-exl3-b70",
+  "akm_version": "0.10.261130",
+  "akm_bin": "bun ~/.codex/plugins/cache/akm-plugins/akm/0.10.261136/node_modules/akm-cli/dist/cli.js",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "config_form": "connections",
+  "limit": null,
+  "seed": "1",
+  "timeout_ms": 120000,
+  "search_mode": "semantic",
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "bakeoff": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/v1/chat/completions",
+        "model": "inkling2-mini-exl3-b70",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "bakeoff"
+    },
+    "experimental": {
+      "improveAutonomy": true
+    },
+    "improve": {
+      "strategies": {
+        "bakeoff-memory-inference": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": true
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        },
+        "bakeoff-schema-repair": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": true
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        },
+        "bakeoff-session-summary": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": true,
+              "indexSessions": true,
+              "minSessionDuration": 0,
+              "triage": {
+                "enabled": false
+              }
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        },
+        "bakeoff-consolidate-promote": {
+          "engine": "bakeoff",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": true,
+              "minPoolSize": 0
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        }
+      }
+    },
+    "connections": {
+      "default": {
+        "reasoning_effort": "none"
+      }
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    }
+  },
+  "reader_settings": {
+    "temperature": 0,
+    "max_tokens": 1024,
+    "retries": 0
+  },
+  "assets_sha256": "f6c91a366f513adc059526db210afbb8402e29a35aba4e209295d9acd816b29f",
+  "status": "complete",
+  "aborted_reason": null,
+  "wall_seconds": 545.247,
+  "resumed": false,
+  "n_cases": 24,
+  "n_selected": 24,
+  "n_run": 24,
+  "n_scored": 24,
+  "n_errored": 0,
+  "n_unfinished": 0,
+  "model_calls": {
+    "calls": 109,
+    "errors": 0,
+    "prompt_tokens": 507.6,
+    "completion_tokens": 364.3,
+    "seconds": 4.16,
+    "output_tokens_per_second": 87.7
+  },
+  "calls_by": [
+    {
+      "process": "native inference",
+      "model": "inkling2-mini-exl3-b70",
+      "calls": 37,
+      "failures": 0,
+      "prompt_tokens": 22743,
+      "completion_tokens": 13069
+    },
+    {
+      "process": "reader",
+      "model": "inkling2-mini-exl3-b70",
+      "calls": 72,
+      "failures": 0,
+      "prompt_tokens": 32585,
+      "completion_tokens": 26643
+    }
+  ],
+  "observed_models": [
+    "inkling2-mini-exl3-b70"
+  ],
+  "metrics": {
+    "arms": {
+      "none": {
+        "failure_inclusive_accuracy": {
+          "n": 24,
+          "correct": 5,
+          "rate": 0.2083
+        },
+        "evaluated_accuracy": {
+          "n": 24,
+          "correct": 5,
+          "rate": 0.2083
+        },
+        "n_evaluated": 24,
+        "n_errors": 0,
+        "n_not_run": 0,
+        "malformed_answers": 0,
+        "invalid_answer_values": 0,
+        "protocol_correct": {
+          "n": 24,
+          "correct": 5,
+          "rate": 0.2083
+        },
+        "empty_answers": 0,
+        "literal_evidence_supported_correct": {
+          "n": 24,
+          "correct": 5,
+          "rate": 0.2083
+        },
+        "cited_correct": {
+          "n": 24,
+          "correct": 5,
+          "rate": 0.2083
+        },
+        "invalid_citation": 0,
+        "missing_citation": 0,
+        "outdated_answer": 0,
+        "wrong_scope_answer": 0,
+        "unsupported_unanswerable": 0,
+        "mean_context_estimated_tokens": 0,
+        "mean_reported_prompt_tokens": 371.7083333333333,
+        "prompt_token_reporting_coverage": 24,
+        "reported_usage": {
+          "prompt_tokens": {
+            "total_reported": 8921,
+            "reporting_count": 24,
+            "attempted_calls": 24
+          },
+          "completion_tokens": {
+            "total_reported": 5822,
+            "reporting_count": 24,
+            "attempted_calls": 24
+          },
+          "cost_usd": {
+            "total_reported": null,
+            "reporting_count": 0,
+            "attempted_calls": 24
+          }
+        },
+        "total_observed_phase_seconds": {
+          "index": 0,
+          "retrieval": 0,
+          "answer": 68.46274616099979
+        },
+        "mean_index_seconds": 0,
+        "mean_retrieval_seconds": 0,
+        "mean_answer_seconds": 2.852614423374991
+      },
+      "source": {
+        "failure_inclusive_accuracy": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "evaluated_accuracy": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "n_evaluated": 24,
+        "n_errors": 0,
+        "n_not_run": 0,
+        "malformed_answers": 1,
+        "invalid_answer_values": 1,
+        "protocol_correct": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "empty_answers": 0,
+        "literal_evidence_supported_correct": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "cited_correct": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "invalid_citation": 0,
+        "missing_citation": 0,
+        "outdated_answer": 0,
+        "wrong_scope_answer": 0,
+        "unsupported_unanswerable": 0,
+        "mean_context_estimated_tokens": 111.29166666666667,
+        "mean_reported_prompt_tokens": 492.75,
+        "prompt_token_reporting_coverage": 24,
+        "reported_usage": {
+          "prompt_tokens": {
+            "total_reported": 11826,
+            "reporting_count": 24,
+            "attempted_calls": 24
+          },
+          "completion_tokens": {
+            "total_reported": 10181,
+            "reporting_count": 24,
+            "attempted_calls": 24
+          },
+          "cost_usd": {
+            "total_reported": null,
+            "reporting_count": 0,
+            "attempted_calls": 24
+          }
+        },
+        "total_observed_phase_seconds": {
+          "index": 12.063625802000134,
+          "retrieval": 19.957807006000014,
+          "answer": 107.84252964300002
+        },
+        "mean_index_seconds": 0.502651075083339,
+        "mean_retrieval_seconds": 0.8315752919166672,
+        "mean_answer_seconds": 4.493438735125001
+      },
+      "inferred": {
+        "failure_inclusive_accuracy": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "evaluated_accuracy": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "n_evaluated": 24,
+        "n_errors": 0,
+        "n_not_run": 0,
+        "malformed_answers": 1,
+        "invalid_answer_values": 1,
+        "protocol_correct": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "empty_answers": 0,
+        "literal_evidence_supported_correct": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "cited_correct": {
+          "n": 24,
+          "correct": 23,
+          "rate": 0.9583
+        },
+        "invalid_citation": 0,
+        "missing_citation": 0,
+        "outdated_answer": 0,
+        "wrong_scope_answer": 0,
+        "unsupported_unanswerable": 0,
+        "mean_context_estimated_tokens": 111.875,
+        "mean_reported_prompt_tokens": 493.25,
+        "prompt_token_reporting_coverage": 24,
+        "reported_usage": {
+          "prompt_tokens": {
+            "total_reported": 11838,
+            "reporting_count": 24,
+            "attempted_calls": 24
+          },
+          "completion_tokens": {
+            "total_reported": 10640,
+            "reporting_count": 24,
+            "attempted_calls": 24
+          },
+          "cost_usd": {
+            "total_reported": null,
+            "reporting_count": 0,
+            "attempted_calls": 24
+          }
+        },
+        "total_observed_phase_seconds": {
+          "index": 13.092083124000052,
+          "retrieval": 20.65247683600016,
+          "answer": 112.4661911510001
+        },
+        "mean_index_seconds": 0.5455034635000021,
+        "mean_retrieval_seconds": 0.8605198681666734,
+        "mean_answer_seconds": 4.686091297958337
+      }
+    },
+    "persistent_memory": {
+      "failure_inclusive": {
+        "n": 24,
+        "value": 0.75,
+        "ci95": [
+          0.4137,
+          0.9023
+        ],
+        "both_correct": 5,
+        "only_with_akm": 18,
+        "only_without_akm": 0,
+        "neither": 1,
+        "p_value": 0.00000762939,
+        "test": "exact McNemar test (two-sided exact binomial test on the discordant pairs)",
+        "interval_method": "95% melded exact interval compatible with the exact McNemar test (Fay and Lumbard 2021)",
+        "complete_pairs": 24,
+        "incomplete_pairs": 0,
+        "helps": 18,
+        "harms": 0,
+        "ties": 6
+      },
+      "complete_pairs": {
+        "n": 24,
+        "value": 0.75,
+        "ci95": [
+          0.4137,
+          0.9023
+        ],
+        "both_correct": 5,
+        "only_with_akm": 18,
+        "only_without_akm": 0,
+        "neither": 1,
+        "p_value": 0.00000762939,
+        "test": "exact McNemar test (two-sided exact binomial test on the discordant pairs)",
+        "interval_method": "95% melded exact interval compatible with the exact McNemar test (Fay and Lumbard 2021)",
+        "complete_pairs": 24,
+        "incomplete_pairs": 0,
+        "helps": 18,
+        "harms": 0,
+        "ties": 6
+      }
+    },
+    "memory_inference": {
+      "failure_inclusive": {
+        "n": 24,
+        "value": 0,
+        "ci95": [
+          -0.186,
+          0.186
+        ],
+        "both_correct": 22,
+        "only_with_akm": 1,
+        "only_without_akm": 1,
+        "neither": 0,
+        "p_value": 1,
+        "test": "exact McNemar test (two-sided exact binomial test on the discordant pairs)",
+        "interval_method": "95% melded exact interval compatible with the exact McNemar test (Fay and Lumbard 2021)",
+        "complete_pairs": 24,
+        "incomplete_pairs": 0,
+        "helps": 1,
+        "harms": 1,
+        "ties": 22
+      },
+      "complete_pairs": {
+        "n": 24,
+        "value": 0,
+        "ci95": [
+          -0.186,
+          0.186
+        ],
+        "both_correct": 22,
+        "only_with_akm": 1,
+        "only_without_akm": 1,
+        "neither": 0,
+        "p_value": 1,
+        "test": "exact McNemar test (two-sided exact binomial test on the discordant pairs)",
+        "interval_method": "95% melded exact interval compatible with the exact McNemar test (Fay and Lumbard 2021)",
+        "complete_pairs": 24,
+        "incomplete_pairs": 0,
+        "helps": 1,
+        "harms": 1,
+        "ties": 22
+      }
+    },
+    "cited_correct_deltas": {
+      "persistent_memory": {
+        "n": 24,
+        "value": 0.75,
+        "ci95": [
+          0.4137,
+          0.9023
+        ],
+        "both_correct": 5,
+        "only_with_akm": 18,
+        "only_without_akm": 0,
+        "neither": 1,
+        "p_value": 0.00000762939,
+        "test": "exact McNemar test (two-sided exact binomial test on the discordant pairs)",
+        "interval_method": "95% melded exact interval compatible with the exact McNemar test (Fay and Lumbard 2021)",
+        "complete_pairs": 24,
+        "incomplete_pairs": 0,
+        "helps": 18,
+        "harms": 0,
+        "ties": 6
+      },
+      "memory_inference": {
+        "n": 24,
+        "value": 0,
+        "ci95": [
+          -0.186,
+          0.186
+        ],
+        "both_correct": 22,
+        "only_with_akm": 1,
+        "only_without_akm": 1,
+        "neither": 0,
+        "p_value": 1,
+        "test": "exact McNemar test (two-sided exact binomial test on the discordant pairs)",
+        "interval_method": "95% melded exact interval compatible with the exact McNemar test (Fay and Lumbard 2021)",
+        "complete_pairs": 24,
+        "incomplete_pairs": 0,
+        "helps": 1,
+        "harms": 1,
+        "ties": 22
+      }
+    },
+    "inference": {
+      "output": 21,
+      "no_change": 3,
+      "errors": 0,
+      "not_run": 0,
+      "mean_seconds": 7.367023130916671,
+      "mean_index_seconds": 0.5073435116666632
+    }
+  },
+  "notes": [
+    "Accuracy is exact structured-answer correctness on synthetic cases, not a general semantic quality score.",
+    "Evidence and safety flags are finite literal/label checks, not semantic entailment or authorization guarantees.",
+    "Paired differences carry an exact McNemar p-value and an exact 95% interval (Fay-Lumbard, compatible with the McNemar test) over independent cases; small samples are diagnostic. Failure-inclusive errors score zero; incomplete pairs are not help/harm/ties. No interval for fewer than two cases or zero complete pairs.",
+    "Context estimates are characters/4, not measured model tokens. duplicate_refs means exact-content duplicates only. Raw provider usage, failures and all phase timings remain in samples.jsonl. Dollar costs are unknown unless the provider reports them."
+  ],
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "memory-utility",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.2"
+    },
+    "cases": {
+      "case-01": {
+        "input_sha256": "4553686e13c0a86a60f4fc7fddf5f17fcb266e41bee23f0f914aff176c4352c7",
+        "label_sha256": "ea1fd3287f5419385841a74e69f1a204f5128616e479f80d1267d5c42fa708be"
+      },
+      "case-02": {
+        "input_sha256": "eb479b93de679272ea974ed34c67c25deb9bdff34212a9bf8e9fed1fdb038725",
+        "label_sha256": "a4921d87243efe0dbe44319509e77263068984935b3f2d340f64b0c1a313f875"
+      },
+      "case-03": {
+        "input_sha256": "0bb4c6ae2a6532380a9a82602c391fe4158b3d454edec2909542eff359cb7108",
+        "label_sha256": "a461e2da84783bb4cc2015765ecf4646781f1dcd316426c949a3565d5b6ebeb6"
+      },
+      "case-04": {
+        "input_sha256": "342dc75fea5c52bcc08085855beb2dc174b1fba9b7f9267c4b8bac30b7e50d06",
+        "label_sha256": "73496ccf5bf8a6adebefb3011ad192adc9c4e5c0d91bbad8506b8ae1b63c16de"
+      },
+      "case-05": {
+        "input_sha256": "96cc52acada6c7c4e5bd805e3dd2bfe7897927af9bf27ccda947535dafe11c0e",
+        "label_sha256": "a40a715e3a74a3f1056ad40eedb7027fd6cff5494521c3610b7b851382f4798f"
+      },
+      "case-06": {
+        "input_sha256": "932b2c402d66358c55e918154b93d54f69ba230de12b3a3e16e576fb77c70df7",
+        "label_sha256": "b280e65f445f551d252978867d024f3dcd1bbf2000945d1ccbebf414b4bacd6a"
+      },
+      "case-07": {
+        "input_sha256": "3217dcb1b1eb9d564605587294687aea2cca7ea5890ad1a1dd6327245bc86d6b",
+        "label_sha256": "1c1ef7ad5561c0bb8d33ca7e54738a78532d2091ce909d2d35310f71a8eff0b8"
+      },
+      "case-08": {
+        "input_sha256": "21bb1ad068002f5cd664375dbe9598c6e44340286f44a8dc400b6e023474f2f7",
+        "label_sha256": "ab78fc7a278d292d80defa1aa0987d296570eb3c3c73b585a6d36b9d1d2e604e"
+      },
+      "case-09": {
+        "input_sha256": "5c778171295366f7cd870ad049ed3e7959d3606dfced3af5e7a5d86a099861e8",
+        "label_sha256": "8c518aa05265af0e4dc415510466a65735936d5f5da40afab240f6843e3a2cc9"
+      },
+      "case-10": {
+        "input_sha256": "2c710dee15c51bb573efcbe271802c4b1c46452f415b628d2cf1f88db5f272d9",
+        "label_sha256": "b87ac4a5470dcb0780f0fe6d7b8ab5eafd5b99dfd0c1ffd65fcc709b9f91f207"
+      },
+      "case-11": {
+        "input_sha256": "2e23bf3d10b2df7ac6da284b8de333f5973fe51488133c1fb3c8ad9e4aff730a",
+        "label_sha256": "351de8f0d97641e48c37003b919fc7cd8bfd25ce44abae6ea2dd1905ad109d45"
+      },
+      "case-12": {
+        "input_sha256": "aa044ad6f6b61e319e3dc85472c081d7a18db38bdaf64637c6fb8e5f4ae336f3",
+        "label_sha256": "27a4f6e7ddda7909e8aad19a44ff1a1c8a5f2181fd27b39ca7287665205a8982"
+      },
+      "case-13": {
+        "input_sha256": "dadb06345003f9bb320aa5ce3a17a6ac21a51f0ed5444aeebc5e143b24faf566",
+        "label_sha256": "1305154e33b35393819761a469088f70a87f09a367bbf0242cf617c433366f23"
+      },
+      "case-14": {
+        "input_sha256": "dce61645fbba592eb6e53eb493899d51b4fa81fabc039b3b6d83cdd53535b650",
+        "label_sha256": "a10cfad8d54a8627fb33ce274221563c445d20271c7b9f5ff894e03dc9d67d47"
+      },
+      "case-15": {
+        "input_sha256": "040b5fc9993c052f823a5bffcf683fa64a33880c5f5032bba86fa4d0b0bb29f4",
+        "label_sha256": "ccfc3392f4c767e31b53f72c48c8dda4be9b78a65cf1c5dc97fdbf798aa672d3"
+      },
+      "case-16": {
+        "input_sha256": "ebbf51b4a8fc6147b5f92b68eec78d1eda0891e94c904a22fa66ffba3b3cd29a",
+        "label_sha256": "a3a8945a786f4ac0af8e509ad67d5e172bfe4a09c868595e42baffa9d211b02d"
+      },
+      "case-17": {
+        "input_sha256": "1c7848116fe652e6bc8b77b5f7aff102e749237661a3beaa49fc13a1c97a3404",
+        "label_sha256": "3d6689c15a05039400058addb158df9e23d99e9c6fc8f43555da22178c7dee05"
+      },
+      "case-18": {
+        "input_sha256": "3f054cef3d4aa5c9d05f94bd7c66f5a39b592a3a750dc2bb294f724755d89f95",
+        "label_sha256": "31233b39e05f7820dfc7a819c9d090f485da208c0da9240c0270a277e806b7a5"
+      },
+      "case-19": {
+        "input_sha256": "6333c6c37b87361370530b0f60622754d1282ecccb186ef9b7ffb24acc32193c",
+        "label_sha256": "6b5b40ecead8f032854ef5eb1698c8539dcdc4761d6fefbbe899e86a6165a595"
+      },
+      "case-20": {
+        "input_sha256": "a3c6b82d086113c546f29b34daba8d78736be94d1873c93801d3392ff7019ed6",
+        "label_sha256": "8a63a229078ff3388fa5b7f284889dfbe8122906e23c2572672dc1af1a11e849"
+      },
+      "case-21": {
+        "input_sha256": "6e361125da92b58adc2b97e9de1c4ef9c885e1332427635f68325495d0b9c91a",
+        "label_sha256": "64611fcec7e25fab187820fcc2d381ed82a2ca4504d350c8633379ce52379d35"
+      },
+      "case-22": {
+        "input_sha256": "aa7f0e7e33b3ef68d4e615dc0eee6f5140cfb3411e4c61f806959f2b460e4d0f",
+        "label_sha256": "4b352219e762d28865f35ce53423a65d14fee2509559c2e05218ed4b6aec11b8"
+      },
+      "case-23": {
+        "input_sha256": "49e7eb62b61976c6c2b2ec65f22e03be84c9991f80a766647b024bee44f54bb8",
+        "label_sha256": "5ddad3a7b279832aa5ea687beca6f9413570bfcba7d981bb3847cdae590d2358"
+      },
+      "case-24": {
+        "input_sha256": "4cb592dd99f6805634b99867e274f6667fb15aad12c172f10da841f240e48d97",
+        "label_sha256": "7429540c18a71a347bd13d004fc4517d22a896b9bf7f8d30a359a271fc5a89c2"
+      }
+    },
+    "akm": {
+      "version": "0.10.261130",
+      "bin": "bun ~/.codex/plugins/cache/akm-plugins/akm/0.10.261136/node_modules/akm-cli/dist/cli.js",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "bakeoff": {
+            "kind": "llm",
+            "provider": "openai"
+          }
+        },
+        "defaults": {
+          "llmEngine": "bakeoff"
+        },
+        "experimental": {
+          "improveAutonomy": true
+        },
+        "improve": {
+          "strategies": {
+            "bakeoff-memory-inference": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": true
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-schema-repair": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": true
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-session-summary": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": true,
+                  "indexSessions": true,
+                  "minSessionDuration": 0,
+                  "triage": {
+                    "enabled": false
+                  }
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            },
+            "bakeoff-consolidate-promote": {
+              "engine": "bakeoff",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": true,
+                  "minPoolSize": 0
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            }
+          }
+        },
+        "connections": {
+          "default": {
+            "reasoning_effort": "none"
+          }
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": "bakeoff-memory-inference",
+      "config_patch_sha256": "c85f118a2cf11b6c91b381b64e5148d6caa6253ad60cc9e8f04c4641a8669768",
+      "timeout_ms": 120000,
+      "seed": "1"
+    },
+    "engines": {
+      "bakeoff": {
+        "model": "inkling2-mini-exl3-b70",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      },
+      "reader": {
+        "model": "inkling2-mini-exl3-b70",
+        "endpoint": "<MODEL_BASE_URL>",
+        "endpoint_sha256": "6a325712e9921728f2b938dccdc1f37c1bb3d381dda1a57476bb6f739c129993",
+        "temperature": 0,
+        "enableThinking": null,
+        "timeoutMs": 120000
+      }
+    },
+    "eval_settings": {
+      "context_tokens_estimated": 1024,
+      "search_limit": 10,
+      "search_mode": "semantic",
+      "reader_settings_sha256": "52308d9ab91860d59ae7b838c4845371ed6be7c958330ee655fa17ea866121e0",
+      "reader_endpoint_sha256": "6a325712e9921728f2b938dccdc1f37c1bb3d381dda1a57476bb6f739c129993",
+      "embedding_settings_sha256": "336eadf446aaab70db1349a0b496d79bc3b3e50ee56367807705b5e663f2be1e",
+      "embedding_endpoint_sha256": null,
+      "embedding_model": "Xenova/bge-small-en-v1.5",
+      "prompt_sha256": "848875b05ef175a6b77cc1cae7bcb25f475b768f9d48c2e1d4cf701d48cf3319",
+      "corpus_input_sha256": "7f8f071bf6f86f3194fed3b0c47a6fd089e11704e0879d699bbf88c5d303afe2",
+      "corpus_labels_sha256": "76143797837c9ae34f256264a8b2550f1040d845f3310dc3248eca48f77e7a59",
+      "ordering": "six counterbalanced permutations; seed offsets case ordinal"
+    },
+    "completion": {
+      "selected": [
+        "case-01",
+        "case-02",
+        "case-03",
+        "case-04",
+        "case-05",
+        "case-06",
+        "case-07",
+        "case-08",
+        "case-09",
+        "case-10",
+        "case-11",
+        "case-12",
+        "case-13",
+        "case-14",
+        "case-15",
+        "case-16",
+        "case-17",
+        "case-18",
+        "case-19",
+        "case-20",
+        "case-21",
+        "case-22",
+        "case-23",
+        "case-24"
+      ],
+      "scored": [
+        "case-01",
+        "case-02",
+        "case-03",
+        "case-04",
+        "case-05",
+        "case-06",
+        "case-07",
+        "case-08",
+        "case-09",
+        "case-10",
+        "case-11",
+        "case-12",
+        "case-13",
+        "case-14",
+        "case-15",
+        "case-16",
+        "case-17",
+        "case-18",
+        "case-19",
+        "case-20",
+        "case-21",
+        "case-22",
+        "case-23",
+        "case-24"
+      ],
+      "errored": []
+    }
+  }
+}
