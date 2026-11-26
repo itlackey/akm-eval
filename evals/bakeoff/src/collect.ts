@@ -202,7 +202,9 @@ const rememberEnrich: Collect = async (c, sandbox, timeoutMs) => {
   const proposal = action.result?.proposal?.payload?.content;
   if (action.mode === "reflect" && typeof proposal === "string") return { outcome: "output", remembered, written: proposal, ...dates, served };
   const why = ([action.result?.reason, action.result?.error ?? (action.result?.errors as unknown[] | undefined)?.[0]].filter(Boolean).join(": ") || "reflect made no proposal").slice(0, 300);
-  if (callFailed(result, "reflect") || !["reflect-guard-rejected", "reflect-skipped"].includes(action.mode)) throw new Error(`reflect did not run to the end (${action.mode}): ${why}`);
+  // A reply akm could not use, even after its repair turn (on an untagged memory, one without 1-5 tags), is the model's, as in schema-repair.
+  const unusable = ["reflect-guard-rejected", "reflect-skipped"].includes(action.mode) || (action.mode === "reflect-failed" && ["parse_error", "llm_invalid_json"].includes(action.result?.reason));
+  if (!unusable) throw new Error(`reflect did not run to the end (${action.mode}): ${why}`);
   return { outcome: "unusable", reason: `akm queued no proposal: ${why}`, remembered, ...dates, served };
 };
 

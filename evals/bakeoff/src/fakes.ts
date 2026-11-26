@@ -7,7 +7,7 @@
 //   legacyInference          true: the memoryInference result has no noChange counter, as before akm#1208
 //   noInference              true: the improve result has no memoryInference, as when the pass did not run
 //   enrich[<memory name>]    { file: <memory file text>, say?: <the line akm prints on stderr> } | { crash: true }   (what akm remember writes, with or without --enrich)
-//   reflect[<memory name>]   { proposal: <memory file text> } | { accepted: <memory file text> } | { refused: <error> } | { provider: true } | { crash: true }
+//   reflect[<memory name>]   { proposal: <memory file text> } | { accepted: <memory file text> } | { refused: <error> } | { unparseable: <error> } | { provider: true } | { crash: true }
 //                            (akm improve memories/<name> --strategy bakeoff-remember-enrich; default: no proposal)
 // FAKE_OBSERVED says what akm does with a memory's date, for the probe's remember calls (names probe-*): "stamps" sets today's on a memory with none,
 // "keeps" keeps one given in leading frontmatter; both, one or neither (the default).
@@ -71,9 +71,9 @@ else if (cmd === "improve") {
     const p = plan.reflect?.[ref.split("/")[1]] ?? {};
     if (p.crash) crash();
     if (p.accepted) put(join(bundle, ref + ".md"), p.accepted);
-    const result = p.proposal || p.accepted ? { ok: true, proposal: { id: "prop-1", status: p.accepted ? "accepted" : "pending", source: "reflect", payload: { content: p.proposal ?? p.accepted } } } : { ok: false, reason: p.provider ? "provider_error" : "quality_rejected", error: p.refused ?? "no revision" };
+    const result = p.proposal || p.accepted ? { ok: true, proposal: { id: "prop-1", status: p.accepted ? "accepted" : "pending", source: "reflect", payload: { content: p.proposal ?? p.accepted } } } : { ok: false, reason: p.provider ? "provider_error" : p.unparseable ? "parse_error" : "quality_rejected", error: p.refused ?? p.unparseable ?? "no revision" };
     // akm's mode of the action says what came of it (loop-stages.ts): a judge refusal is reflect-guard-rejected, a failed call reflect-failed
-    const mode = result.ok ? "reflect" : p.provider ? "reflect-failed" : "reflect-guard-rejected";
+    const mode = result.ok ? "reflect" : p.provider || p.unparseable ? "reflect-failed" : "reflect-guard-rejected";
     out({ ok: true, actions: [{ ref, mode, result }], usageReport: usage("reflect", p.provider ? 1 : 0) });
   } else if (strategy === "bakeoff-schema-repair") {
     const ref = rest[0];

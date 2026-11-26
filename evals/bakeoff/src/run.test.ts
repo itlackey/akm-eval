@@ -203,22 +203,24 @@ describe("runCorpus", () => {
       { id: "accepted", process: "remember-enrich", files: { "memories/accepted.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
       { id: "moved", process: "remember-enrich", files: { "memories/moved.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
       { id: "refused", process: "remember-enrich", files: { "memories/refused.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
+      { id: "untagged", process: "remember-enrich", files: { "memories/untagged.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
       { id: "failed", process: "remember-enrich", files: { "memories/failed.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
     ];
     const plan = {
-      enrich: { proposed: { file: untagged("2026-03-04") }, accepted: { file: untagged(on) }, moved: { file: untagged(on) }, refused: { file: untagged(on) }, failed: { file: untagged(on) } },
-      reflect: { proposed: { proposal: tagged("2026-03-04") }, accepted: { accepted: tagged(on) }, moved: { proposal: tagged("2026-01-01") }, refused: { refused: "Reflect proposal quality gate rejected" }, failed: { provider: true } },
+      enrich: { proposed: { file: untagged("2026-03-04") }, accepted: { file: untagged(on) }, moved: { file: untagged(on) }, refused: { file: untagged(on) }, untagged: { file: untagged(on) }, failed: { file: untagged(on) } },
+      reflect: { proposed: { proposal: tagged("2026-03-04") }, accepted: { accepted: tagged(on) }, moved: { proposal: tagged("2026-01-01") }, refused: { refused: "Reflect proposal quality gate rejected" }, untagged: { unparseable: "direct reflect frontmatterPatch.tags must be an array of 1-5 tags: the memory has none" }, failed: { provider: true } },
     };
     const { corpus, ctx, calls, results } = setup(specs, plan);
     const summary = await quiet(() => runCorpus(corpus, ctx, results));
     const rows = samplesOf(summary);
-    expect(rows.map((r) => [r.id, r.outcome, r.correct])).toEqual([["proposed", "output", true], ["accepted", "output", true], ["moved", "output", false], ["refused", "unusable", false], ["failed", "error", null]]);
+    expect(rows.map((r) => [r.id, r.outcome, r.correct])).toEqual([["proposed", "output", true], ["accepted", "output", true], ["moved", "output", false], ["refused", "unusable", false], ["untagged", "unusable", false], ["failed", "error", null]]);
     expect(rows[0]).toMatchObject({ written: tagged("2026-03-04"), remembered: untagged("2026-03-04"), written_on: on, served: "served-model" });
     expect(rows[2].checks).toMatchObject({ "carries observed": true, "observed is the write date": false, "improve keeps observed": false });
     expect(rows[3].reason).toBe("akm queued no proposal: quality_rejected: Reflect proposal quality gate rejected");
-    for (const row of rows.slice(0, 4)) expect("raw" in (MEASUREMENT.rawOf(row) as object)).toBe(true);
+    expect(rows[4].reason).toBe("akm queued no proposal: parse_error: direct reflect frontmatterPatch.tags must be an array of 1-5 tags: the memory has none"); // its reply had no tags, even after repair
+    for (const row of rows.slice(0, 5)) expect("raw" in (MEASUREMENT.rawOf(row) as object)).toBe(true);
     const args = calls().map((c) => c.args.join(" "));
-    expect(rows.slice(0, 4).every((r) => r.akm_sets_observed === true)).toBe(true); // the error row has no output to score
+    expect(rows.slice(0, 5).every((r) => r.akm_sets_observed === true)).toBe(true); // the error row has no output to score
     expect(args.slice(0, 5)).toEqual(["config get experimental.memoryEnrichment", "remember --name probe-stamps", "remember --name probe-keeps", "remember --name proposed --format json", "improve memories/proposed --strategy bakeoff-remember-enrich --no-sync --json-to-stdout --format json"]);
     expect(args.some((a) => a.includes("--enrich"))).toBe(false);
     expect(args.filter((a) => a.startsWith("config get"))).toHaveLength(1);
