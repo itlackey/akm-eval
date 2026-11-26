@@ -8,7 +8,7 @@
 // The prompts are akm's own. Each process is one command:
 //
 //   memory-inference     akm index, akm improve --strategy bakeoff-memory-inference   reads memories/<name>.derived.md
-//   remember-enrich      akm remember --name <name>, akm improve memories/<name> --strategy bakeoff-remember-enrich   reads memories/<name>.md, or reflect's proposal
+//   remember-enrich      akm remember --name <name>, akm improve memories/<name> --strategy bakeoff-remember-enrich   reads memories/<name>.md, or the tags proposal
 //                        (akm with experimental.memoryEnrichment; before it, akm remember --enrich --name <name>, which reads memories/<name>.md)
 //   schema-repair        akm index, akm improve <lesson> --strategy bakeoff-schema-repair    reads the proposal of source schema-repair
 //   session-summary      akm proposal extract --sessions claude --session-id <id>     reads sessions/claude/<id>.md (--type claude before 0.10.261120)
@@ -19,7 +19,7 @@ import { basename, dirname, join } from "node:path";
 import { type Sandbox, createSandbox, engineConfig, extractSessionsArgs, hasMemoryEnrichment, observedSupport, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
-import { type Case, type Inference, type Process, type Raw, type Row, makeRow } from "./score.ts";
+import { type Case, type Inference, type Process, type Raw, type Row, makeRow, parseDocument } from "./score.ts";
 
 export const NAME = "bakeoff";
 
@@ -165,8 +165,8 @@ const today = (): string => {
 /**
  * remember-enrich: `akm remember` on the text of the memory, with the case's explicit observation date, if any, in a leading frontmatter block (akm has no
  * `--observed` flag; it keeps a body's leading frontmatter under its own keys). On an akm with `experimental.memoryEnrichment` the memory is written with no
- * tags, then `akm improve memories/<name>` with only reflect on proposes them: what is read is the memory, if improve accepted the proposal, else the
- * proposal. Before it, `akm remember --enrich` does both in one command, and exits 0 and writes the memory without enrichment when the model gives
+ * tags, then `akm improve memories/<name>` with only reflect on proposes them, as a proposal of their own that the memory.tags judge decides: what
+ * is read is the memory, if improve accepted the tags, else the tags proposal. Before it, `akm remember --enrich` does both in one command, and exits 0 and writes the memory without enrichment when the model gives
  * nothing, and says so on stderr.
  */
 const rememberEnrich: Collect = async (c, sandbox, timeoutMs) => {
@@ -193,19 +193,30 @@ const rememberEnrich: Collect = async (c, sandbox, timeoutMs) => {
   const ref = `memories/${name}`;
   const result = await runAkmJson<Obj>(sandbox, ["improve", ref, "--strategy", STRATEGIES["remember-enrich"], "--no-sync", ...requireEnginesArgs(), "--json-to-stdout"], { timeoutMs });
   const served = servedBy(result, "reflect");
+  // The tags are a proposal of their own (akm#1836), judged by `memory.tags`; the revision of the description is judged apart and is not what
+  // this process measures. The memory holds the tags if improve accepted them; otherwise the tags proposal does.
   const after = readFileSync(path, "utf8");
-  if (after !== remembered) return { outcome: "output", remembered, written: after, ...dates, served };
-  // akm records reflect's action by what came of it: `reflect` (a proposal), `reflect-guard-rejected` (its judge or content policy refused the
-  // revision), `reflect-skipped` (no change), `reflect-failed` (a call, parse or timeout failure) or `reflect-cooldown` (not run).
-  const action = (result.actions as Obj[] | undefined)?.find((a) => a.ref === ref && typeof a.mode === "string" && a.mode.startsWith("reflect"));
-  if (!action) throw new Error("improve did not reflect on the memory");
-  const proposal = action.result?.proposal?.payload?.content;
-  if (action.mode === "reflect" && typeof proposal === "string") return { outcome: "output", remembered, written: proposal, ...dates, served };
-  const why = ([action.result?.reason, action.result?.error ?? (action.result?.errors as unknown[] | undefined)?.[0]].filter(Boolean).join(": ") || "reflect made no proposal").slice(0, 300);
+  if ((parseDocument(after)?.data.tags ?? null) !== null) return { outcome: "output", remembered, written: after, ...dates, served };
+  // akm records reflect's action by what came of it: `reflect` (a proposal), `reflect-guard-rejected` (a judge or content policy refused it),
+  // `reflect-skipped` (no change), `reflect-failed` (a call, parse or timeout failure) or `reflect-cooldown` (not run). The revision's result
+  // carries the outcome of the tags as `tags`, there whenever the reply had tags.
+  const revision = (result.actions as Obj[] | undefined)?.find((a) => a.ref === ref && typeof a.mode === "string" && a.mode.startsWith("reflect"));
+  if (!revision) throw new Error("improve did not reflect on the memory");
+  const tags = revision.result?.tags as Obj | undefined;
+  const proposal = tags?.proposal?.payload?.content;
+  if (tags?.ok === true && typeof proposal === "string") return { outcome: "output", remembered, written: proposal, ...dates, served };
+  const outcome = tags ?? revision.result ?? {};
+  const why = ([outcome.reason, outcome.error ?? (outcome.errors as unknown[] | undefined)?.[0]].filter(Boolean).join(": ") || "no reason given").slice(0, 300);
+  if (callFailed(result, "reflect")) throw new Error(`the model call of reflect failed: ${why}`);
   // A reply akm could not use, even after its repair turn (on an untagged memory, one without 1-5 tags), is the model's, as in schema-repair.
-  const unusable = ["reflect-guard-rejected", "reflect-skipped"].includes(action.mode) || (action.mode === "reflect-failed" && ["parse_error", "llm_invalid_json"].includes(action.result?.reason));
-  if (!unusable) throw new Error(`reflect did not run to the end (${action.mode}): ${why}`);
-  return { outcome: "unusable", reason: `akm queued no proposal: ${why}`, remembered, ...dates, served };
+  if (tags) {
+    if (["quality_rejected", "content_policy_reject"].includes(tags.reason)) return { outcome: "unusable", reason: `the memory.tags judge refused the tags: ${why}`, remembered, ...dates, served };
+    if (["parse_error", "llm_invalid_json", "no_change"].includes(tags.reason)) return { outcome: "unusable", reason: `akm queued no tags: ${why}`, remembered, ...dates, served };
+    throw new Error(`the tags proposal did not run to the end: ${why}`);
+  }
+  const usable = revision.mode !== "reflect-cooldown" && (revision.mode !== "reflect-failed" || ["parse_error", "llm_invalid_json"].includes(revision.result?.reason));
+  if (!usable) throw new Error(`reflect did not run to the end (${revision.mode}): ${why}`);
+  return { outcome: "unusable", reason: `reflect gave no tags (${revision.mode}): ${why}`, remembered, ...dates, served };
 };
 
 /** schema-repair: the lesson in a bundle, `akm improve <lesson>` with only validation on, which repairs a lesson that has no description, and the proposal it queues. */

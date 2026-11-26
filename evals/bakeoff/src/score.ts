@@ -286,7 +286,7 @@ export interface Raw {
   derived?: string;
   /** memory-inference: the counters of akm's result that say why there is a derived memory or none. Rows collected before bakeoff 0.3 lack it. */
   inference?: Inference;
-  /** remember-enrich: the memory with its tags: the file improve accepted, or reflect's proposal (an akm with `experimental.memoryEnrichment`), or the file `akm remember --enrich` wrote. */
+  /** remember-enrich: the memory with its tags: the file improve accepted, or the tags proposal (an akm with `experimental.memoryEnrichment`), or the file `akm remember --enrich` wrote. */
   written?: string;
   /** remember-enrich, on an akm with `experimental.memoryEnrichment`: the memory as `akm remember` wrote it, before improve. */
   remembered?: string;

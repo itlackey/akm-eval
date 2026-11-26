@@ -7,8 +7,9 @@
 //   legacyInference          true: the memoryInference result has no noChange counter, as before akm#1208
 //   noInference              true: the improve result has no memoryInference, as when the pass did not run
 //   enrich[<memory name>]    { file: <memory file text>, say?: <the line akm prints on stderr> } | { crash: true }   (what akm remember writes, with or without --enrich)
-//   reflect[<memory name>]   { proposal: <memory file text> } | { accepted: <memory file text> } | { refused: <error> } | { unparseable: <error> } | { provider: true } | { crash: true }
-//                            (akm improve memories/<name> --strategy bakeoff-remember-enrich; default: no proposal)
+//   reflect[<memory name>]   { proposal: <tags proposal text> } | { accepted: <memory file text> } | { refused: <error of the memory.tags judge> } | { unparseable: <error> }
+//                            | { provider: true } | { crash: true }, and revisionRefused: true for a revision its judge refused (akm improve memories/<name>
+//                            --strategy bakeoff-remember-enrich; default: a reply with no tags). The tags outcome rides on the revision's result as \`tags\` (akm#1836).
 // FAKE_OBSERVED says what akm does with a memory's date, for the probe's remember calls (names probe-*): "stamps" sets today's on a memory with none,
 // "keeps" keeps one given in leading frontmatter; both, one or neither (the default).
 //   repair[<lesson ref>]     { outcome: "queued", content } | { outcome: "error", error } | { crash: true }
@@ -71,10 +72,12 @@ else if (cmd === "improve") {
     const p = plan.reflect?.[ref.split("/")[1]] ?? {};
     if (p.crash) crash();
     if (p.accepted) put(join(bundle, ref + ".md"), p.accepted);
-    const result = p.proposal || p.accepted ? { ok: true, proposal: { id: "prop-1", status: p.accepted ? "accepted" : "pending", source: "reflect", payload: { content: p.proposal ?? p.accepted } } } : { ok: false, reason: p.provider ? "provider_error" : p.unparseable ? "parse_error" : "quality_rejected", error: p.refused ?? p.unparseable ?? "no revision" };
-    // akm's mode of the action says what came of it (loop-stages.ts): a judge refusal is reflect-guard-rejected, a failed call reflect-failed
-    const mode = result.ok ? "reflect" : p.provider || p.unparseable ? "reflect-failed" : "reflect-guard-rejected";
-    out({ ok: true, actions: [{ ref, mode, result }], usageReport: usage("reflect", p.provider ? 1 : 0) });
+    // akm's mode of an action says what came of it (loop-stages.ts): a judge refusal is reflect-guard-rejected, a failed call or an unparseable reply reflect-failed
+    const tags = p.proposal || p.accepted ? { ok: true, proposal: { id: "prop-2", status: p.accepted ? "accepted" : "pending", source: "reflect", payload: { content: p.proposal ?? p.accepted } } } : p.refused ? { ok: false, reason: "quality_rejected", error: p.refused } : undefined;
+    const failed = p.provider ? { ok: false, reason: "provider_error", error: "upstream failure" } : p.unparseable ? { ok: false, reason: "parse_error", error: p.unparseable } : undefined;
+    const revision = failed ? { ref, mode: "reflect-failed", result: failed } : { ref, mode: p.revisionRefused ? "reflect-guard-rejected" : "reflect", result: { ok: !p.revisionRefused, ...(p.revisionRefused ? { reason: "quality_rejected", error: "Reflect proposal quality gate rejected" } : { proposal: { id: "prop-1", status: "pending", source: "reflect", payload: { content: "a revision" } } }), ...(tags ? { tags } : {}) } };
+    const actions = [revision, ...(tags ? [{ ref, mode: tags.ok ? "reflect" : "reflect-guard-rejected", result: tags }] : [])];
+    out({ ok: true, actions, usageReport: usage("reflect", p.provider ? 1 : 0) });
   } else if (strategy === "bakeoff-schema-repair") {
     const ref = rest[0];
     const p = plan.repair?.[ref] ?? { outcome: "error", error: "LLM returned unparseable JSON for schema repair" };

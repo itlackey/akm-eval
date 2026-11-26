@@ -20,8 +20,9 @@ Add a release entry here when a version changes.
 
 - bakeoff collection 0.5 and scoring 0.6 (were 0.4 and 0.5): `remember-enrich` measures what replaces `akm remember --enrich`.
   - On an akm with `experimental.memoryEnrichment` (0.10.261134, akm#1833), the memory is written with `akm remember` and no tags, and
-    `akm improve memories/<name>` with only reflect on (strategy `bakeoff-remember-enrich`) proposes them. The row holds the memory improve
-    accepted or reflect proposed (`written`) and the memory before improve (`remembered`). The run asks akm whether it has the setting
+    `akm improve memories/<name>` with only reflect on (strategy `bakeoff-remember-enrich`) proposes them, from akm#1836 as a proposal of
+    their own that the `memory.tags` judge decides; reflect's revision of the description is not scored. The row holds the memory improve
+    accepted or the tags proposal (`written`) and the memory before improve (`remembered`). The run asks akm whether it has the setting
     (`akm config get experimental.memoryEnrichment`). Older akm keeps `--enrich`; an akm with neither is not applicable, as before.
   - akm sets the observation date, never the model. A case's `observed_at` is now the date it gives `akm remember` (in a leading
     frontmatter block, `observed: <date>`; akm has no `--observed` flag), and null means none, so the memory must carry the date it was
