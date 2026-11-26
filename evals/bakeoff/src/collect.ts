@@ -195,12 +195,14 @@ const rememberEnrich: Collect = async (c, sandbox, timeoutMs) => {
   const served = servedBy(result, "reflect");
   const after = readFileSync(path, "utf8");
   if (after !== remembered) return { outcome: "output", remembered, written: after, ...dates, served };
-  const action = (result.actions as Obj[] | undefined)?.find((a) => a.ref === ref && a.mode === "reflect");
+  // akm records reflect's action by what came of it: `reflect` (a proposal), `reflect-guard-rejected` (its judge or content policy refused the
+  // revision), `reflect-skipped` (no change), `reflect-failed` (a call, parse or timeout failure) or `reflect-cooldown` (not run).
+  const action = (result.actions as Obj[] | undefined)?.find((a) => a.ref === ref && typeof a.mode === "string" && a.mode.startsWith("reflect"));
   if (!action) throw new Error("improve did not reflect on the memory");
   const proposal = action.result?.proposal?.payload?.content;
-  if (typeof proposal === "string") return { outcome: "output", remembered, written: proposal, ...dates, served };
-  if (callFailed(result, "reflect")) throw new Error("the model call of reflect failed");
+  if (action.mode === "reflect" && typeof proposal === "string") return { outcome: "output", remembered, written: proposal, ...dates, served };
   const why = ([action.result?.reason, action.result?.error ?? (action.result?.errors as unknown[] | undefined)?.[0]].filter(Boolean).join(": ") || "reflect made no proposal").slice(0, 300);
+  if (callFailed(result, "reflect") || !["reflect-guard-rejected", "reflect-skipped"].includes(action.mode)) throw new Error(`reflect did not run to the end (${action.mode}): ${why}`);
   return { outcome: "unusable", reason: `akm queued no proposal: ${why}`, remembered, ...dates, served };
 };
 

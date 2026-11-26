@@ -72,7 +72,9 @@ else if (cmd === "improve") {
     if (p.crash) crash();
     if (p.accepted) put(join(bundle, ref + ".md"), p.accepted);
     const result = p.proposal || p.accepted ? { ok: true, proposal: { id: "prop-1", status: p.accepted ? "accepted" : "pending", source: "reflect", payload: { content: p.proposal ?? p.accepted } } } : { ok: false, reason: p.provider ? "provider_error" : "quality_rejected", error: p.refused ?? "no revision" };
-    out({ ok: true, actions: [{ ref, mode: "reflect", result }], usageReport: usage("reflect", p.provider ? 1 : 0) });
+    // akm's mode of the action says what came of it (loop-stages.ts): a judge refusal is reflect-guard-rejected, a failed call reflect-failed
+    const mode = result.ok ? "reflect" : p.provider ? "reflect-failed" : "reflect-guard-rejected";
+    out({ ok: true, actions: [{ ref, mode, result }], usageReport: usage("reflect", p.provider ? 1 : 0) });
   } else if (strategy === "bakeoff-schema-repair") {
     const ref = rest[0];
     const p = plan.repair?.[ref] ?? { outcome: "error", error: "LLM returned unparseable JSON for schema repair" };
