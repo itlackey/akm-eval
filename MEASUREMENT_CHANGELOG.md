@@ -30,9 +30,11 @@ Add a release entry here when a version changes.
     observed`. A memory with no date now fails. On improve rows `metadata covers <keyword>` reads the tags only, since the description is
     akm's own; on `--enrich` rows it reads the tags and description, no longer the date. The case input digest of `remember-enrich` adds
     the explicit date.
-  - An akm that does not stamp `observed` on write (0.10.261133 and earlier) fails `carries observed` and `observed is the write date`
-    on every case without an explicit date, for every model. Read that as akm's behaviour, not a model regression.
-  - Rows collected before 0.5 have no `written_on`: `scripts/rescore` refuses their `remember-enrich` output rows, which have to be
+  - The date checks are left out where the akm under test does not set the date the case expects, since they would fail for every
+    model: no stamping on write (before the date fix on `release/0.10.261134`) for a case without an explicit date, and no leading-
+    frontmatter `observed` (before 0.10.261109, akm#1449) for one with an explicit date. The run asks akm with two `akm remember` calls
+    and no model call, and records the answer per row as `akm_sets_observed`.
+  - Rows collected before 0.5 have no `written_on` or `akm_sets_observed`: `scripts/rescore` refuses their `remember-enrich` output rows, which have to be
     collected again. Other processes are unchanged and compare as before.
 
 - cli-ratification removed. `evals/ratification` is the one agent ratification (akm#1629); on akm 0.11 four of cli-ratification's 14 cards tested removed surfaces and both its regression bugs are closed. Its published reports stay under `reports/`. ratification, no version change: its knowledge check reads a search's `results` first and keeps `hits` for earlier builds, the same check (akm 0.11 renamed the field; rule above on version-gated spellings).

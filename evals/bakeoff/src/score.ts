@@ -169,18 +169,23 @@ function scoreInference(c: Case, derived: string | undefined, noChange: boolean)
  * remember-enrich: the memory with the tags the model gave. With `remembered` (an akm with `experimental.memoryEnrichment`), `written` is the memory
  * improve's reflect proposed or accepted, and the tags are the model's while the description is akm's own from the body, so the keywords are looked
  * for in the tags. Without it, `written` is what `akm remember --enrich` wrote, tags and description both the model's. The observation date is akm's:
- * the explicit one the case gave, else the date the memory was written (`writtenOn`), and improve must leave it as remember wrote it.
+ * the explicit one the case gave, else the date the memory was written (`writtenOn`), and improve must leave it as remember wrote it. On an akm that does
+ * not set that date (`akmSetsObserved` false: no stamping before the date fix of 0.10.261134, no leading frontmatter before 0.10.261109), the date is
+ * not checked: it would fail for every model.
  */
-function scoreEnrich(c: Case, written: string | undefined, remembered: string | undefined, writtenOn: string | undefined): Scored {
+function scoreEnrich(c: Case, written: string | undefined, remembered: string | undefined, writtenOn: string | undefined, akmSetsObserved: boolean): Scored {
   const doc = parseDocument(written);
   const tags = strings(doc?.data.tags);
   const description = text(doc?.data.description);
   const given = observedOf(doc?.data);
   const structure = !!doc && !!tags && tags.length >= 1 && tags.length <= 5 && tags.every((t) => t !== "" && t === t.toLowerCase()) && description !== "";
   const output = normalize(remembered === undefined ? { tags: tags ?? [], description } : (tags ?? []));
-  const checks: Checks = { "carries observed": !!doc && typeof given === "string" && given.trim() !== "" };
-  if (c.expected.observed_at) checks["observed is the explicit date"] = !!doc && given === c.expected.observed_at;
-  else checks["observed is the write date"] = !!doc && writtenOn !== undefined && given === writtenOn;
+  const checks: Checks = {};
+  if (akmSetsObserved) {
+    checks["carries observed"] = !!doc && typeof given === "string" && given.trim() !== "";
+    if (c.expected.observed_at) checks["observed is the explicit date"] = !!doc && given === c.expected.observed_at;
+    else checks["observed is the write date"] = !!doc && writtenOn !== undefined && given === writtenOn;
+  }
   if (remembered !== undefined) checks["improve keeps observed"] = !!doc && given === observedOf(parseDocument(remembered)?.data);
   for (const term of c.expected.keywords ?? []) checks[`metadata covers ${term}`] = !!doc && containsTerm(output, term);
   return { structure, checks };
@@ -287,6 +292,8 @@ export interface Raw {
   remembered?: string;
   /** remember-enrich: the local date, YYYY-MM-DD, the memory was written on. Rows collected before bakeoff 0.5 lack it. */
   written_on?: string;
+  /** remember-enrich: the akm under test sets the date the case expects (keeps the explicit one, or stamps the write date). When false, the date is not scored. */
+  akm_sets_observed?: boolean;
   /** schema-repair: the content of the proposal akm queued, the lesson with its two fields repaired. */
   proposal?: string;
   /** session-summary: the session asset akm wrote, without the sandbox's paths (`log_path`, `access`). */
@@ -332,7 +339,7 @@ function score(c: Case, run: Raw): Scored {
     case "memory-inference":
       return scoreInference(c, output as string | undefined, run.outcome === "no-change");
     case "remember-enrich":
-      return scoreEnrich(c, output as string | undefined, run.remembered, run.written_on);
+      return scoreEnrich(c, output as string | undefined, run.remembered, run.written_on, run.akm_sets_observed !== false);
     case "schema-repair":
       return scoreRepair(c, output as string | undefined);
     case "session-summary":
@@ -348,7 +355,7 @@ export function makeRow(c: Case, run: Raw): Row {
   const base = { id: c.id, process: c.process, outcome: run.outcome, reason: run.reason ?? "", ...(run.served && run.outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
   if (run.outcome === "error") return { ...base, structure: null, correct: null, checks: null, error: run.error ?? run.reason, ...(run.timedOut ? { timed_out: true as const } : {}) };
   const { structure, checks } = score(c, run);
-  const kept = Object.fromEntries((["derived", "inference", "written", "remembered", "written_on", "proposal", "asset", "planned", "promoted", "skipped"] as const).filter((k) => run[k] !== undefined).map((k) => [k, run[k]]));
+  const kept = Object.fromEntries((["derived", "inference", "written", "remembered", "written_on", "akm_sets_observed", "proposal", "asset", "planned", "promoted", "skipped"] as const).filter((k) => run[k] !== undefined).map((k) => [k, run[k]]));
   return { ...base, ...kept, structure, correct: (structure === true || run.outcome === "no-change") && Object.values(checks).every(Boolean), checks };
 }
 
@@ -453,9 +460,10 @@ export function rawOf(row: Record<string, any>): { raw: Raw } | { missing: strin
   }
   // The observation date of an enriched memory is checked against the date it was written, which a row collected before bakeoff 0.5 does not have.
   if (row.process === "remember-enrich" && row.outcome === "output" && typeof row.written_on !== "string") missing.push("written_on (the date the memory was written; recollect the case with bakeoff 0.5)");
+  if (row.process === "remember-enrich" && row.outcome === "output" && typeof row.akm_sets_observed !== "boolean") missing.push("akm_sets_observed (whether akm sets the date the case expects; recollect the case with bakeoff 0.5)");
   if (missing.length > 0) return { missing };
-  const { derived, inference, written, remembered, written_on, proposal, asset, promoted, planned, skipped } = row;
-  return { raw: { outcome: row.outcome, reason: row.reason ?? "", served: row.served, seconds: row.seconds, derived, inference, written, remembered, written_on, proposal, asset, planned, promoted, skipped, error: row.error, timedOut: row.timed_out === true } };
+  const { derived, inference, written, remembered, written_on, akm_sets_observed, proposal, asset, promoted, planned, skipped } = row;
+  return { raw: { outcome: row.outcome, reason: row.reason ?? "", served: row.served, seconds: row.seconds, derived, inference, written, remembered, written_on, akm_sets_observed, proposal, asset, planned, promoted, skipped, error: row.error, timedOut: row.timed_out === true } };
 }
 
 /** A case that ended in an error has no verdict. */

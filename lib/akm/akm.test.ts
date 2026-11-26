@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { ENRICH_REMOVED_FROM, SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, connectionsConfig, createSandbox, doctorArgs, engineConfig, extractSessionsArgs, hasMemoryEnrichment, improveTimeoutFlag, requireEnginesArgs, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, useConfigForm, writeConfig, writtenConfigForm } from "./akm.ts";
+import { ENRICH_REMOVED_FROM, SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, connectionsConfig, createSandbox, doctorArgs, engineConfig, extractSessionsArgs, hasMemoryEnrichment, improveTimeoutFlag, observedSupport, requireEnginesArgs, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, useConfigForm, writeConfig, writtenConfigForm } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -631,6 +631,37 @@ process.exit(process.argv[4] === "experimental.memoryEnrichment" && config.exper
       useConfigForm("0.10.261120");
       expect(withEnv({ AKM_BIN: fake(false) }, () => hasMemoryEnrichment())).toBe(false);
       expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["config get experimental.memoryEnrichment", "config get experimental.memoryEnrichment"]);
+    } finally {
+      useConfigForm("0.9.99-test");
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("observedSupport", () => {
+  test("asks akm with two remember calls whether it stamps a memory's date and keeps a given one, once per akm command and version", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lib-akm-test-"));
+    try {
+      const log = join(dir, "calls");
+      const fake = (does: string): string => {
+        const script = join(dir, `akm-${does || "none"}.ts`);
+        writeFileSync(script, `import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(log)}, process.argv.slice(2).join(" ") + "\\n");
+const text = await Bun.stdin.text();
+const given = /^observed: (\\S+)/m.exec(text)?.[1];
+const observed = ${JSON.stringify(does)}.includes("keeps") && given ? given : ${JSON.stringify(does)}.includes("stamps") ? "2026-11-26" : undefined;
+mkdirSync(process.env.AKM_BUNDLE_DIR + "/memories", { recursive: true });
+writeFileSync(process.env.AKM_BUNDLE_DIR + "/memories/" + process.argv[4] + ".md", "---\\n" + (observed ? "observed: " + observed + "\\n" : "") + "---\\nA note.\\n");
+`);
+        return commandLine(["bun", script]);
+      };
+      useConfigForm("0.10.261134");
+      expect(withEnv({ AKM_BIN: fake("stamps keeps") }, () => [observedSupport(), observedSupport()])).toEqual([{ stamps: true, keeps: true }, { stamps: true, keeps: true }]);
+      useConfigForm("0.10.261133");
+      expect(withEnv({ AKM_BIN: fake("keeps") }, () => observedSupport())).toEqual({ stamps: false, keeps: true });
+      useConfigForm("0.10.261100");
+      expect(withEnv({ AKM_BIN: fake("") }, () => observedSupport())).toEqual({ stamps: false, keeps: false });
+      expect(readFileSync(log, "utf8").trim().split("\n")).toHaveLength(6);
     } finally {
       useConfigForm("0.9.99-test");
       rmSync(dir, { recursive: true, force: true });

@@ -9,6 +9,8 @@
 //   enrich[<memory name>]    { file: <memory file text>, say?: <the line akm prints on stderr> } | { crash: true }   (what akm remember writes, with or without --enrich)
 //   reflect[<memory name>]   { proposal: <memory file text> } | { accepted: <memory file text> } | { refused: <error> } | { provider: true } | { crash: true }
 //                            (akm improve memories/<name> --strategy bakeoff-remember-enrich; default: no proposal)
+// FAKE_OBSERVED says what akm does with a memory's date, for the probe's remember calls (names probe-*): "stamps" sets today's on a memory with none,
+// "keeps" keeps one given in leading frontmatter; both, one or neither (the default).
 //   repair[<lesson ref>]     { outcome: "queued", content } | { outcome: "error", error } | { crash: true }
 //   session[<session id>]    { asset: <session asset text> } | { skip: <skipReason> } | { none: true } | { crash: true }
 //   promote                  { refs: [<memory ref queued>], planned?: [<memory ref planned, default refs>], skipped?: { <ref>: <reason> }, failedChunks?: n, warnings?: [...], provider?: true } | { crash: true }
@@ -85,6 +87,14 @@ else if (cmd === "improve") {
     save();
     out({ ok: true, consolidation: { ok: true, totalChunks: 1, failedChunks: p.failedChunks ?? 0, warnings: p.warnings ?? ["Anti-collapse: injected 1 random cluster member(s)"], planned: (p.planned ?? p.refs ?? []).map((ref) => ({ op: "promote", ref, knowledgeRef: "knowledge/" + ref.split("/")[1] })), skipReasons: Object.entries(p.skipped ?? {}).map(([ref, reason]) => ({ ref, skips: [{ op: "promote", reason }] })) }, usageReport: usage("consolidate", p.provider ? 1 : 0) });
   } else { console.error("unexpected strategy " + strategy); process.exit(1); }
+}
+else if (cmd === "remember" && flag("--name").startsWith("probe-")) {
+  const name = flag("--name");
+  const does = process.env.FAKE_OBSERVED ?? "";
+  const given = /^---\\n[\\s\\S]*?^observed: (\\S+)/m.exec(stdin)?.[1];
+  const observed = does.includes("keeps") && given ? given : does.includes("stamps") ? new Date().toISOString().slice(0, 10) : undefined;
+  put(join(bundle, "memories", name + ".md"), "---\\n" + (observed ? "observed: " + observed + "\\n" : "") + "type: memory\\n---\\nA note.\\n");
+  out({ ok: true });
 }
 else if (cmd === "remember") {
   const name = flag("--name");

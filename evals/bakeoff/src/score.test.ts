@@ -249,6 +249,12 @@ describe("remember-enrich", () => {
     expect(makeRow(undated, ok({ written: memory(["queue"], `observed: ${on}\n`) })).checks).toMatchObject({ "observed is the write date": false }); // no write date to compare with
   });
 
+  test("on an akm that does not set the date the case expects, the date is not checked: it would fail for every model", () => {
+    expect(makeRow(undated, ok({ written: memory(["queue"]), written_on: on, akm_sets_observed: false })).checks).toEqual({ "metadata covers queue": true });
+    expect(makeRow(dated, ok({ written: memory(["queue", "retry"]), written_on: on, akm_sets_observed: false }))).toMatchObject({ correct: true });
+    expect(makeRow(undated, ok({ written: memory(["queue"]), written_on: on, akm_sets_observed: true })).checks).toMatchObject({ "carries observed": false });
+  });
+
   test("the date is read under observed (newer akm) or observed_at (older akm)", () => {
     expect(makeRow(dated, ok({ written: memory(["queue", "retry"], "observed_at: 2026-02-14\n"), written_on: on }))).toMatchObject({ correct: true });
     expect(makeRow(undated, ok({ written: memory(["queue"], `observed_at: ${on}\n`), written_on: on }))).toMatchObject({ correct: true });
@@ -379,8 +385,8 @@ describe("scoring a stored row again", () => {
 
   test("a row that lacks what the scorer reads is refused, and the fields are named", () => {
     expect(rawOf({ process: "memory-inference", outcome: "output", reason: "", seconds: 1 })).toEqual({ missing: ["derived"] });
-    expect(rawOf({ process: "remember-enrich", outcome: "output", reason: "", seconds: 1, written_on: "2026-11-26" })).toEqual({ missing: ["written"] });
-    expect(rawOf({ process: "remember-enrich", outcome: "output", reason: "", seconds: 1, written: "x" })).toEqual({ missing: ["written_on (the date the memory was written; recollect the case with bakeoff 0.5)"] });
+    expect(rawOf({ process: "remember-enrich", outcome: "output", reason: "", seconds: 1, written_on: "2026-11-26", akm_sets_observed: true })).toEqual({ missing: ["written"] });
+    expect(rawOf({ process: "remember-enrich", outcome: "output", reason: "", seconds: 1, written: "x" })).toEqual({ missing: ["written_on (the date the memory was written; recollect the case with bakeoff 0.5)", "akm_sets_observed (whether akm sets the date the case expects; recollect the case with bakeoff 0.5)"] });
     expect(rawOf({ process: "schema-repair", outcome: "output", reason: "", seconds: 1 })).toEqual({ missing: ["proposal"] });
     expect(rawOf({ process: "session-summary", outcome: "output", reason: "", seconds: 1 })).toEqual({ missing: ["asset"] });
     expect(rawOf({ process: "consolidate-promote", outcome: "output", reason: "", seconds: 1, promoted: [] })).toEqual({ missing: ["planned"] });

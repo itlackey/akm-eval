@@ -16,7 +16,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { type Sandbox, createSandbox, engineConfig, extractSessionsArgs, hasMemoryEnrichment, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, createSandbox, engineConfig, extractSessionsArgs, hasMemoryEnrichment, observedSupport, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
 import { type Case, type Inference, type Process, type Raw, type Row, makeRow } from "./score.ts";
@@ -175,30 +175,33 @@ const rememberEnrich: Collect = async (c, sandbox, timeoutMs) => {
   const improve = hasMemoryEnrichment();
   const observed = c.expected.observed_at;
   const stdin = `${observed ? `---\nobserved: ${observed}\n---\n` : ""}${bodyOf(c.texts[file] as string)}`;
+  // Does this akm set the date the case expects: keep the explicit one, or stamp the day it wrote the memory? Where it does not, the date is not scored.
+  const support = observedSupport();
   const r = await runAkm(sandbox, ["remember", ...(improve ? [] : ["--enrich"]), "--name", name, "--format", "json"], { stdin, timeoutMs });
   const writtenOn = today();
+  const dates = { written_on: writtenOn, akm_sets_observed: observed ? support.keeps : support.stamps };
   if (r.timedOut) throw new Error(`akm remember timed out after ${+(timeoutMs / 1000).toFixed(1)}s`);
   if (r.code !== 0) throw new Error(exitMessage(r.code, r.stderr, r.stdout));
   const said = improve ? undefined : r.stderr.split("\n").find((l) => /--enrich/.test(l))?.trim();
   if (said && /requires an engine|--enrich failed/.test(said)) throw new Error(said);
-  if (said && /invalid JSON/.test(said)) return { outcome: "unusable", reason: said, written_on: writtenOn };
+  if (said && /invalid JSON/.test(said)) return { outcome: "unusable", reason: said, ...dates };
   const path = bundleFile(sandbox, join("memories", `${name}.md`));
   if (!existsSync(path)) throw new Error("akm remember wrote no memory");
   const remembered = readFileSync(path, "utf8");
-  if (!improve) return { outcome: "output", written: remembered, written_on: writtenOn };
+  if (!improve) return { outcome: "output", written: remembered, ...dates };
 
   const ref = `memories/${name}`;
   const result = await runAkmJson<Obj>(sandbox, ["improve", ref, "--strategy", STRATEGIES["remember-enrich"], "--no-sync", ...requireEnginesArgs(), "--json-to-stdout"], { timeoutMs });
   const served = servedBy(result, "reflect");
   const after = readFileSync(path, "utf8");
-  if (after !== remembered) return { outcome: "output", remembered, written: after, written_on: writtenOn, served };
+  if (after !== remembered) return { outcome: "output", remembered, written: after, ...dates, served };
   const action = (result.actions as Obj[] | undefined)?.find((a) => a.ref === ref && a.mode === "reflect");
   if (!action) throw new Error("improve did not reflect on the memory");
   const proposal = action.result?.proposal?.payload?.content;
-  if (typeof proposal === "string") return { outcome: "output", remembered, written: proposal, written_on: writtenOn, served };
+  if (typeof proposal === "string") return { outcome: "output", remembered, written: proposal, ...dates, served };
   if (callFailed(result, "reflect")) throw new Error("the model call of reflect failed");
   const why = ([action.result?.reason, action.result?.error ?? (action.result?.errors as unknown[] | undefined)?.[0]].filter(Boolean).join(": ") || "reflect made no proposal").slice(0, 300);
-  return { outcome: "unusable", reason: `akm queued no proposal: ${why}`, remembered, written_on: writtenOn, served };
+  return { outcome: "unusable", reason: `akm queued no proposal: ${why}`, remembered, ...dates, served };
 };
 
 /** schema-repair: the lesson in a bundle, `akm improve <lesson>` with only validation on, which repairs a lesson that has no description, and the proposal it queues. */
