@@ -30,6 +30,8 @@ Add a release entry here when a version changes.
     observed`. A memory with no date now fails. On improve rows `metadata covers <keyword>` reads the tags only, since the description is
     akm's own; on `--enrich` rows it reads the tags and description, no longer the date. The case input digest of `remember-enrich` adds
     the explicit date.
+  - An akm that does not stamp `observed` on write (0.10.261133 and earlier) fails `carries observed` and `observed is the write date`
+    on every case without an explicit date, for every model. Read that as akm's behaviour, not a model regression.
   - Rows collected before 0.5 have no `written_on`: `scripts/rescore` refuses their `remember-enrich` output rows, which have to be
     collected again. Other processes are unchanged and compare as before.
 
