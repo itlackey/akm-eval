@@ -18,6 +18,16 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- bakeoff scoring 0.7 (was 0.6); collection stays 0.5. Label-only: two `remember-enrich` keywords that no tag set would hold are
+  replaced with a term from the memory that is what it is about. Each `metadata covers <keyword>` on the tags path reads the tags.
+  - `enrich-cache-policy-memory`: `cache, 90, gateway` -> `cache, ttl, gateway`. "90" is a bare number, not a tag; the memory is
+    about the request-cache TTL.
+  - `enrich-operator-preference-memory`: `approval, concise, digest` -> `deployment, approval, digest`. "concise" is a style word,
+    not a tag; the memory is about deployment approval messages.
+  The other six cases are unchanged, including "signature" (signing) and "certificate" (ios), which a tag can hold. The memory files
+  and the memory-inference cases that share them are unchanged. Rescore saved 0.5 runs to apply it; custom corpora need
+  `./generate-assets --only bakeoff` again.
+
 - bakeoff collection 0.5 and scoring 0.6 (were 0.4 and 0.5): `remember-enrich` measures what replaces `akm remember --enrich`.
   - On an akm with `experimental.memoryEnrichment` (0.10.261134, akm#1833), the memory is written with `akm remember` and no tags, and
     `akm improve memories/<name>` with only reflect on (strategy `bakeoff-remember-enrich`) proposes them, from akm#1836 as a proposal of

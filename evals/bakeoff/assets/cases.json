@@ -107,7 +107,7 @@
       "observed_at": null,
       "keywords": [
         "cache",
-        "90",
+        "ttl",
         "gateway"
       ]
     }
@@ -121,8 +121,8 @@
     "expected": {
       "observed_at": null,
       "keywords": [
+        "deployment",
         "approval",
-        "concise",
         "digest"
       ]
     }
