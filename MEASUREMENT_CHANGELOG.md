@@ -18,6 +18,21 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- bakeoff collection 0.5 and scoring 0.6 (were 0.4 and 0.5): `remember-enrich` measures what replaces `akm remember --enrich`.
+  - On an akm with `experimental.memoryEnrichment` (0.10.261134, akm#1833), the memory is written with `akm remember` and no tags, and
+    `akm improve memories/<name>` with only reflect on (strategy `bakeoff-remember-enrich`) proposes them. The row holds the memory improve
+    accepted or reflect proposed (`written`) and the memory before improve (`remembered`). The run asks akm whether it has the setting
+    (`akm config get experimental.memoryEnrichment`). Older akm keeps `--enrich`; an akm with neither is not applicable, as before.
+  - akm sets the observation date, never the model. A case's `observed_at` is now the date it gives `akm remember` (in a leading
+    frontmatter block, `observed: <date>`; akm has no `--observed` flag), and null means none, so the memory must carry the date it was
+    written (`written_on`, recorded per row). The checks `preserves explicit date` and `does not invent an observation date` are replaced
+    by `carries observed`, `observed is the explicit date` or `observed is the write date`, and, for improve rows, `improve keeps
+    observed`. A memory with no date now fails. On improve rows `metadata covers <keyword>` reads the tags only, since the description is
+    akm's own; on `--enrich` rows it reads the tags and description, no longer the date. The case input digest of `remember-enrich` adds
+    the explicit date.
+  - Rows collected before 0.5 have no `written_on`: `scripts/rescore` refuses their `remember-enrich` output rows, which have to be
+    collected again. Other processes are unchanged and compare as before.
+
 - cli-ratification removed. `evals/ratification` is the one agent ratification (akm#1629); on akm 0.11 four of cli-ratification's 14 cards tested removed surfaces and both its regression bugs are closed. Its published reports stay under `reports/`. ratification, no version change: its knowledge check reads a search's `results` first and keeps `hits` for earlier builds, the same check (akm 0.11 renamed the field; rule above on version-gated spellings).
 
 - Exact-scored memory-utility and memory-maintenance collection 0.2 → 0.3: the reader gets a per-field JSON example, explicit instructions to answer independently and distinguish tentative evidence from approval or confirmation, and an explicit prohibition on Markdown fences. Memory-maintenance also adds the Wren history: recovery does not replace a distinct historical hypothesis. Scorers remain at 0.2 and 0.1 respectively; saved results retain their original scores and collection identity. The LongMemEval path uses a different reader and remains at collection/scoring 0.2.

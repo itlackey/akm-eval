@@ -65,7 +65,7 @@ describe("the cases of a corpus folder", () => {
     expect(loadError(corpus([{ ...base, files: ["/etc/passwd"] }], files))).toContain("a: /etc/passwd is not a path inside the corpus folder");
     expect(loadError(corpus([{ ...base, files: ["memories/m.txt"] }], { "memories/m.txt": "x" }))).toContain("a: memory-inference reads .md files, not memories/m.txt");
     expect(loadError(corpus([{ ...base, expected: {} }], files))).toContain("a: required needs a list of terms");
-    expect(loadError(corpus([{ id: "b", process: "remember-enrich", files: ["memories/m.md"], expected: { keywords: ["x"] } }], files))).toContain("b: observed_at needs a date, or null for a memory that writes none");
+    expect(loadError(corpus([{ id: "b", process: "remember-enrich", files: ["memories/m.md"], expected: { keywords: ["x"] } }], files))).toContain("b: observed_at needs the date the case gives akm remember, or null for none");
     expect(loadError(corpus([{ id: "c", process: "session-summary", files: ["s/p/s.md"], expected: { required: ["x"], topics: ["x"] } }], { "s/p/s.md": "x" }))).toContain("c: session-summary reads .jsonl files, not s/p/s.md");
     expect(loadError(corpus([{ id: "d", process: "consolidate-promote", files: ["memories/a.md"], expected: { promote: ["memories/a"] } }], files))).toContain("d: consolidate-promote reads a pool of two files or more, not 1");
     expect(loadError(corpus([{ id: "d", process: "consolidate-promote", files: ["memories/a.md", "memories/b.md"], expected: { promote: ["memories/c"], protected: ["memories/a"] } }], { "memories/a.md": "x", "memories/b.md": "y" }))).toBe(

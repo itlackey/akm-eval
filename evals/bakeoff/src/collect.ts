@@ -8,14 +8,15 @@
 // The prompts are akm's own. Each process is one command:
 //
 //   memory-inference     akm index, akm improve --strategy bakeoff-memory-inference   reads memories/<name>.derived.md
-//   remember-enrich      akm remember --enrich --name <name>                          reads memories/<name>.md
+//   remember-enrich      akm remember --name <name>, akm improve memories/<name> --strategy bakeoff-remember-enrich   reads memories/<name>.md, or reflect's proposal
+//                        (akm with experimental.memoryEnrichment; before it, akm remember --enrich --name <name>, which reads memories/<name>.md)
 //   schema-repair        akm index, akm improve <lesson> --strategy bakeoff-schema-repair    reads the proposal of source schema-repair
 //   session-summary      akm proposal extract --sessions claude --session-id <id>     reads sessions/claude/<id>.md (--type claude before 0.10.261120)
 //   consolidate-promote  akm index, akm improve --strategy bakeoff-consolidate-promote      reads consolidation.planned and the proposals of source consolidate
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { type Sandbox, createSandbox, engineConfig, extractSessionsArgs, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, createSandbox, engineConfig, extractSessionsArgs, hasMemoryEnrichment, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
 import { type Case, type Inference, type Process, type Raw, type Row, makeRow } from "./score.ts";
@@ -30,9 +31,10 @@ export interface LoadedCase extends Case {
   texts: Record<string, string>;
 }
 
-/** The strategy of each process that runs through `akm improve` or `akm proposal extract`. remember-enrich has none. */
-export const STRATEGIES: Record<Exclude<Process, "remember-enrich">, string> = {
+/** The strategy of each process that runs through `akm improve` or `akm proposal extract`. remember-enrich uses its own only on an akm with `experimental.memoryEnrichment`. */
+export const STRATEGIES: Record<Process, string> = {
   "memory-inference": "bakeoff-memory-inference",
+  "remember-enrich": "bakeoff-remember-enrich",
   "schema-repair": "bakeoff-schema-repair",
   "session-summary": "bakeoff-session-summary",
   "consolidate-promote": "bakeoff-consolidate-promote",
@@ -53,17 +55,18 @@ const only = (on: Record<string, unknown>) => ({
 /**
  * The akm config of a run: the model under test as the one engine, at temperature 0 and with thinking off, and a strategy for each process
  * that runs through improve. Memory inference writes a derived memory and rewrites the frontmatter of its parent, which akm keeps behind
- * `experimental.improveAutonomy`. Without --semantic, semantic search is off, so consolidate's pair pass finds no pairs and the promotion pass sees the pool in
+ * `experimental.improveAutonomy`. On an akm that has `experimental.memoryEnrichment`, it is on, so reflect proposes a memory's tags. Without --semantic, semantic search is off, so consolidate's pair pass finds no pairs and the promotion pass sees the pool in
  * the order it was written.
  */
 export function bakeoffConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai"): Record<string, any> {
   const config = engineConfig(baseUrl, model, hasKey, ENGINE, provider);
   config.engines[ENGINE].temperature = 0;
   config.engines[ENGINE].enableThinking = false;
-  config.experimental = { improveAutonomy: true };
+  config.experimental = { improveAutonomy: true, ...(hasMemoryEnrichment() ? { memoryEnrichment: true } : {}) };
   config.improve = {
     strategies: {
       [STRATEGIES["memory-inference"]]: only({ memoryInference: { enabled: true } }),
+      [STRATEGIES["remember-enrich"]]: only({ reflect: { enabled: true } }),
       [STRATEGIES["schema-repair"]]: only({ validation: { enabled: true } }),
       [STRATEGIES["session-summary"]]: only({ extract: { enabled: true, indexSessions: true, minSessionDuration: 0, triage: { enabled: false } } }),
       [STRATEGIES["consolidate-promote"]]: only({ consolidate: { enabled: true, minPoolSize: 0 } }),
@@ -153,19 +156,49 @@ const memoryInference: Collect = async (c, sandbox, timeoutMs) => {
   throw new Error(`akm wrote no derived memory and its counters do not explain it (noChange ${noChange}, skippedNoFacts ${skippedNoFacts}, considered ${improve.memoryInference.considered ?? "?"})`);
 };
 
-/** remember-enrich: `akm remember --enrich` on the text of the memory, and the memory file it wrote. akm exits 0 and writes the memory without enrichment when the model gives nothing, and says so on stderr. */
+/** Today in the local time zone, YYYY-MM-DD: the date akm stamps on a memory it writes. */
+const today = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/**
+ * remember-enrich: `akm remember` on the text of the memory, with the case's explicit observation date, if any, in a leading frontmatter block (akm has no
+ * `--observed` flag; it keeps a body's leading frontmatter under its own keys). On an akm with `experimental.memoryEnrichment` the memory is written with no
+ * tags, then `akm improve memories/<name>` with only reflect on proposes them: what is read is the memory, if improve accepted the proposal, else the
+ * proposal. Before it, `akm remember --enrich` does both in one command, and exits 0 and writes the memory without enrichment when the model gives
+ * nothing, and says so on stderr.
+ */
 const rememberEnrich: Collect = async (c, sandbox, timeoutMs) => {
   const file = c.files[0] as string;
   const name = basename(file, ".md");
-  const r = await runAkm(sandbox, ["remember", "--enrich", "--name", name, "--format", "json"], { stdin: bodyOf(c.texts[file] as string), timeoutMs });
+  const improve = hasMemoryEnrichment();
+  const observed = c.expected.observed_at;
+  const stdin = `${observed ? `---\nobserved: ${observed}\n---\n` : ""}${bodyOf(c.texts[file] as string)}`;
+  const r = await runAkm(sandbox, ["remember", ...(improve ? [] : ["--enrich"]), "--name", name, "--format", "json"], { stdin, timeoutMs });
+  const writtenOn = today();
   if (r.timedOut) throw new Error(`akm remember timed out after ${+(timeoutMs / 1000).toFixed(1)}s`);
   if (r.code !== 0) throw new Error(exitMessage(r.code, r.stderr, r.stdout));
-  const said = r.stderr.split("\n").find((l) => /--enrich/.test(l))?.trim();
+  const said = improve ? undefined : r.stderr.split("\n").find((l) => /--enrich/.test(l))?.trim();
   if (said && /requires an engine|--enrich failed/.test(said)) throw new Error(said);
-  if (said && /invalid JSON/.test(said)) return { outcome: "unusable", reason: said };
-  const written = bundleFile(sandbox, join("memories", `${name}.md`));
-  if (!existsSync(written)) throw new Error("akm remember wrote no memory");
-  return { outcome: "output", written: readFileSync(written, "utf8") };
+  if (said && /invalid JSON/.test(said)) return { outcome: "unusable", reason: said, written_on: writtenOn };
+  const path = bundleFile(sandbox, join("memories", `${name}.md`));
+  if (!existsSync(path)) throw new Error("akm remember wrote no memory");
+  const remembered = readFileSync(path, "utf8");
+  if (!improve) return { outcome: "output", written: remembered, written_on: writtenOn };
+
+  const ref = `memories/${name}`;
+  const result = await runAkmJson<Obj>(sandbox, ["improve", ref, "--strategy", STRATEGIES["remember-enrich"], "--no-sync", ...requireEnginesArgs(), "--json-to-stdout"], { timeoutMs });
+  const served = servedBy(result, "reflect");
+  const after = readFileSync(path, "utf8");
+  if (after !== remembered) return { outcome: "output", remembered, written: after, written_on: writtenOn, served };
+  const action = (result.actions as Obj[] | undefined)?.find((a) => a.ref === ref && a.mode === "reflect");
+  if (!action) throw new Error("improve did not reflect on the memory");
+  const proposal = action.result?.proposal?.payload?.content;
+  if (typeof proposal === "string") return { outcome: "output", remembered, written: proposal, written_on: writtenOn, served };
+  if (callFailed(result, "reflect")) throw new Error("the model call of reflect failed");
+  const why = ([action.result?.reason, action.result?.error ?? (action.result?.errors as unknown[] | undefined)?.[0]].filter(Boolean).join(": ") || "reflect made no proposal").slice(0, 300);
+  return { outcome: "unusable", reason: `akm queued no proposal: ${why}`, remembered, written_on: writtenOn, served };
 };
 
 /** schema-repair: the lesson in a bundle, `akm improve <lesson>` with only validation on, which repairs a lesson that has no description, and the proposal it queues. */

@@ -565,8 +565,31 @@ export const REPLACEMENT_FROM = {
   sessions: "0.10.261120",
 } as const;
 
-/** The first version without `remember --enrich` (removed in 0.11; its replacement is akm's TODO(0.11:memory-enrichment)). The lowest prerelease of 0.11.0 counts. */
+/** The first version without `remember --enrich` (removed in 0.11; its replacement, `experimental.memoryEnrichment`, is from 0.10.261134: see hasMemoryEnrichment). The lowest prerelease of 0.11.0 counts. */
 export const ENRICH_REMOVED_FROM = "0.11.0-0";
+
+const memoryEnrichmentCache = new Map<string, boolean>();
+
+/**
+ * Does the akm under test have `experimental.memoryEnrichment` (akm#1833, 0.10.261134), which has `akm improve`'s reflect propose a memory's tags in place of
+ * `remember --enrich`? It is asked of akm, not read from `--version`, because a build of a release branch from source still prints the last release:
+ * `akm config get experimental.memoryEnrichment` exits 0 only on an akm that knows the key. Asked once per akm command and version.
+ */
+export function hasMemoryEnrichment(): boolean {
+  const key = `${akmCommand().join(" ")} ${testedVersion ?? ""}`;
+  let known = memoryEnrichmentCache.get(key);
+  if (known === undefined) {
+    const sandbox = createSandbox("probe");
+    try {
+      writeConfig(sandbox, { ...plainConfig(), experimental: { memoryEnrichment: true } });
+      known = Bun.spawnSync([...sandbox.cmd, "config", "get", "experimental.memoryEnrichment"], { env: sandbox.env, stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+    } finally {
+      removeSandbox(sandbox);
+    }
+    memoryEnrichmentCache.set(key, known);
+  }
+  return known;
+}
 
 let testedVersion: string | undefined;
 

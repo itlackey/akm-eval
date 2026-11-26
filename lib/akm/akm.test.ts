@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { ENRICH_REMOVED_FROM, SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, connectionsConfig, createSandbox, doctorArgs, engineConfig, extractSessionsArgs, improveTimeoutFlag, requireEnginesArgs, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, useConfigForm, writeConfig, writtenConfigForm } from "./akm.ts";
+import { ENRICH_REMOVED_FROM, SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, connectionsConfig, createSandbox, doctorArgs, engineConfig, extractSessionsArgs, hasMemoryEnrichment, improveTimeoutFlag, requireEnginesArgs, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, semanticConfig, useAkm, useConfigForm, writeConfig, writtenConfigForm } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -610,6 +610,31 @@ describe("the form of a deprecated command by the akm under test", () => {
     expect(atLeast("0.10.261120", ENRICH_REMOVED_FROM)).toBe(false);
     expect(atLeast("0.11.0-alpha.1", ENRICH_REMOVED_FROM)).toBe(true);
     expect(atLeast("0.11.0", ENRICH_REMOVED_FROM)).toBe(true);
+  });
+
+  test("asks akm whether it has experimental.memoryEnrichment, whatever version it prints, once per akm command and version", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lib-akm-test-"));
+    try {
+      const log = join(dir, "calls");
+      // an akm that knows the key (or not), as `akm config get` exits 2 on a key it does not know
+      const fake = (knows: boolean): string => {
+        const script = join(dir, `akm-${knows}.ts`);
+        writeFileSync(script, `import { appendFileSync, readFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(log)}, process.argv.slice(2).join(" ") + "\\n");
+const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
+process.exit(process.argv[4] === "experimental.memoryEnrichment" && config.experimental?.memoryEnrichment === true && ${knows} ? 0 : 2);
+`);
+        return commandLine(["bun", script]);
+      };
+      useConfigForm("0.10.261133"); // a source build of 0.10.261134 still prints the last release
+      expect(withEnv({ AKM_BIN: fake(true) }, () => [hasMemoryEnrichment(), hasMemoryEnrichment()])).toEqual([true, true]);
+      useConfigForm("0.10.261120");
+      expect(withEnv({ AKM_BIN: fake(false) }, () => hasMemoryEnrichment())).toBe(false);
+      expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["config get experimental.memoryEnrichment", "config get experimental.memoryEnrichment"]);
+    } finally {
+      useConfigForm("0.9.99-test");
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

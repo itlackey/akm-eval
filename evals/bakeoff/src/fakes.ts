@@ -6,7 +6,9 @@
 //   infer[<memory name>]     { derived: <file text> } | { noChange: true } | { skip: true } | { nothing: true } | { provider: true } | { crash: true } | { slow: true }
 //   legacyInference          true: the memoryInference result has no noChange counter, as before akm#1208
 //   noInference              true: the improve result has no memoryInference, as when the pass did not run
-//   enrich[<memory name>]    { file: <memory file text>, say?: <the line akm prints on stderr> } | { crash: true }
+//   enrich[<memory name>]    { file: <memory file text>, say?: <the line akm prints on stderr> } | { crash: true }   (what akm remember writes, with or without --enrich)
+//   reflect[<memory name>]   { proposal: <memory file text> } | { accepted: <memory file text> } | { refused: <error> } | { provider: true } | { crash: true }
+//                            (akm improve memories/<name> --strategy bakeoff-remember-enrich; default: no proposal)
 //   repair[<lesson ref>]     { outcome: "queued", content } | { outcome: "error", error } | { crash: true }
 //   session[<session id>]    { asset: <session asset text> } | { skip: <skipReason> } | { none: true } | { crash: true }
 //   promote                  { refs: [<memory ref queued>], planned?: [<memory ref planned, default refs>], skipped?: { <ref>: <reason> }, failedChunks?: n, warnings?: [...], provider?: true } | { crash: true }
@@ -25,14 +27,14 @@ const out = (o) => console.log(JSON.stringify(o));
 const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const engine = config.engines?.bakeoff ?? {};
-const stdin = args.includes("--enrich") ? await Bun.stdin.text() : null;
+const stdin = cmd === "remember" ? await Bun.stdin.text() : null;
 appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args, cwd: process.cwd(), bundle, model: engine.model ?? null, temperature: engine.temperature ?? null, thinking: engine.enableThinking ?? null, autonomy: config.experimental?.improveAutonomy ?? null, key: process.env.MODEL_API_KEY ?? null, projects: process.env.AKM_CLAUDE_PROJECTS_DIR ?? null, stdin, strategy: flag("--strategy") ? config.improve?.strategies?.[flag("--strategy")] ?? null : null }) + "\\n");
 const put = (path, text) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); };
 const usage = (process_, failures = 0) => ({ byProcessEngineModel: [{ process: process_, engine: "bakeoff", model: plan.served ?? "served-model", calls: 1, failures }] });
 const crash = () => { console.error(JSON.stringify({ error: "boom", code: "INTERNAL" })); process.exit(70); };
 
 // FAKE_AKM_VERSION picks the generation of akm: before 0.10.261120 (the default, 0.9.99-test) only the old forms of the deprecated flags exist; from 0.10.261120 only the replacements do,
-// and 0.11 has no \`remember --enrich\`. The fake refuses the form the version lacks, as akm does, so a test shows which form the collector picked.
+// and 0.11 has no \`remember --enrich\`. FAKE_MEMORY_ENRICHMENT=1 is an akm that has \`experimental.memoryEnrichment\` (0.10.261134). The fake refuses the form the version lacks, as akm does, so a test shows which form the collector picked.
 const version = process.env.FAKE_AKM_VERSION ?? "0.9.99-test";
 const modern = version !== "0.9.99-test";
 const refuse = (what) => { console.error("unknown option " + what); process.exit(2); };
@@ -42,6 +44,7 @@ if (cmd !== "--version") {
   if (version.startsWith("0.11") && args.includes("--enrich")) refuse("--enrich");
 }
 if (cmd === "--version") console.log("akm " + version);
+else if (cmd === "config" && rest[0] === "get") { if (rest[1] === "experimental.memoryEnrichment" && process.env.FAKE_MEMORY_ENRICHMENT === "1") console.log("true"); else { console.error("Unknown config key: " + rest[1]); process.exit(2); } }
 else if (cmd === "index") out({ ok: true });
 else if (cmd === "improve") {
   const strategy = flag("--strategy");
@@ -61,6 +64,13 @@ else if (cmd === "improve") {
       else { put(join(dir, name + ".derived.md"), p.derived); result.splitParents++; result.writtenFacts++; }
     }
     out({ ok: true, ...(plan.noInference ? {} : { memoryInference: result }), usageReport: usage("memoryInference", provider ? 1 : 0) });
+  } else if (strategy === "bakeoff-remember-enrich") {
+    const ref = rest[0];
+    const p = plan.reflect?.[ref.split("/")[1]] ?? {};
+    if (p.crash) crash();
+    if (p.accepted) put(join(bundle, ref + ".md"), p.accepted);
+    const result = p.proposal || p.accepted ? { ok: true, proposal: { id: "prop-1", status: p.accepted ? "accepted" : "pending", source: "reflect", payload: { content: p.proposal ?? p.accepted } } } : { ok: false, reason: p.provider ? "provider_error" : "quality_rejected", error: p.refused ?? "no revision" };
+    out({ ok: true, actions: [{ ref, mode: "reflect", result }], usageReport: usage("reflect", p.provider ? 1 : 0) });
   } else if (strategy === "bakeoff-schema-repair") {
     const ref = rest[0];
     const p = plan.repair?.[ref] ?? { outcome: "error", error: "LLM returned unparseable JSON for schema repair" };
