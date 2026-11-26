@@ -9,6 +9,7 @@ import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/ma
 import { loadConfigPatch, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { FAKE_AKM } from "./fakes.ts";
 import { type Case, assetsSha256, configFor, loadCases, selectCases } from "./lib.ts";
+import { bakeoffConfig } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
@@ -133,7 +134,6 @@ describe("runCorpus", () => {
     // the commands are those of the README
     const args = calls().map((c) => c.args.join(" "));
     expect(args).toEqual([
-      "config get experimental.memoryEnrichment", // the one probe: this akm has no experimental.memoryEnrichment, so it runs remember --enrich
       "index --format json",
       "improve --strategy bakeoff-memory-inference --no-sync --require-engines --json-to-stdout --format json",
       "remember --name probe-stamps", // the probe of what this akm does with a memory's date (no model call)
@@ -212,7 +212,7 @@ describe("runCorpus", () => {
       reflect: { proposed: { proposal: tagged("2026-03-04") }, accepted: { accepted: tagged(on) }, moved: { proposal: tagged("2026-01-01") }, refused: { refused: "Tags proposal quality gate rejected" }, revised: { proposal: tagged(on), revisionRefused: true }, untagged: { unparseable: "direct reflect frontmatterPatch.tags must be an array of 1-5 tags: the memory has none" }, failed: { provider: true } },
     };
     const { corpus, ctx, calls, results } = setup(specs, plan);
-    const summary = await quiet(() => runCorpus(corpus, ctx, results));
+    const summary = await quiet(() => runCorpus(corpus, { ...ctx, memoryEnrichment: true }, results)); // what the run's one probe found (prepare)
     const rows = samplesOf(summary);
     expect(rows.map((r) => [r.id, r.outcome, r.correct])).toEqual([["proposed", "output", true], ["accepted", "output", true], ["moved", "output", false], ["refused", "unusable", false], ["revised", "output", true], ["untagged", "unusable", false], ["failed", "error", null]]);
     expect(rows[0]).toMatchObject({ written: tagged("2026-03-04"), remembered: untagged("2026-03-04"), written_on: on, served: "served-model" });
@@ -224,12 +224,18 @@ describe("runCorpus", () => {
     for (const row of rows.slice(0, 6)) expect("raw" in (MEASUREMENT.rawOf(row) as object)).toBe(true);
     const args = calls().map((c) => c.args.join(" "));
     expect(rows.slice(0, 6).every((r) => r.akm_sets_observed === true)).toBe(true); // the error row has no output to score
-    expect(args.slice(0, 5)).toEqual(["config get experimental.memoryEnrichment", "remember --name probe-stamps", "remember --name probe-keeps", "remember --name proposed --format json", "improve memories/proposed --strategy bakeoff-remember-enrich --no-sync --json-to-stdout --format json"]);
+    expect(args.slice(0, 4)).toEqual(["remember --name probe-stamps", "remember --name probe-keeps", "remember --name proposed --format json", "improve memories/proposed --strategy bakeoff-remember-enrich --no-sync --json-to-stdout --format json"]);
     expect(args.some((a) => a.includes("--enrich"))).toBe(false);
-    expect(args.filter((a) => a.startsWith("config get"))).toHaveLength(1);
     const config = summary.config as any;
     expect(config.experimental).toEqual({ improveAutonomy: true, memoryEnrichment: true });
     expect(Object.entries(config.improve.strategies["bakeoff-remember-enrich"].processes).filter(([, p]) => (p as any).enabled !== false).map(([k]) => k)).toEqual(["reflect"]);
+  });
+
+  test("bakeoffConfig runs nothing: the run asks akm about experimental.memoryEnrichment once, at its start, and the config only reads the answer", () => {
+    process.env.AKM_BIN = "/nonexistent/akm"; // any akm command would fail
+    expect(bakeoffConfig("http://localhost:9/v1", "m", true).experimental).toEqual({ improveAutonomy: true });
+    expect(bakeoffConfig("http://localhost:9/v1", "m", true, "openai", { memoryEnrichment: true }).experimental).toEqual({ improveAutonomy: true, memoryEnrichment: true });
+    expect(configFor({ baseUrl: "http://localhost:9/v1", model: "m", hasKey: true }).experimental).toEqual({ improveAutonomy: true });
   });
 
   test("gives akm the text of the memory without its frontmatter, the model at temperature 0 with thinking off, and the key by reference", async () => {
@@ -505,5 +511,6 @@ describe("the command", () => {
     expect(rows.map((r) => r.id).sort()).toEqual([...stored.manifest.completion.selected].sort());
     const calls = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(calls.filter((c) => c.args[0] === "--version")).toHaveLength(1);
+    expect(calls.filter((c) => c.args.join(" ") === "config get experimental.memoryEnrichment")).toHaveLength(1); // asked once, at the run's start
   }, 60_000);
 });

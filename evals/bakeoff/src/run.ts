@@ -20,8 +20,8 @@ const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 export const MIN_AKM = "0.9.26"; // the release the commands, the config and the output read here were checked against
 
-/** What bakeoff adds to the context of a case: the one process the run is limited to. */
-type Extra = { process?: Process };
+/** What bakeoff adds to the context of a case: the one process the run is limited to, and whether akm has `experimental.memoryEnrichment`. */
+type Extra = { process?: Process; memoryEnrichment?: boolean };
 
 /** The field of a bakeoff summary that is neither one every eval has nor from its rows. */
 type Own = { process: Process | null };
@@ -69,7 +69,7 @@ const SPEC: EvalSpec<LoadedCase, Row, Extra> = {
   selectCases: (all, limit, ctx) => {
     // remember-enrich runs through improve on an akm with `experimental.memoryEnrichment` (0.10.261134), else through `remember --enrich` (removed in 0.11).
     // An akm with neither has no way to run it: it is left out and said so, not run and not scored as a failure.
-    const enrich = !all.some((c) => c.process === "remember-enrich") || hasMemoryEnrichment() || !atLeast(ctx.version, ENRICH_REMOVED_FROM);
+    const enrich = !all.some((c) => c.process === "remember-enrich") || ctx.memoryEnrichment === true || !atLeast(ctx.version, ENRICH_REMOVED_FROM);
     if (!enrich) {
       const why = `akm ${ctx.version} has neither \`experimental.memoryEnrichment\` nor \`akm remember --enrich\``;
       if (ctx.process === "remember-enrich") fail(`remember-enrich is not applicable: ${why}. Nothing was run.`);
@@ -88,7 +88,9 @@ const SPEC: EvalSpec<LoadedCase, Row, Extra> = {
   },
   prepare: (values) => {
     if (values.process !== undefined && !(PROCESSES as readonly string[]).includes(values.process)) throw new Error(`--process must be one of ${PROCESSES.join(", ")}, not "${values.process}"`);
-    return () => ({ process: values.process as Process | undefined });
+    const process = values.process as Process | undefined;
+    // After the version probe, akm is asked once whether it has experimental.memoryEnrichment, unless the run has no remember-enrich case.
+    return () => ({ process, memoryEnrichment: process === undefined || process === "remember-enrich" ? hasMemoryEnrichment() : false });
   },
   summaryExtras: (_cases, _rows, ctx) => ({ process: ctx.process ?? null }),
   printSummary,

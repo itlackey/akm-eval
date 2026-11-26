@@ -16,7 +16,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { type Sandbox, createSandbox, engineConfig, extractSessionsArgs, hasMemoryEnrichment, observedSupport, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, createSandbox, engineConfig, extractSessionsArgs, observedSupport, removeSandbox, requireEnginesArgs, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { exitMessage, hideEndpoint } from "../../../lib/cli.ts";
 import { type Case, type Inference, type Process, type Raw, type Row, makeRow, parseDocument } from "./score.ts";
@@ -55,14 +55,15 @@ const only = (on: Record<string, unknown>) => ({
 /**
  * The akm config of a run: the model under test as the one engine, at temperature 0 and with thinking off, and a strategy for each process
  * that runs through improve. Memory inference writes a derived memory and rewrites the frontmatter of its parent, which akm keeps behind
- * `experimental.improveAutonomy`. On an akm that has `experimental.memoryEnrichment`, it is on, so reflect proposes a memory's tags. Without --semantic, semantic search is off, so consolidate's pair pass finds no pairs and the promotion pass sees the pool in
+ * `experimental.improveAutonomy`. With `memoryEnrichment` (the run asks akm once whether it has the setting: hasMemoryEnrichment), `experimental.memoryEnrichment`
+ * is on, so reflect proposes a memory's tags; an older akm is not given the key. It runs nothing. Without --semantic, semantic search is off, so consolidate's pair pass finds no pairs and the promotion pass sees the pool in
  * the order it was written.
  */
-export function bakeoffConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai"): Record<string, any> {
+export function bakeoffConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai", { memoryEnrichment = false } = {}): Record<string, any> {
   const config = engineConfig(baseUrl, model, hasKey, ENGINE, provider);
   config.engines[ENGINE].temperature = 0;
   config.engines[ENGINE].enableThinking = false;
-  config.experimental = { improveAutonomy: true, ...(hasMemoryEnrichment() ? { memoryEnrichment: true } : {}) };
+  config.experimental = { improveAutonomy: true, ...(memoryEnrichment ? { memoryEnrichment: true } : {}) };
   config.improve = {
     strategies: {
       [STRATEGIES["memory-inference"]]: only({ memoryInference: { enabled: true } }),
@@ -86,11 +87,13 @@ export interface CaseContext {
   overrides?: Overrides;
   /** How long one akm command may run, in milliseconds. A run always sets it (--timeout-ms); without it the default is TIMEOUT_MS. */
   timeoutMs?: number;
+  /** The akm under test has `experimental.memoryEnrichment`, as the run asked it once (hasMemoryEnrichment): remember-enrich runs through improve. */
+  memoryEnrichment?: boolean;
 }
 
 /** The akm config of a run, with the config patch merged in. */
-export const configFor = (ctx: Pick<CaseContext, "baseUrl" | "model" | "hasKey" | "provider" | "overrides">): Record<string, any> =>
-  patchedConfig(bakeoffConfig(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.provider), ctx.overrides ?? defaultOverrides(""));
+export const configFor = (ctx: Pick<CaseContext, "baseUrl" | "model" | "hasKey" | "provider" | "overrides" | "memoryEnrichment">): Record<string, any> =>
+  patchedConfig(bakeoffConfig(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.provider, { memoryEnrichment: ctx.memoryEnrichment === true }), ctx.overrides ?? defaultOverrides(""));
 
 /** Did the command run past its timeout? runAkm ends the stderr of a command it killed with "akm timed out after <N>s", and runAkmJson throws a message that says so. */
 export const timedOutMessage = (message: string): boolean => /\btimed out after [\d.]+s\b/.test(message);
@@ -122,7 +125,7 @@ const bundleFile = (sandbox: Sandbox, path: string): string => join(sandbox.dir,
 /** The memory text, without its frontmatter, as a person would pass it to `akm remember`. */
 const bodyOf = (text: string): string => (/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/.exec(text)?.[1] ?? text).trim();
 
-type Collect = (c: LoadedCase, sandbox: Sandbox, timeoutMs: number) => Promise<Out>;
+type Collect = (c: LoadedCase, sandbox: Sandbox, timeoutMs: number, memoryEnrichment: boolean) => Promise<Out>;
 
 /** The counters of the improve result's `memoryInference` that decide a case with no derived memory. Only whole numbers are kept. */
 function inferenceOf(improve: Obj): Inference {
@@ -169,10 +172,9 @@ const today = (): string => {
  * is read is the memory, if improve accepted the tags, else the tags proposal. Before it, `akm remember --enrich` does both in one command, and exits 0 and writes the memory without enrichment when the model gives
  * nothing, and says so on stderr.
  */
-const rememberEnrich: Collect = async (c, sandbox, timeoutMs) => {
+const rememberEnrich: Collect = async (c, sandbox, timeoutMs, improve) => {
   const file = c.files[0] as string;
   const name = basename(file, ".md");
-  const improve = hasMemoryEnrichment();
   const observed = c.expected.observed_at;
   const stdin = `${observed ? `---\nobserved: ${observed}\n---\n` : ""}${bodyOf(c.texts[file] as string)}`;
   // Does this akm set the date the case expects: keep the explicit one, or stamp the day it wrote the memory? Where it does not, the date is not scored.
@@ -323,7 +325,7 @@ export async function runCase(c: LoadedCase, ctx: CaseContext): Promise<Row> {
   const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
   try {
     writeConfig(sandbox, configFor(ctx));
-    const out = await COLLECTORS[c.process](c, sandbox, ctx.timeoutMs ?? TIMEOUT_MS);
+    const out = await COLLECTORS[c.process](c, sandbox, ctx.timeoutMs ?? TIMEOUT_MS, ctx.memoryEnrichment === true);
     return makeRow(c, { ...out, ...(out.reason === undefined ? {} : { reason: hide(out.reason) }), seconds: seconds() });
   } catch (e) {
     const message = hide((e as Error).message);
