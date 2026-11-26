@@ -565,8 +565,60 @@ export const REPLACEMENT_FROM = {
   sessions: "0.10.261120",
 } as const;
 
-/** The first version without `remember --enrich` (removed in 0.11; its replacement is akm's TODO(0.11:memory-enrichment)). The lowest prerelease of 0.11.0 counts. */
+/** The first version without `remember --enrich` (removed in 0.11; its replacement, `experimental.memoryEnrichment`, is from 0.10.261134: see hasMemoryEnrichment). The lowest prerelease of 0.11.0 counts. */
 export const ENRICH_REMOVED_FROM = "0.11.0-0";
+
+const memoryEnrichmentCache = new Map<string, boolean>();
+
+const observedCache = new Map<string, { stamps: boolean; keeps: boolean }>();
+
+/**
+ * What the akm under test does with a memory's `observed` date, asked of it with two `akm remember` calls in a sandbox of its own (no model call):
+ * `stamps`, it sets `observed` to the day it writes a memory that has none (the date fix on `release/0.10.261134`); `keeps`, it keeps an `observed`
+ * given in a leading frontmatter block of the memory text (akm#1449, 0.10.261109). Read from what akm writes, not from `--version`, for the reason
+ * hasMemoryEnrichment gives. Asked once per akm command and version.
+ */
+export function observedSupport(): { stamps: boolean; keeps: boolean } {
+  const key = `${akmCommand().join(" ")} ${testedVersion ?? ""}`;
+  let known = observedCache.get(key);
+  if (known === undefined) {
+    const sandbox = createSandbox("probe");
+    try {
+      const observedOf = (name: string, text: string): string | undefined => {
+        Bun.spawnSync([...sandbox.cmd, "remember", "--name", name], { env: sandbox.env, stdin: Buffer.from(text), stdout: "ignore", stderr: "ignore" });
+        const file = join(sandbox.dir, "bundle", "memories", `${name}.md`);
+        const front = existsSync(file) ? /^---\r?\n([\s\S]*?)\r?\n---/.exec(readFileSync(file, "utf8"))?.[1] : undefined;
+        return front?.match(/^observed:\s*['"]?(\d{4}-\d{2}-\d{2})/m)?.[1];
+      };
+      known = { stamps: observedOf("probe-stamps", "A note with no date.") !== undefined, keeps: observedOf("probe-keeps", "---\nobserved: 2001-02-03\n---\nA note.") === "2001-02-03" };
+    } finally {
+      removeSandbox(sandbox);
+    }
+    observedCache.set(key, known);
+  }
+  return known;
+}
+
+/**
+ * Does the akm under test have `experimental.memoryEnrichment` (akm#1833, 0.10.261134), which has `akm improve`'s reflect propose a memory's tags in place of
+ * `remember --enrich`? It is asked of akm, not read from `--version`, because a build of a release branch from source still prints the last release:
+ * `akm config get experimental.memoryEnrichment` exits 0 only on an akm that knows the key. Asked once per akm command and version.
+ */
+export function hasMemoryEnrichment(): boolean {
+  const key = `${akmCommand().join(" ")} ${testedVersion ?? ""}`;
+  let known = memoryEnrichmentCache.get(key);
+  if (known === undefined) {
+    const sandbox = createSandbox("probe");
+    try {
+      writeConfig(sandbox, { ...plainConfig(), experimental: { memoryEnrichment: true } });
+      known = Bun.spawnSync([...sandbox.cmd, "config", "get", "experimental.memoryEnrichment"], { env: sandbox.env, stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+    } finally {
+      removeSandbox(sandbox);
+    }
+    memoryEnrichmentCache.set(key, known);
+  }
+  return known;
+}
 
 let testedVersion: string | undefined;
 
