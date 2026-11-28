@@ -279,12 +279,13 @@ function isFixed(c: Case, before: Note, after: Note, title: string | undefined):
 
 /**
  * Score a result with checks that need no judge. `proposal` is the note as the proposal would leave it, or undefined
- * when reflect made none, which leaves the note as it is.
+ * when reflect made none, which leaves the note as it is. `bookkeeping` is the frontmatter keys akm writes itself, which are
+ * no change: nightly, which scores the note as akm wrote it, gives its own (`AKM_KEYS`, with the `updated` akm stamps on a write).
  */
-export function score(c: Case, proposal: string | undefined): Scored {
+export function score(c: Case, proposal: string | undefined, bookkeeping: ReadonlySet<string> = BOOKKEEPING): Scored {
   const [before, after] = [parse(c.source), parse(proposal ?? c.source)];
   const title = addedTitle(before.body, after.body);
-  const changed = after.data === undefined || before.data === undefined ? ["frontmatter"] : [...new Set([...Object.keys(before.data), ...Object.keys(after.data)])].filter((k) => !BOOKKEEPING.has(k) && !sameJson(before.data?.[k], after.data?.[k]));
+  const changed = after.data === undefined || before.data === undefined ? ["frontmatter"] : [...new Set([...Object.keys(before.data), ...Object.keys(after.data)])].filter((k) => !bookkeeping.has(k) && !sameJson(before.data?.[k], after.data?.[k]));
   if (title !== undefined) changed.push("title");
   const values: Record<string, string> = {};
   for (const k of changed) {

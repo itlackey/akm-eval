@@ -194,9 +194,10 @@ const bodyKept = (o: Outcome, path: string): boolean => {
 /**
  * The frontmatter keys akm adds or stamps itself when it queues or accepts a proposal. They are neither a fix nor a change. A proposal is
  * minted with a `type` and an `updated` the note lacked, and an accept stamps `generated` and `verified` (and `provenance`, for a note that
- * has `evidenceSources`, which none of the night's notes has). akm-cli 0.9.26 and 0.10.26101201-alpha stamp the same keys.
+ * has `evidenceSources`, which none of the night's notes has). akm-cli 0.9.26 and 0.10.26101201-alpha stamp the same keys. Since akm#1834
+ * (0.10.261134) every write sets `updated` to the day of the write. The reflect eval's checks read these keys as akm's, not as a change.
  */
-const AKM_KEYS = ["type", "updated", "generated", "verified"];
+const AKM_KEYS: ReadonlySet<string> = new Set(["type", "updated", "generated", "verified"]);
 
 /** Do two notes say the same, whatever akm stamps on a proposal? Same body, same frontmatter apart from the keys akm adds. */
 export function sameNote(a: string, b: string): boolean {
@@ -245,7 +246,7 @@ function scorePair(item: PairItem, o: Outcome): Scored {
 function scoreReflectItem(item: ReflectItem, o: Outcome): Scored {
   const source = o.before.get(item.path) as string;
   const final = o.after.get(item.path) ?? "";
-  const { checks, changed, values } = scoreReflect(reflectCase(item, source), final);
+  const { checks, changed, values } = scoreReflect(reflectCase(item, source), final, AKM_KEYS);
   const mine = o.proposals.filter((p) => p.source === "reflect" && p.ref === refOf(item.path));
   const proposal = mine.at(-1);
   const action = describeAction(actionFor(o.actions, refOf(item.path), "reflect"));
@@ -265,7 +266,7 @@ function scoreSilentItem(item: ReflectItem, o: Outcome): Scored {
   // none pending, the last one is read for the state alone, and the check fails
   const mine = o.proposals.filter((p) => p.source === "reflect" && p.ref === ref);
   const proposal = mine.filter((p) => p.status === "pending").at(-1) ?? mine.at(-1);
-  const { checks: reflected, changed, values } = scoreReflect(reflectCase(item, source), proposal?.content ?? source);
+  const { checks: reflected, changed, values } = scoreReflect(reflectCase(item, source), proposal?.content ?? source, AKM_KEYS);
   const failed = Object.entries(reflected).filter(([, pass]) => !pass).map(([name]) => name);
   const action = describeAction(actionFor(o.actions, ref, "reflect"));
   const planned = o.lane?.refs.includes(ref) ?? false;

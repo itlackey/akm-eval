@@ -375,6 +375,14 @@ describe("scoring a reflect case", () => {
     expect(r.detail.final).toBe(mended);
   });
 
+  test("a defect the drain fixed is right when akm stamps the day of the write in `updated` (akm#1834), and is not harm", () => {
+    const stamped = mended.replace(/^updated: .*$/m, "updated: 2026-11-28");
+    expect(stamped).not.toBe(mended);
+    const p = proposal({ ref: refOf(period.path), status: "accepted", gate: "auto-accepted/judge-passed" });
+    const r = scoreItem(period, quiet({ after: new Map(night.files).set(period.path, stamped), proposals: [p] }));
+    expect(r).toMatchObject({ ok: true, harm: false, checks: { defect_fixed: true, no_extra_change: true }, state: "edited by the drain (description)", detail: { changed: ["description"] } });
+  });
+
   test("a defect left as it is is a miss, and says where the proposal stands", () => {
     const left = scoreItem(period, quiet({ proposals: [proposal({ ref: refOf(period.path), gate: "deferred/quality-gate" })] }));
     expect(left).toMatchObject({ ok: false, harm: false, checks: { defect_fixed: false }, state: "proposal pending, deferred/quality-gate" });

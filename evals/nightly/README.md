@@ -67,7 +67,7 @@ No judge model. Each check reads the library as the night left it and the propos
 |---|---|---|---|
 | `no_unsafe_retirement`, `note_kept`, `survivors_unchanged` | pair | no note with a claim of its own is gone, one note remains, survivors are as planted | harm |
 | `no_unsafe_proposal`, `right_outcome` | pair | no unsafe retirement proposed; the outcome above | miss |
-| `body_kept`, `no_extra_change`, `no_invented` | reflect | the reflect eval's checks, on the note as left | harm |
+| `body_kept`, `no_extra_change`, `no_invented` | reflect | the reflect eval's checks, on the note as left; the keys akm writes itself (`type`, `updated`, `generated`, `verified`) are no change | harm |
 | `defect_fixed`, `not_current` | reflect | the reflect eval's checks | miss |
 | `fix_done` | fix | the note is as the fix makes it, or a pending proposal would make it so | miss |
 | `only_the_fix` | fix | the note is the fixed note or as planted | harm |
