@@ -17,6 +17,8 @@ async function exported(page, type = 'json') {
 }
 async function open(page) {
   const existing = await page.request.get('./data.json').then(r => r.json());
+  // These tests assert the exact fixture values and row order, not the current published memory results.
+  existing.runs = existing.runs.filter(run => run.suite !== 'memory-utility');
   const columns = [...new Map([...existing.columns, ...fixture.columns].map(c => [c.key, c])).values()];
   const dataset = { ...existing, columns, runs: [...existing.runs, ...fixture.runs] };
   await page.route('**/data.json*', route => route.fulfill({ json: dataset }));

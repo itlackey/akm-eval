@@ -236,20 +236,38 @@ describe("remember-enrich", () => {
   const dated = c("remember-enrich", { observed_at: "2026-02-14", keywords: ["queue", "retry"] });
   const undated = c("remember-enrich", { observed_at: null, keywords: ["queue"] });
 
-  test("the date must be the one the memory writes, and no date means none", () => {
-    expect(makeRow(dated, ok({ written: memory(["queue", "retry"], "observed_at: 2026-02-14\n") }))).toMatchObject({ structure: true, correct: true });
-    expect(makeRow(dated, ok({ written: memory(["queue", "retry"]) })).checks).toMatchObject({ "preserves explicit date": false });
-    expect(makeRow(dated, ok({ written: memory(["queue", "retry"], "observed_at: 2026-03-01\n") })).checks).toMatchObject({ "preserves explicit date": false });
-    expect(makeRow(undated, ok({ written: memory(["queue"]) })).checks).toMatchObject({ "does not invent an observation date": true });
-    expect(makeRow(undated, ok({ written: memory(["queue"], "observed_at: ''\n") })).checks).toMatchObject({ "does not invent an observation date": true });
-    expect(makeRow(undated, ok({ written: memory(["queue"], "observed_at: 2026-02-14\n") })).checks).toMatchObject({ "does not invent an observation date": false });
+  const on = "2026-11-26"; // the date the run wrote the memory
+
+  test("observed is the explicit date the case gave, else the date the memory was written; none at all fails both", () => {
+    expect(makeRow(dated, ok({ written: memory(["queue", "retry"], "observed: 2026-02-14\n"), written_on: on }))).toMatchObject({ structure: true, correct: true });
+    expect(makeRow(dated, ok({ written: memory(["queue", "retry"], `observed: ${on}\n`), written_on: on })).checks).toMatchObject({ "carries observed": true, "observed is the explicit date": false });
+    expect(makeRow(dated, ok({ written: memory(["queue", "retry"]), written_on: on })).checks).toMatchObject({ "carries observed": false, "observed is the explicit date": false });
+    expect(makeRow(undated, ok({ written: memory(["queue"], `observed: ${on}\n`), written_on: on }))).toMatchObject({ structure: true, correct: true });
+    // a date read out of the memory text is not the write date: akm sets observed, never the model
+    expect(makeRow(undated, ok({ written: memory(["queue"], "observed: 2026-02-14\n"), written_on: on })).checks).toMatchObject({ "carries observed": true, "observed is the write date": false });
+    expect(makeRow(undated, ok({ written: memory(["queue"], "observed: ''\n"), written_on: on })).checks).toMatchObject({ "carries observed": false, "observed is the write date": false });
+    expect(makeRow(undated, ok({ written: memory(["queue"], `observed: ${on}\n`) })).checks).toMatchObject({ "observed is the write date": false }); // no write date to compare with
+  });
+
+  test("on an akm that does not set the date the case expects, the date is not checked: it would fail for every model", () => {
+    expect(makeRow(undated, ok({ written: memory(["queue"]), written_on: on, akm_sets_observed: false })).checks).toEqual({ "metadata covers queue": true });
+    expect(makeRow(dated, ok({ written: memory(["queue", "retry"]), written_on: on, akm_sets_observed: false }))).toMatchObject({ correct: true });
+    expect(makeRow(undated, ok({ written: memory(["queue"]), written_on: on, akm_sets_observed: true })).checks).toMatchObject({ "carries observed": false });
   });
 
   test("the date is read under observed (newer akm) or observed_at (older akm)", () => {
-    expect(makeRow(dated, ok({ written: memory(["queue", "retry"], "observed: 2026-02-14\n") }))).toMatchObject({ structure: true, correct: true });
-    expect(makeRow(dated, ok({ written: memory(["queue", "retry"], "observed: 2026-03-01\n") })).checks).toMatchObject({ "preserves explicit date": false });
-    expect(makeRow(undated, ok({ written: memory(["queue"], "observed: 2026-02-14\n") })).checks).toMatchObject({ "does not invent an observation date": false });
-    expect(makeRow(undated, ok({ written: memory(["queue"], "observed: ''\n") })).checks).toMatchObject({ "does not invent an observation date": true });
+    expect(makeRow(dated, ok({ written: memory(["queue", "retry"], "observed_at: 2026-02-14\n"), written_on: on }))).toMatchObject({ correct: true });
+    expect(makeRow(undated, ok({ written: memory(["queue"], `observed_at: ${on}\n`), written_on: on }))).toMatchObject({ correct: true });
+  });
+
+  test("through improve: the tags must cover the keywords, and improve must leave observed as remember wrote it", () => {
+    const remembered = `---\ndescription: A retry policy for the queue.\nobserved: ${on}\ntype: memory\n---\nBody.\n`;
+    const through = (written: string) => makeRow(undated, ok({ written, remembered, written_on: on })).checks;
+    expect(through(memory(["queue"], `observed: ${on}\n`))).toEqual({ "carries observed": true, "observed is the write date": true, "improve keeps observed": true, "metadata covers queue": true });
+    expect(through(memory(["jobs"], `observed: ${on}\n`))).toMatchObject({ "metadata covers queue": false }); // the description says queue, but it is akm's, not the model's
+    expect(through(memory(["queue"], "observed: 2026-01-01\n"))).toMatchObject({ "improve keeps observed": false, "observed is the write date": false });
+    expect(through(memory(["queue"]))).toMatchObject({ "improve keeps observed": false, "carries observed": false });
+    expect(makeRow(dated, ok({ written: memory(["queue", "retry"]), remembered: memory([], "observed: 2026-02-14\n"), written_on: on })).checks).toMatchObject({ "improve keeps observed": false });
   });
 
   test("one to five lowercase tags and a description are the shape", () => {
@@ -367,7 +385,8 @@ describe("scoring a stored row again", () => {
 
   test("a row that lacks what the scorer reads is refused, and the fields are named", () => {
     expect(rawOf({ process: "memory-inference", outcome: "output", reason: "", seconds: 1 })).toEqual({ missing: ["derived"] });
-    expect(rawOf({ process: "remember-enrich", outcome: "output", reason: "", seconds: 1 })).toEqual({ missing: ["written"] });
+    expect(rawOf({ process: "remember-enrich", outcome: "output", reason: "", seconds: 1, written_on: "2026-11-26", akm_sets_observed: true })).toEqual({ missing: ["written"] });
+    expect(rawOf({ process: "remember-enrich", outcome: "output", reason: "", seconds: 1, written: "x" })).toEqual({ missing: ["written_on (the date the memory was written; recollect the case with bakeoff 0.5)", "akm_sets_observed (whether akm sets the date the case expects; recollect the case with bakeoff 0.5)"] });
     expect(rawOf({ process: "schema-repair", outcome: "output", reason: "", seconds: 1 })).toEqual({ missing: ["proposal"] });
     expect(rawOf({ process: "session-summary", outcome: "output", reason: "", seconds: 1 })).toEqual({ missing: ["asset"] });
     expect(rawOf({ process: "consolidate-promote", outcome: "output", reason: "", seconds: 1, promoted: [] })).toEqual({ missing: ["planned"] });

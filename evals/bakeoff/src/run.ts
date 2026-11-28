@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// bakeoff: runs the akm commands that make the work no other eval measures (memory inference, remember --enrich, schema repair, the summary
+// bakeoff: runs the akm commands that make the work no other eval measures (memory inference, memory tag enrichment, schema repair, the summary
 // of a session, consolidate's promotions) with the model under test as akm's engine, and scores what akm wrote with checks that need no
 // judge. See ../README.md.
 //
@@ -9,7 +9,7 @@
 // and how it is shown, and the --process flag. Bakeoff has no strategy: each process has its own, so it has no --strategy.
 
 import { relative, resolve } from "node:path";
-import { ENRICH_REMOVED_FROM, atLeast } from "../../../lib/akm/akm.ts";
+import { ENRICH_REMOVED_FROM, atLeast, hasMemoryEnrichment } from "../../../lib/akm/akm.ts";
 import { fail } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { type CtxInput, type EvalSpec, type Summary, runCorpus as runIn, runEval } from "../../../lib/run.ts";
@@ -20,8 +20,8 @@ const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 export const MIN_AKM = "0.9.26"; // the release the commands, the config and the output read here were checked against
 
-/** What bakeoff adds to the context of a case: the one process the run is limited to. */
-type Extra = { process?: Process };
+/** What bakeoff adds to the context of a case: the one process the run is limited to, and whether akm has `experimental.memoryEnrichment`. */
+type Extra = { process?: Process; memoryEnrichment?: boolean };
 
 /** The field of a bakeoff summary that is neither one every eval has nor from its rows. */
 type Own = { process: Process | null };
@@ -67,11 +67,13 @@ const SPEC: EvalSpec<LoadedCase, Row, Extra> = {
   casesFile: CASES_FILE,
   loadCases,
   selectCases: (all, limit, ctx) => {
-    // remember-enrich is not applicable on an akm without `remember --enrich` (removed in 0.11, no replacement yet): it is left out and said so, not run and not scored as a failure.
-    const enrich = !atLeast(ctx.version, ENRICH_REMOVED_FROM);
+    // remember-enrich runs through improve on an akm with `experimental.memoryEnrichment` (0.10.261134), else through `remember --enrich` (removed in 0.11).
+    // An akm with neither has no way to run it: it is left out and said so, not run and not scored as a failure.
+    const enrich = !all.some((c) => c.process === "remember-enrich") || ctx.memoryEnrichment === true || !atLeast(ctx.version, ENRICH_REMOVED_FROM);
     if (!enrich) {
-      if (ctx.process === "remember-enrich") fail(`remember-enrich is not applicable on akm ${ctx.version}: \`akm remember --enrich\` is removed in 0.11 and has no replacement yet. Nothing was run.`);
-      if (all.some((c) => c.process === "remember-enrich")) console.log(`remember-enrich: not applicable on akm ${ctx.version} (\`akm remember --enrich\` is removed in 0.11, no replacement yet); its cases are not run or scored`);
+      const why = `akm ${ctx.version} has neither \`experimental.memoryEnrichment\` nor \`akm remember --enrich\``;
+      if (ctx.process === "remember-enrich") fail(`remember-enrich is not applicable: ${why}. Nothing was run.`);
+      console.log(`remember-enrich: not applicable (${why}); its cases are not run or scored`);
     }
     const cases = selectCases(enrich ? all : all.filter((c) => c.process !== "remember-enrich"), limit, ctx.process);
     if (cases.length === 0) fail(`no case to run: the corpus has none for ${ctx.process}`);
@@ -86,7 +88,9 @@ const SPEC: EvalSpec<LoadedCase, Row, Extra> = {
   },
   prepare: (values) => {
     if (values.process !== undefined && !(PROCESSES as readonly string[]).includes(values.process)) throw new Error(`--process must be one of ${PROCESSES.join(", ")}, not "${values.process}"`);
-    return () => ({ process: values.process as Process | undefined });
+    const process = values.process as Process | undefined;
+    // After the version probe, akm is asked once whether it has experimental.memoryEnrichment, unless the run has no remember-enrich case.
+    return () => ({ process, memoryEnrichment: process === undefined || process === "remember-enrich" ? hasMemoryEnrichment() : false });
   },
   summaryExtras: (_cases, _rows, ctx) => ({ process: ctx.process ?? null }),
   printSummary,

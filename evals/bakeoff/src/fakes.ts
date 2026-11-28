@@ -6,7 +6,12 @@
 //   infer[<memory name>]     { derived: <file text> } | { noChange: true } | { skip: true } | { nothing: true } | { provider: true } | { crash: true } | { slow: true }
 //   legacyInference          true: the memoryInference result has no noChange counter, as before akm#1208
 //   noInference              true: the improve result has no memoryInference, as when the pass did not run
-//   enrich[<memory name>]    { file: <memory file text>, say?: <the line akm prints on stderr> } | { crash: true }
+//   enrich[<memory name>]    { file: <memory file text>, say?: <the line akm prints on stderr> } | { crash: true }   (what akm remember writes, with or without --enrich)
+//   reflect[<memory name>]   { proposal: <tags proposal text> } | { accepted: <memory file text> } | { refused: <error of the memory.tags judge> } | { unparseable: <error> }
+//                            | { provider: true } | { crash: true }, and revisionRefused: true for a revision its judge refused (akm improve memories/<name>
+//                            --strategy bakeoff-remember-enrich; default: a reply with no tags). The tags outcome rides on the revision's result as \`tags\` (akm#1836).
+// FAKE_OBSERVED says what akm does with a memory's date, for the probe's remember calls (names probe-*): "stamps" sets today's on a memory with none,
+// "keeps" keeps one given in leading frontmatter; both, one or neither (the default).
 //   repair[<lesson ref>]     { outcome: "queued", content } | { outcome: "error", error } | { crash: true }
 //   session[<session id>]    { asset: <session asset text> } | { skip: <skipReason> } | { none: true } | { crash: true }
 //   promote                  { refs: [<memory ref queued>], planned?: [<memory ref planned, default refs>], skipped?: { <ref>: <reason> }, failedChunks?: n, warnings?: [...], provider?: true } | { crash: true }
@@ -25,14 +30,14 @@ const out = (o) => console.log(JSON.stringify(o));
 const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const engine = config.engines?.bakeoff ?? {};
-const stdin = args.includes("--enrich") ? await Bun.stdin.text() : null;
+const stdin = cmd === "remember" ? await Bun.stdin.text() : null;
 appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args, cwd: process.cwd(), bundle, model: engine.model ?? null, temperature: engine.temperature ?? null, thinking: engine.enableThinking ?? null, autonomy: config.experimental?.improveAutonomy ?? null, key: process.env.MODEL_API_KEY ?? null, projects: process.env.AKM_CLAUDE_PROJECTS_DIR ?? null, stdin, strategy: flag("--strategy") ? config.improve?.strategies?.[flag("--strategy")] ?? null : null }) + "\\n");
 const put = (path, text) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); };
 const usage = (process_, failures = 0) => ({ byProcessEngineModel: [{ process: process_, engine: "bakeoff", model: plan.served ?? "served-model", calls: 1, failures }] });
 const crash = () => { console.error(JSON.stringify({ error: "boom", code: "INTERNAL" })); process.exit(70); };
 
 // FAKE_AKM_VERSION picks the generation of akm: before 0.10.261120 (the default, 0.9.99-test) only the old forms of the deprecated flags exist; from 0.10.261120 only the replacements do,
-// and 0.11 has no \`remember --enrich\`. The fake refuses the form the version lacks, as akm does, so a test shows which form the collector picked.
+// and 0.11 has no \`remember --enrich\`. FAKE_MEMORY_ENRICHMENT=1 is an akm that has \`experimental.memoryEnrichment\` (0.10.261134). The fake refuses the form the version lacks, as akm does, so a test shows which form the collector picked.
 const version = process.env.FAKE_AKM_VERSION ?? "0.9.99-test";
 const modern = version !== "0.9.99-test";
 const refuse = (what) => { console.error("unknown option " + what); process.exit(2); };
@@ -42,6 +47,7 @@ if (cmd !== "--version") {
   if (version.startsWith("0.11") && args.includes("--enrich")) refuse("--enrich");
 }
 if (cmd === "--version") console.log("akm " + version);
+else if (cmd === "config" && rest[0] === "get") { if (rest[1] === "experimental.memoryEnrichment" && process.env.FAKE_MEMORY_ENRICHMENT === "1") console.log("true"); else { console.error("Unknown config key: " + rest[1]); process.exit(2); } }
 else if (cmd === "index") out({ ok: true });
 else if (cmd === "improve") {
   const strategy = flag("--strategy");
@@ -61,6 +67,17 @@ else if (cmd === "improve") {
       else { put(join(dir, name + ".derived.md"), p.derived); result.splitParents++; result.writtenFacts++; }
     }
     out({ ok: true, ...(plan.noInference ? {} : { memoryInference: result }), usageReport: usage("memoryInference", provider ? 1 : 0) });
+  } else if (strategy === "bakeoff-remember-enrich") {
+    const ref = rest[0];
+    const p = plan.reflect?.[ref.split("/")[1]] ?? {};
+    if (p.crash) crash();
+    if (p.accepted) put(join(bundle, ref + ".md"), p.accepted);
+    // akm's mode of an action says what came of it (loop-stages.ts): a judge refusal is reflect-guard-rejected, a failed call or an unparseable reply reflect-failed
+    const tags = p.proposal || p.accepted ? { ok: true, proposal: { id: "prop-2", status: p.accepted ? "accepted" : "pending", source: "reflect", payload: { content: p.proposal ?? p.accepted } } } : p.refused ? { ok: false, reason: "quality_rejected", error: p.refused } : undefined;
+    const failed = p.provider ? { ok: false, reason: "provider_error", error: "upstream failure" } : p.unparseable ? { ok: false, reason: "parse_error", error: p.unparseable } : undefined;
+    const revision = failed ? { ref, mode: "reflect-failed", result: failed } : { ref, mode: p.revisionRefused ? "reflect-guard-rejected" : "reflect", result: { ok: !p.revisionRefused, ...(p.revisionRefused ? { reason: "quality_rejected", error: "Reflect proposal quality gate rejected" } : { proposal: { id: "prop-1", status: "pending", source: "reflect", payload: { content: "a revision" } } }), ...(tags ? { tags } : {}) } };
+    const actions = [revision, ...(tags ? [{ ref, mode: tags.ok ? "reflect" : "reflect-guard-rejected", result: tags }] : [])];
+    out({ ok: true, actions, usageReport: usage("reflect", p.provider ? 1 : 0) });
   } else if (strategy === "bakeoff-schema-repair") {
     const ref = rest[0];
     const p = plan.repair?.[ref] ?? { outcome: "error", error: "LLM returned unparseable JSON for schema repair" };
@@ -75,6 +92,14 @@ else if (cmd === "improve") {
     save();
     out({ ok: true, consolidation: { ok: true, totalChunks: 1, failedChunks: p.failedChunks ?? 0, warnings: p.warnings ?? ["Anti-collapse: injected 1 random cluster member(s)"], planned: (p.planned ?? p.refs ?? []).map((ref) => ({ op: "promote", ref, knowledgeRef: "knowledge/" + ref.split("/")[1] })), skipReasons: Object.entries(p.skipped ?? {}).map(([ref, reason]) => ({ ref, skips: [{ op: "promote", reason }] })) }, usageReport: usage("consolidate", p.provider ? 1 : 0) });
   } else { console.error("unexpected strategy " + strategy); process.exit(1); }
+}
+else if (cmd === "remember" && flag("--name").startsWith("probe-")) {
+  const name = flag("--name");
+  const does = process.env.FAKE_OBSERVED ?? "";
+  const given = /^---\\n[\\s\\S]*?^observed: (\\S+)/m.exec(stdin)?.[1];
+  const observed = does.includes("keeps") && given ? given : does.includes("stamps") ? new Date().toISOString().slice(0, 10) : undefined;
+  put(join(bundle, "memories", name + ".md"), "---\\n" + (observed ? "observed: " + observed + "\\n" : "") + "type: memory\\n---\\nA note.\\n");
+  out({ ok: true });
 }
 else if (cmd === "remember") {
   const name = flag("--name");

@@ -9,6 +9,7 @@ import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/ma
 import { loadConfigPatch, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { FAKE_AKM } from "./fakes.ts";
 import { type Case, assetsSha256, configFor, loadCases, selectCases } from "./lib.ts";
+import { bakeoffConfig } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
@@ -16,7 +17,7 @@ import { MIN_AKM, runCorpus } from "./run.ts";
 const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
 
 const dirs: string[] = [];
-const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_PLAN: process.env.FAKE_PLAN, FAKE_LOG: process.env.FAKE_LOG, FAKE_AKM_VERSION: process.env.FAKE_AKM_VERSION, MODEL_API_KEY: process.env.MODEL_API_KEY };
+const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_PLAN: process.env.FAKE_PLAN, FAKE_LOG: process.env.FAKE_LOG, FAKE_AKM_VERSION: process.env.FAKE_AKM_VERSION, FAKE_MEMORY_ENRICHMENT: process.env.FAKE_MEMORY_ENRICHMENT, FAKE_OBSERVED: process.env.FAKE_OBSERVED, MODEL_API_KEY: process.env.MODEL_API_KEY };
 const sandboxes = (): string[] => readdirSync(tmpdir()).filter((n) => n.startsWith("akm-eval-bakeoff-"));
 const before = new Set(sandboxes());
 afterEach(() => {
@@ -119,6 +120,9 @@ describe("runCorpus", () => {
     expect(summary.served).toEqual({ "served-model": 3 }); // memory inference, schema repair and consolidate report the model that answered
     const rows = samplesOf(summary);
     expect(rows.map((r) => [r.id, r.outcome, r.correct])).toEqual(SPECS.map((s) => [s.id, "output", true]));
+    // this fake akm keeps no explicit date, so the date is not scored: it would fail for every model
+    expect(rows[1]).toMatchObject({ akm_sets_observed: false, checks: { "metadata covers retries": true, "metadata covers backoff": true } });
+    expect(Object.keys(rows[1].checks)).toEqual(["metadata covers retries", "metadata covers backoff"]);
     // the raw output the scorer reads is in the row, under the names rawOf reads
     expect(rows[0].derived).toBe(derived());
     expect(rows[1].written).toBe(enriched());
@@ -132,6 +136,8 @@ describe("runCorpus", () => {
     expect(args).toEqual([
       "index --format json",
       "improve --strategy bakeoff-memory-inference --no-sync --require-engines --json-to-stdout --format json",
+      "remember --name probe-stamps", // the probe of what this akm does with a memory's date (no model call)
+      "remember --name probe-keeps",
       "remember --enrich --name retry-backoff --format json",
       "index --format json",
       "improve lessons/pause-publishers --strategy bakeoff-schema-repair --no-sync --require-engines --json-to-stdout --format json",
@@ -180,15 +186,64 @@ describe("runCorpus", () => {
     expect(Object.keys(summary.metrics.by_process)).toEqual(["memory-inference", "schema-repair", "session-summary", "consolidate-promote"]);
     expect(samplesOf(summary).map((r) => r.id)).toEqual(["infer-ok", "repair-ok", "summary-ok", "promote-ok"]);
     expect(calls().some((c) => c.args.includes("--enrich"))).toBe(false);
-    expect(said.some((l) => l.includes("remember-enrich: not applicable on akm 0.11.0"))).toBe(true);
+    expect(said.some((l) => l.includes("remember-enrich: not applicable (akm 0.11.0 has neither `experimental.memoryEnrichment` nor `akm remember --enrich`)"))).toBe(true);
     await expect(runCorpus(corpus, { ...ctx, process: "remember-enrich", label: "only" }, results)).rejects.toThrow();
+  });
+
+  test("on an akm with experimental.memoryEnrichment, remember writes the memory untagged and improve's reflect proposes the tags", async () => {
+    process.env.FAKE_AKM_VERSION = "0.10.261134";
+    process.env.FAKE_MEMORY_ENRICHMENT = "1";
+    process.env.FAKE_OBSERVED = "stamps keeps";
+    const day = new Date();
+    const on = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+    const untagged = (observed: string) => `---\ndescription: Retries back off at 2 seconds.\nobserved: ${observed}\ntype: memory\nupdated: ${on}\n---\nOn 2026-03-04 we found that retries back off at 2 seconds.\n`;
+    const tagged = (observed: string, tags = ["retries", "backoff"]) => untagged(observed).replace("type: memory", `type: memory\ntags:\n${tags.map((t) => `  - ${t}`).join("\n")}`);
+    const specs: Spec[] = [
+      { id: "proposed", process: "remember-enrich", files: { "memories/proposed.md": MEMORY }, expected: { observed_at: "2026-03-04", keywords: ["retries", "backoff"] } },
+      { id: "accepted", process: "remember-enrich", files: { "memories/accepted.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
+      { id: "moved", process: "remember-enrich", files: { "memories/moved.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
+      { id: "refused", process: "remember-enrich", files: { "memories/refused.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
+      { id: "revised", process: "remember-enrich", files: { "memories/revised.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
+      { id: "untagged", process: "remember-enrich", files: { "memories/untagged.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
+      { id: "failed", process: "remember-enrich", files: { "memories/failed.md": MEMORY }, expected: { observed_at: null, keywords: ["retries"] } },
+    ];
+    const plan = {
+      enrich: { proposed: { file: untagged("2026-03-04") }, accepted: { file: untagged(on) }, moved: { file: untagged(on) }, refused: { file: untagged(on) }, revised: { file: untagged(on) }, untagged: { file: untagged(on) }, failed: { file: untagged(on) } },
+      reflect: { proposed: { proposal: tagged("2026-03-04") }, accepted: { accepted: tagged(on) }, moved: { proposal: tagged("2026-01-01") }, refused: { refused: "Tags proposal quality gate rejected" }, revised: { proposal: tagged(on), revisionRefused: true }, untagged: { unparseable: "direct reflect frontmatterPatch.tags must be an array of 1-5 tags: the memory has none" }, failed: { provider: true } },
+    };
+    const { corpus, ctx, calls, results } = setup(specs, plan);
+    const summary = await quiet(() => runCorpus(corpus, { ...ctx, memoryEnrichment: true }, results)); // what the run's one probe found (prepare)
+    const rows = samplesOf(summary);
+    expect(rows.map((r) => [r.id, r.outcome, r.correct])).toEqual([["proposed", "output", true], ["accepted", "output", true], ["moved", "output", false], ["refused", "unusable", false], ["revised", "output", true], ["untagged", "unusable", false], ["failed", "error", null]]);
+    expect(rows[0]).toMatchObject({ written: tagged("2026-03-04"), remembered: untagged("2026-03-04"), written_on: on, served: "served-model" });
+    expect(rows[2].checks).toMatchObject({ "carries observed": true, "observed is the write date": false, "improve keeps observed": false });
+    expect(rows[3].reason).toBe("the memory.tags judge refused the tags: quality_rejected: Tags proposal quality gate rejected");
+    // the description's judge refused the revision, which is not what this process measures: the tags are scored from their own proposal
+    expect(rows[4].written).toBe(tagged(on));
+    expect(rows[5].reason).toBe("reflect gave no tags (reflect-failed): parse_error: direct reflect frontmatterPatch.tags must be an array of 1-5 tags: the memory has none"); // even after repair
+    for (const row of rows.slice(0, 6)) expect("raw" in (MEASUREMENT.rawOf(row) as object)).toBe(true);
+    const args = calls().map((c) => c.args.join(" "));
+    expect(rows.slice(0, 6).every((r) => r.akm_sets_observed === true)).toBe(true); // the error row has no output to score
+    expect(args.slice(0, 4)).toEqual(["remember --name probe-stamps", "remember --name probe-keeps", "remember --name proposed --format json", "improve memories/proposed --strategy bakeoff-remember-enrich --no-sync --json-to-stdout --format json"]);
+    expect(args.some((a) => a.includes("--enrich"))).toBe(false);
+    const config = summary.config as any;
+    expect(config.experimental).toEqual({ improveAutonomy: true, memoryEnrichment: true });
+    expect(Object.entries(config.improve.strategies["bakeoff-remember-enrich"].processes).filter(([, p]) => (p as any).enabled !== false).map(([k]) => k)).toEqual(["reflect"]);
+  });
+
+  test("bakeoffConfig runs nothing: the run asks akm about experimental.memoryEnrichment once, at its start, and the config only reads the answer", () => {
+    process.env.AKM_BIN = "/nonexistent/akm"; // any akm command would fail
+    expect(bakeoffConfig("http://localhost:9/v1", "m", true).experimental).toEqual({ improveAutonomy: true });
+    expect(bakeoffConfig("http://localhost:9/v1", "m", true, "openai", { memoryEnrichment: true }).experimental).toEqual({ improveAutonomy: true, memoryEnrichment: true });
+    expect(configFor({ baseUrl: "http://localhost:9/v1", model: "m", hasKey: true }).experimental).toEqual({ improveAutonomy: true });
   });
 
   test("gives akm the text of the memory without its frontmatter, the model at temperature 0 with thinking off, and the key by reference", async () => {
     const { corpus, ctx, calls, results } = setup(SPECS.slice(0, 2), PLAN);
     const summary = await quiet(() => runCorpus(corpus, ctx, results));
-    const enrich = calls().find((c) => c.args[0] === "remember");
-    expect(enrich.stdin).toBe("On 2026-03-04 we found that retries back off at 2 seconds. After 3 failures the job parks.");
+    const enrich = calls().find((c) => c.args[0] === "remember" && !c.args[2].startsWith("probe-"));
+    // the case's explicit observation date goes in a leading frontmatter block, which akm keeps (akm has no --observed flag)
+    expect(enrich.stdin).toBe("---\nobserved: 2026-03-04\n---\nOn 2026-03-04 we found that retries back off at 2 seconds. After 3 failures the job parks.");
     expect(enrich).toMatchObject({ model: "the-model", temperature: 0, thinking: false, autonomy: true, key: "model-secret" });
     // the sandbox is not the caller's bundle, and it is gone when the case ends
     expect(dirname(enrich.bundle).startsWith(join(tmpdir(), "akm-eval-bakeoff-"))).toBe(true);
@@ -456,5 +511,6 @@ describe("the command", () => {
     expect(rows.map((r) => r.id).sort()).toEqual([...stored.manifest.completion.selected].sort());
     const calls = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(calls.filter((c) => c.args[0] === "--version")).toHaveLength(1);
+    expect(calls.filter((c) => c.args.join(" ") === "config get experimental.memoryEnrichment")).toHaveLength(1); // asked once, at the run's start
   }, 60_000);
 });

@@ -15,8 +15,8 @@ import { type Raw, type Row, errored, makeRow, rawOf, refOf, summarize } from ".
 export const MEASUREMENT: Measurement<LoadedCase, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.4",
-  scoringVersion: "0.5",
+  version: "0.5",
+  scoringVersion: "0.7",
   loadCases: (root, summary) => {
     // The public cases are in the repository. A custom corpus is in the folder the run recorded (`corpus_folder`), or that scripts/rescore was given with --cases.
     if (summary.corpus === "public") return loadCases(join(root, "evals", NAME, "assets"));
@@ -27,8 +27,8 @@ export const MEASUREMENT: Measurement<LoadedCase, Raw, Row> = {
     return loadCases(folder);
   },
   caseId: (c) => c.id,
-  // The files of the case go into the bundle (or, for a session, to where akm reads sessions), and the process decides the command.
-  input: (c) => ({ process: c.process, files: c.files.map((path) => ({ path, text: c.texts[path] })) }),
+  // The files of the case go into the bundle (or, for a session, to where akm reads sessions), and the process decides the command. remember-enrich also gives akm the explicit observation date, if any.
+  input: (c) => ({ process: c.process, files: c.files.map((path) => ({ path, text: c.texts[path] })), ...(c.process === "remember-enrich" ? { observed: c.expected.observed_at ?? null } : {}) }),
   // Everything score() reads of the case: its process, what it expects, and the refs of its files.
   labels: (c) => ({ process: c.process, expected: c.expected, refs: c.files.map(refOf) }),
   rawOf,

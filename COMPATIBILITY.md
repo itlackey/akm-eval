@@ -37,7 +37,7 @@ akm deprecates some spellings in 0.10.x and removes them in 0.11 (akm's `docs/mi
 | `proposal extract` source: `--type <harness>` | `--type` | `--sessions <harness>` from 0.10.261120 |
 | `info` (index stats) | `info` | `doctor info` from 0.10.261119 |
 | `judge` (the judge evals) | `judge` | `doctor judge` from 0.10.261119 |
-| `remember --enrich` (bakeoff `remember-enrich`) | run | not applicable from 0.11.0: the case is left out and the run says so, it is not scored as a failure (no replacement until akm's `TODO(0.11:memory-enrichment)`) |
+| `remember --enrich` (bakeoff `remember-enrich`) | run | `akm remember`, then `akm improve memories/<name>` with `experimental.memoryEnrichment` on, on an akm that has the setting (0.10.261134; asked of akm with `akm config get`, not read from the version). An akm with neither (0.11 without the setting) leaves the case out and says so; it is not scored as a failure. Unlike the rows above, this is a new collection (bakeoff 0.5): the replacement is a different akm process |
 
 Not yet moved, because akm has no replacement in 0.10.x: `improve --json-to-stdout` (0.11 switches to ordinary JSON output) and `--detail full` on `proposal list` (global `--detail` goes in 0.11).
 
