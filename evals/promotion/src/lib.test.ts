@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { BUNDLE_DIR, build, bundle, firstHalf, insertAfterTitle, render } from "./build.ts";
 import { memoryOf } from "./collect.ts";
 import { Database } from "bun:sqlite";
-import { type Case, type Drained, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, digestOf, dispatchFailures, makeRow, metrics, parseCases, promotionConfig, proposalRow, rawFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
+import { type Case, type Drained, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, proposalColumns, assetsSha256, digestOf, dispatchFailures, makeRow, metrics, parseCases, promotionConfig, proposalRow, rawFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
 const LIBRARY = BUNDLE_DIR; // the notes a run holds in its bundle, as build.ts makes them from corpus/library
@@ -109,6 +109,17 @@ describe("akm's tables", () => {
     const db = memory(proposals);
     db.prepare(`INSERT INTO proposals (${PROPOSAL_COLUMNS.join(", ")}) VALUES (${PROPOSAL_COLUMNS.map(() => "?").join(", ")})`).run(...row);
     expect(db.query("SELECT id, ref, source FROM proposals").get()).toEqual({ id: uuidOf("a"), ref: "bundle//knowledge/a", source: "consolidate" });
+  });
+
+  test("writes the bundle's root in bundle_id when akm's table has that column (migration 031), and in stash_dir otherwise", () => {
+    expect(proposalColumns(memory(proposals))).toEqual(PROPOSAL_COLUMNS);
+    const renamed = memory(proposals.replace("stash_dir", "bundle_id"));
+    const columns = proposalColumns(renamed);
+    expect(columns).toEqual(PROPOSAL_COLUMNS.map((c) => (c === "stash_dir" ? "bundle_id" : c)));
+    expect(schemaProblem(renamed, "proposals", columns)).toBeUndefined();
+    renamed.prepare(`INSERT INTO proposals (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`).run(...proposalRow(make("a", "good"), "/tmp/x/bundle", "2026-10-07T00:00:00Z"));
+    expect(renamed.query("SELECT bundle_id FROM proposals").get()).toEqual({ bundle_id: "/tmp/x/bundle" });
+    expect(proposalColumns(memory(proposals.replace("stash_dir", "stash")))).toEqual(PROPOSAL_COLUMNS); // neither: checked for the older layout, which names stash_dir
   });
 
   test("a table that has every column it needs is fine, whatever else it has", () => {

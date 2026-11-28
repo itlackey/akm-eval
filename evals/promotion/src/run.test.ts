@@ -87,8 +87,10 @@ if (args[0] === "index") {
   process.exit(0);
 }
 const db = new Database(dbPath);
+// Like akm before and after its migration 031, which renamed stash_dir to bundle_id. The eval writes the bundle's root in either.
+const byId = db.query("PRAGMA table_info(proposals)").all().some((c) => c.name === "bundle_id");
 const bundle = process.env.FAKE_BUNDLE ?? process.env.AKM_BUNDLE_DIR;
-const pending = () => db.query("SELECT id, ref, content FROM proposals WHERE status = 'pending' AND stash_dir = ?").all(bundle);
+const pending = () => db.query(\`SELECT id, ref, content FROM proposals WHERE status = 'pending' AND \${byId ? "bundle_id" : "stash_dir"} = ?\`).all(bundle);
 if (args[0] === "proposal" && args[1] === "list" && args[args.indexOf("--status") + 1] === "pending") { log({ cmd: "list", status: "pending" }); out({ totalCount: pending().length, proposals: [] }); process.exit(0); }
 if (args[0] === "proposal" && args[1] === "list" && args[args.indexOf("--status") + 1] === "rejected") {
   log({ cmd: "list", status: "rejected" });
@@ -226,6 +228,15 @@ describe("runCorpus", () => {
     expect(written.git_commit).toBeString();
     expect(rows.map((r) => r.outcome)).toEqual(["accept", "defer", "reject", "accept", "reject", "accept", "error", "reject"]);
     expect(rows[2].reason).toBe("a duplicate of a note");
+  });
+
+  test("writes into bundle_id when akm's table has it (akm's migration 031), and counts as with stash_dir", async () => {
+    const ddl = "CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, bundle_id TEXT NOT NULL, ref TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', source TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', frontmatter_json TEXT, metadata_json TEXT NOT NULL DEFAULT '{}')";
+    const { ctx, folders } = setup(cases, { FAKE_PROPOSALS_DDL: ddl });
+    const summary = await quiet(() => runPublic(ctx, folders));
+    expect(summary).toMatchObject({ n_cases: 8, n_run: 8, n_errored: 1, status: "complete" });
+    expect(summary.metrics.accepted).toEqual({ n: 3, good: 1 });
+    expect(summary.metrics.recall).toEqual({ value: 0.3333, accepted: 1, of: 3 });
   });
 
   test("puts all the proposals in one sandbox and one drain, which is gone when the run ends, and gives each a progress line as the rows are recorded", async () => {

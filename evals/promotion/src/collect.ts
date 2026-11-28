@@ -79,6 +79,17 @@ export const memoryOf = (c: Case): string => {
 /** The columns of akm's `proposals` table that the eval writes, in the order `proposalRow` gives their values. akm's schema is private: see "Depends on akm's private schema" in the README. */
 export const PROPOSAL_COLUMNS = ["id", "stash_dir", "ref", "status", "source", "created_at", "updated_at", "content", "frontmatter_json", "metadata_json"] as const;
 
+/**
+ * PROPOSAL_COLUMNS as this akm's table names them. akm's migration 031 (akm#1746) renamed `stash_dir`, the root of a row's bundle,
+ * to `bundle_id`, the bundle's id. The eval writes the root in either: akm rewrites a root in `bundle_id` to the id of the bundle
+ * configured there when it opens state.db, as it does for the rows the migration carried over. A table without `bundle_id` is
+ * checked for the older layout.
+ */
+export function proposalColumns(db: SchemaDb): readonly string[] {
+  const have = (db.query("PRAGMA table_info(proposals)").all() as { name: string }[]).map((c) => c.name);
+  return have.includes("bundle_id") ? PROPOSAL_COLUMNS.map((c) => (c === "stash_dir" ? "bundle_id" : c)) : PROPOSAL_COLUMNS;
+}
+
 /** The columns of akm's `events` table that the eval reads, to count the model calls of a drain. */
 export const EVENT_COLUMNS = ["event_type", "metadata_json"] as const;
 
@@ -164,9 +175,10 @@ export async function plant(sandbox: Sandbox, cases: Case[], libraryDir: string)
   const db = new Database(join(sandbox.env.AKM_DATA_DIR, "state.db"));
   try {
     // akm's tables are its own: a build that lays them out differently is named here, and not found in a SQL error.
-    const problem = schemaProblem(db, "proposals", PROPOSAL_COLUMNS);
-    if (problem) fail(`${problem}. The eval writes its proposals into that table, so it needs a build of akm that lays it out as akm 0.9.26 does. See "Depends on akm's private schema" in evals/promotion/README.md.`, 1);
-    const insert = db.prepare(`INSERT INTO proposals (${PROPOSAL_COLUMNS.join(", ")}) VALUES (${PROPOSAL_COLUMNS.map(() => "?").join(", ")})`);
+    const columns = proposalColumns(db);
+    const problem = schemaProblem(db, "proposals", columns);
+    if (problem) fail(`${problem}. The eval writes its proposals into that table, so it needs a build of akm that lays it out as akm 0.9.26 does, or with bundle_id for stash_dir as akm's migration 031 does. See "Depends on akm's private schema" in evals/promotion/README.md.`, 1);
+    const insert = db.prepare(`INSERT INTO proposals (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`);
     for (const c of cases) insert.run(...proposalRow(c, stash, now));
   } finally {
     db.close();
