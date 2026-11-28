@@ -18,6 +18,13 @@ Add a release entry here when a version changes.
 
 ## Unreleased
 
+- nightly scoring 0.5 (was 0.4); collection stays 0.3. The reflect eval's checks, on a note as the night left it or on a proactive-lane
+  proposal, read the frontmatter keys akm writes itself (nightly's `AKM_KEYS`: `type`, `updated`, `generated`, `verified`) as no change.
+  They read only reflect's own (`type`, `generated`, `verified`) before, so since akm#1834 (0.10.261134), which sets `updated` to the day
+  of every write, each correct fix the drain accepted failed `no_extra_change` and counted as harm. The reflect eval itself is unchanged
+  (scoring 0.4): it scores the proposal, which akm does not stamp, so a changed `updated` there is the model's. Rescore saved nightly runs
+  to compare with a run on this version; the saved 0.10.261112-beta run scores the same (0 rows differ).
+
 - bakeoff scoring 0.7 (was 0.6); collection stays 0.5. Label-only: two `remember-enrich` keywords that no tag set would hold are
   replaced with a term from the memory that is what it is about. Each `metadata covers <keyword>` on the tags path reads the tags.
   - `enrich-cache-policy-memory`: `cache, 90, gateway` -> `cache, ttl, gateway`. "90" is a bare number, not a tag; the memory is
