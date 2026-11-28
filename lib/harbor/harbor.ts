@@ -31,6 +31,7 @@ export const RELEASE_PLUGINS: Record<string, string> = {
   "0.10.261111-beta": "0.10.261110-beta",
   "0.10.261112-beta": "0.10.261111-beta",
   "0.10.261120": "0.10.261122",
+  "0.10.261135": "0.10.261141",
 };
 
 export const CONCURRENT_TRIALS = 4;

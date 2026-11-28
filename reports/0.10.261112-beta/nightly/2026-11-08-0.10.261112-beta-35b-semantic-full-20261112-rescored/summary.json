@@ -1,0 +1,351 @@
+{
+  "eval": "nightly",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "0.10.261112-beta-35b-semantic-full-20261112-rescored",
+  "date": "2026-11-08T06:48:08.461Z",
+  "git_commit": "0861517-dirty",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261112-beta",
+  "akm_bin": "akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "config_form": "connections",
+  "limit": null,
+  "strategy": "default",
+  "config_patch": {
+    "path": "--semantic",
+    "sha256": "591a6213cec2890f9c7e4cd52a35c9e2eab91bf5db0879f27aa6efd178555ef5"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "nightly": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "nightly"
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    }
+  },
+  "engine": {
+    "engine": "nightly",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "<MODEL_BASE_URL>",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "nightly": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "6f3b2ac339a2fbee37666609b553444524aa402d8d26fef4da09020f19357174",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 35,
+  "n_errored": 0,
+  "outside_changed": [],
+  "metrics": {
+    "items": {
+      "n": 35,
+      "ok": 31,
+      "rate": 0.8857
+    },
+    "by_kind": {
+      "pair": {
+        "n": 7,
+        "ok": 7
+      },
+      "reflect": {
+        "n": 10,
+        "ok": 10
+      },
+      "distill": {
+        "n": 7,
+        "ok": 4
+      },
+      "fix": {
+        "n": 1,
+        "ok": 1
+      },
+      "untouched": {
+        "n": 4,
+        "ok": 4
+      },
+      "silent": {
+        "n": 6,
+        "ok": 5
+      }
+    },
+    "failed": {
+      "lesson_queued": 2,
+      "lesson_good": 2,
+      "no_lesson": 1,
+      "fix_proposed": 1
+    },
+    "harm": {
+      "items": 0,
+      "outside_changed": 0,
+      "lessons_accepted": 0
+    },
+    "calls": {
+      "n": 56,
+      "failures": 0
+    },
+    "proactive": {
+      "selected": 10,
+      "due": 10,
+      "proposals": 6,
+      "on_silent": 5,
+      "on_others": 1
+    }
+  },
+  "embedder": "real",
+  "n_items": 35,
+  "n_planted": 35,
+  "seconds": {
+    "index": 3.8,
+    "feedback": 7,
+    "improve": 113.8,
+    "drain": 1.7,
+    "total": 127.3
+  },
+  "improve_ok": true,
+  "skipped_processes": [],
+  "drain": {
+    "promoted": 9,
+    "rejected": 0,
+    "deferred": 17,
+    "failed": 0
+  },
+  "pair_pass": {
+    "pairs_judged": 7,
+    "failed_judgments": 0,
+    "labels": {
+      "duplicate": 2,
+      "subsumed": 2,
+      "overlap": 3
+    }
+  },
+  "calls_by": [
+    {
+      "process": "consolidate",
+      "model": "qwen3.6-35b-a3b",
+      "calls": 13,
+      "failures": 0,
+      "prompt_tokens": 16012,
+      "completion_tokens": 1988
+    },
+    {
+      "process": "reflect",
+      "model": "qwen3.6-35b-a3b",
+      "calls": 34,
+      "failures": 0,
+      "prompt_tokens": 70081,
+      "completion_tokens": 2174
+    },
+    {
+      "process": "distill",
+      "model": "qwen3.6-35b-a3b",
+      "calls": 9,
+      "failures": 0,
+      "prompt_tokens": 15091,
+      "completion_tokens": 1222
+    }
+  ],
+  "model_calls": {
+    "calls": 56,
+    "errors": 0,
+    "prompt_tokens": 1806.9,
+    "completion_tokens": 96.1,
+    "seconds": 1.87,
+    "output_tokens_per_second": 51.4
+  },
+  "semantic_verification": {
+    "index_checks": 1,
+    "indexed_entries": 44,
+    "embedded_entries": 44,
+    "searches": {
+      "semantic": 0,
+      "non_semantic": 0,
+      "unknown": 0
+    },
+    "telemetry_errors": 0,
+    "failures": 0
+  },
+  "timeout_ms": 2700000,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "nightly",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.5"
+    },
+    "akm": {
+      "version": "0.10.261112-beta",
+      "bin": "akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "nightly": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "nightly"
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": "default",
+      "config_patch_sha256": "591a6213cec2890f9c7e4cd52a35c9e2eab91bf5db0879f27aa6efd178555ef5",
+      "timeout_ms": 2700000,
+      "seed": null
+    },
+    "engines": {
+      "nightly": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "<MODEL_BASE_URL>",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "eval_settings": {
+      "embedder": "real"
+    },
+    "completion": {
+      "selected": [
+        "duplicate-01",
+        "duplicate-02",
+        "subsumed-02",
+        "supersedes-01",
+        "contradicts-04",
+        "overlap-04",
+        "unrelated-06",
+        "description-period-01",
+        "retrieval-miss-01",
+        "when-to-use-missing-01",
+        "historical-01",
+        "title-missing-01",
+        "description-truncated-01",
+        "unsupported-ask-01",
+        "description-missing-01",
+        "description-quote-01",
+        "body-defect-01",
+        "lesson-01",
+        "status-01",
+        "claim-01",
+        "asset-01",
+        "lesson-02",
+        "dup-04",
+        "status-02",
+        "exact-fix-01",
+        "untouched-01",
+        "untouched-02",
+        "untouched-03",
+        "untouched-04",
+        "silent-description-period-02",
+        "silent-description-quote-02",
+        "silent-description-truncated-02",
+        "silent-description-missing-02",
+        "silent-when-to-use-missing-02",
+        "silent-title-missing-02"
+      ],
+      "scored": [
+        "duplicate-01",
+        "duplicate-02",
+        "subsumed-02",
+        "supersedes-01",
+        "contradicts-04",
+        "overlap-04",
+        "unrelated-06",
+        "description-period-01",
+        "retrieval-miss-01",
+        "when-to-use-missing-01",
+        "historical-01",
+        "title-missing-01",
+        "description-truncated-01",
+        "unsupported-ask-01",
+        "description-missing-01",
+        "description-quote-01",
+        "body-defect-01",
+        "lesson-01",
+        "status-01",
+        "claim-01",
+        "asset-01",
+        "lesson-02",
+        "dup-04",
+        "status-02",
+        "exact-fix-01",
+        "untouched-01",
+        "untouched-02",
+        "untouched-03",
+        "untouched-04",
+        "silent-description-period-02",
+        "silent-description-quote-02",
+        "silent-description-truncated-02",
+        "silent-description-missing-02",
+        "silent-when-to-use-missing-02",
+        "silent-title-missing-02"
+      ],
+      "errored": []
+    },
+    "rescored_from": {
+      "results": "2026-11-08-0.10.261112-beta-35b-semantic-full-20261112",
+      "scorer": {
+        "version": "0.4"
+      },
+      "at": "2026-11-28T06:43:04.130Z",
+      "dropped": []
+    }
+  },
+  "wall_seconds": 127.284,
+  "scoring_version": "0.5",
+  "rescored_from": {
+    "results": "2026-11-08-0.10.261112-beta-35b-semantic-full-20261112",
+    "scorer": {
+      "version": "0.4"
+    },
+    "at": "2026-11-28T06:43:04.130Z",
+    "dropped": []
+  }
+}

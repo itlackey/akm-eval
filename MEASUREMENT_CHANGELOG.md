@@ -25,6 +25,10 @@ Add a release entry here when a version changes.
   (scoring 0.4): it scores the proposal, which akm does not stamp, so a changed `updated` there is the model's. Rescore saved nightly runs
   to compare with a run on this version; the saved 0.10.261112-beta run scores the same (0 rows differ).
 
+- agent-ab and terminal-bench, no version change (rule of the 0.5 entry): a run with `--akm akm-cli@0.10.261135` gets plugin akm-opencode
+  0.10.261141, the release that pins that CLI (`RELEASE_PLUGINS`). No lockfile is committed for either, so the tree is resolved fresh
+  (`akm_install.locked` false). The measurement changes only for that release.
+
 - bakeoff scoring 0.7 (was 0.6); collection stays 0.5. Label-only: two `remember-enrich` keywords that no tag set would hold are
   replaced with a term from the memory that is what it is about. Each `metadata covers <keyword>` on the tags path reads the tags.
   - `enrich-cache-policy-memory`: `cache, 90, gateway` -> `cache, ttl, gateway`. "90" is a bare number, not a tag; the memory is
